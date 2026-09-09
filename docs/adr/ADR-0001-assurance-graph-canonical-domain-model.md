@@ -61,6 +61,7 @@ The graph represents:
 | **Framework** | Compliance/assurance framework (Cyber Essentials, ISO 27001, etc.) | Multiple per org |
 | **Policy** | Organisational decision rule for autonomous action | Multiple per org |
 | **Action** | Remediation or configuration change | Multiple (temporal) |
+| **Verification** | Proof that an action was successful | Multiple (temporal, 1:N with Action) |
 | **Assurance** | Current state of a requirement/control/framework | Multiple (temporal) |
 
 ### Relationships (Edges)
@@ -80,7 +81,8 @@ The graph represents:
 | **proves** | Evidence | Control | Control proof |
 | **triggers** | Finding | Control | Control failure |
 | **remediates** | Action | Finding | Remediation target |
-| **verifies** | Verification | Action | Action verification |
+| **verified_by** | Action | Verification | Action produces verification evidence |
+| **confirms** | Verification | Evidence | Verification evidence |
 | **affected_by** | Entity | Supplier | Supplier dependency |
 
 ### Properties (Attributes)
@@ -150,11 +152,17 @@ AUTHORISATION_REQUIRED?
             ↓
          EXECUTING
             ↓
-         EXECUTED
+          EXECUTED
             ↓
          VERIFYING
             ↓
-      VERIFIED_SUCCESS | VERIFIED_FAILURE
+    VERIFICATION_IN_PROGRESS
+            ↓
+   VERIFIED_SUCCESS | VERIFIED_FAILURE
+            ↓
+   [creates Verification node]
+            ↓
+   [produces Evidence via confirms edge]
 ```
 
 ---
@@ -184,6 +192,7 @@ AUTHORISATION_REQUIRED?
 - **Scalability:** Graph structure supports distributed querying and caching
 - **Auditability:** Every change produces traceable edge modifications
 - **Extensibility:** New entity types and relationships can be added without breaking existing structures
+- **Verification chain:** Actions produce verifiable evidence, creating closed remediation loops
 
 ### Negative
 
@@ -200,12 +209,13 @@ AUTHORISATION_REQUIRED?
 - **Data access:** Permissions model must traverse graph relationships (person → identity → device → data)
 - **Audit integrity:** Graph mutations are append-only where possible; deletions are rare
 - **Evidence immutability:** Observation/Evidence nodes should be immutable after creation; corrections create new nodes with provenance
+- **Verification integrity:** Verification nodes are immutable; failures create audit trail of attempted remediation
 
 ---
 
 ## Scalability Implications
 
-- **Initial:** Single PostgreSQL with graph extensions (PostGIS/Apache AGE)
+- **Initial:** Single PostgreSQL with Apache AGE graph extension
 - **Mid-scale:** Graph caching layer (Redis) for frequently traversed paths
 - **Large-scale:** Distributed graph database or graph replication across regions
 
@@ -218,6 +228,7 @@ The model supports all deployment patterns without re-architecture.
 - **Observability:** Graph statistics become operational metrics (node counts, relationship density, query patterns)
 - **Backup/recovery:** Graph consistency must be tested in recovery procedures
 - **Data migration:** New integrations require translation to canonical graph model
+- **Verification monitoring:** Verification success/failure rates signal remediation effectiveness
 
 ---
 
