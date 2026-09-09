@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { assessControl, type ClaimFacts, type ControlAssessmentInput, type EvidenceFacts, type SubjectFacts } from './engine.js';
+import {
+  assessControl,
+  type ClaimFacts,
+  type ControlAssessmentInput,
+  type EvidenceFacts,
+  type SubjectFacts,
+} from './engine.js';
 import { compileRuleset, createRulesetRegistry } from './ruleset.js';
 import { adericelBaselineV1 } from './rulesets/adericel-baseline.js';
 import { cyberEssentialsV1 } from './rulesets/cyber-essentials.js';
@@ -52,7 +58,14 @@ function input(overrides: Partial<ControlAssessmentInput> = {}): ControlAssessme
     organisationClaims: [],
     evidence: [evidence()],
     activeExceptions: [],
-    observedSubjectKinds: ['Identity', 'Device', 'CloudResource', 'DataAsset', 'Policy', 'Supplier'],
+    observedSubjectKinds: [
+      'Identity',
+      'Device',
+      'CloudResource',
+      'DataAsset',
+      'Policy',
+      'Supplier',
+    ],
     ...overrides,
   };
 }
@@ -61,7 +74,10 @@ describe('assessControl — determinism and reproducibility', () => {
   it('produces identical output for identical input', () => {
     const args = input({
       subjects: [
-        identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)]),
+        identity('id-1', [
+          claim('identity.mfa.enforced', true),
+          claim('identity.account.enabled', true),
+        ]),
       ],
     });
     const a = assessControl(baseline, args);
@@ -70,8 +86,14 @@ describe('assessControl — determinism and reproducibility', () => {
   });
 
   it('is insensitive to the order of subjects and claims in the input digest', () => {
-    const s1 = identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)]);
-    const s2 = identity('id-2', [claim('identity.account.enabled', true, { id: 'c2a' }), claim('identity.mfa.enforced', true, { id: 'c2b' })]);
+    const s1 = identity('id-1', [
+      claim('identity.mfa.enforced', true),
+      claim('identity.account.enabled', true),
+    ]);
+    const s2 = identity('id-2', [
+      claim('identity.account.enabled', true, { id: 'c2a' }),
+      claim('identity.mfa.enforced', true, { id: 'c2b' }),
+    ]);
     const forward = assessControl(baseline, input({ subjects: [s1, s2] }));
     const reversed = assessControl(baseline, input({ subjects: [s2, s1] }));
     expect(forward.provenance.inputDigest).toBe(reversed.provenance.inputDigest);
@@ -81,11 +103,25 @@ describe('assessControl — determinism and reproducibility', () => {
   it('changes the input digest when a fact changes', () => {
     const passing = assessControl(
       baseline,
-      input({ subjects: [identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)])] }),
+      input({
+        subjects: [
+          identity('id-1', [
+            claim('identity.mfa.enforced', true),
+            claim('identity.account.enabled', true),
+          ]),
+        ],
+      }),
     );
     const failing = assessControl(
       baseline,
-      input({ subjects: [identity('id-1', [claim('identity.mfa.enforced', false), claim('identity.account.enabled', true)])] }),
+      input({
+        subjects: [
+          identity('id-1', [
+            claim('identity.mfa.enforced', false),
+            claim('identity.account.enabled', true),
+          ]),
+        ],
+      }),
     );
     expect(passing.provenance.inputDigest).not.toBe(failing.provenance.inputDigest);
   });
@@ -104,7 +140,12 @@ describe('assessControl — determinism and reproducibility', () => {
       baseline,
       input({
         asOfIso: '2026-09-09T07:00:00.000Z',
-        subjects: [identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)])],
+        subjects: [
+          identity('id-1', [
+            claim('identity.mfa.enforced', true),
+            claim('identity.account.enabled', true),
+          ]),
+        ],
       }),
     );
     expect(historical.state).toBe('SATISFIED');
@@ -127,7 +168,10 @@ describe('assessControl — UNKNOWN is preserved', () => {
       baseline,
       input({
         subjects: [
-          identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)]),
+          identity('id-1', [
+            claim('identity.mfa.enforced', true),
+            claim('identity.account.enabled', true),
+          ]),
           identity('id-2', [claim('identity.account.enabled', true, { id: 'c2' })]),
         ],
       }),
@@ -141,7 +185,10 @@ describe('assessControl — UNKNOWN is preserved', () => {
       baseline,
       input({
         subjects: [
-          identity('id-1', [claim('identity.mfa.enforced', false), claim('identity.account.enabled', true)]),
+          identity('id-1', [
+            claim('identity.mfa.enforced', false),
+            claim('identity.account.enabled', true),
+          ]),
           identity('id-2', [claim('identity.account.enabled', true, { id: 'c2' })]),
         ],
       }),
@@ -198,7 +245,12 @@ describe('assessControl — evidence lifecycle drives usability', () => {
     const result = assessControl(
       baseline,
       input({
-        subjects: [identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)])],
+        subjects: [
+          identity('id-1', [
+            claim('identity.mfa.enforced', true),
+            claim('identity.account.enabled', true),
+          ]),
+        ],
         evidence: [
           evidence({
             observedAt: '2026-07-01T00:00:00.000Z',
@@ -220,7 +272,12 @@ describe('assessControl — evidence lifecycle drives usability', () => {
     const result = assessControl(
       baseline,
       input({
-        subjects: [identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)])],
+        subjects: [
+          identity('id-1', [
+            claim('identity.mfa.enforced', true),
+            claim('identity.account.enabled', true),
+          ]),
+        ],
         evidence: [evidence({ status: 'REVOKED' })],
       }),
     );
@@ -231,7 +288,12 @@ describe('assessControl — evidence lifecycle drives usability', () => {
     const result = assessControl(
       baseline,
       input({
-        subjects: [identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)])],
+        subjects: [
+          identity('id-1', [
+            claim('identity.mfa.enforced', true),
+            claim('identity.account.enabled', true),
+          ]),
+        ],
         evidence: [evidence({ status: 'SUPERSEDED' })],
       }),
     );
@@ -294,8 +356,14 @@ describe('assessControl — the AI/truth boundary', () => {
       input({
         subjects: [
           identity('id-1', [
-            claim('identity.mfa.enforced', false, { id: 'old', assertedAt: '2026-09-01T00:00:00.000Z' }),
-            claim('identity.mfa.enforced', true, { id: 'new', assertedAt: '2026-09-09T06:00:00.000Z' }),
+            claim('identity.mfa.enforced', false, {
+              id: 'old',
+              assertedAt: '2026-09-01T00:00:00.000Z',
+            }),
+            claim('identity.mfa.enforced', true, {
+              id: 'new',
+              assertedAt: '2026-09-09T06:00:00.000Z',
+            }),
             claim('identity.account.enabled', true),
           ]),
         ],
@@ -311,7 +379,12 @@ describe('assessControl — exceptions', () => {
     const result = assessControl(
       baseline,
       input({
-        subjects: [identity('id-1', [claim('identity.mfa.enforced', false), claim('identity.account.enabled', true)])],
+        subjects: [
+          identity('id-1', [
+            claim('identity.mfa.enforced', false),
+            claim('identity.account.enabled', true),
+          ]),
+        ],
         activeExceptions: [
           {
             id: 'exc-1',
@@ -331,14 +404,22 @@ describe('assessControl — exceptions', () => {
       baseline,
       input({
         subjects: [
-          identity('id-1', [claim('identity.mfa.enforced', false), claim('identity.account.enabled', true)]),
+          identity('id-1', [
+            claim('identity.mfa.enforced', false),
+            claim('identity.account.enabled', true),
+          ]),
           identity('id-2', [
             claim('identity.mfa.enforced', true, { id: 'c2a' }),
             claim('identity.account.enabled', true, { id: 'c2b' }),
           ]),
         ],
         activeExceptions: [
-          { id: 'exc-1', subjectNodeId: 'id-1', justification: 'Break-glass account', expiresAt: '2026-12-31T00:00:00.000Z' },
+          {
+            id: 'exc-1',
+            subjectNodeId: 'id-1',
+            justification: 'Break-glass account',
+            expiresAt: '2026-12-31T00:00:00.000Z',
+          },
         ],
       }),
     );
@@ -367,7 +448,11 @@ describe('assessControl — aggregation semantics', () => {
   it('THRESHOLD reports SATISFIED at or above the threshold', () => {
     const result = assessControl(
       baseline,
-      input({ ruleKey: 'device.os.supported', controlKey: 'device.os.supported', subjects: devices(Array(20).fill(true)) }),
+      input({
+        ruleKey: 'device.os.supported',
+        controlKey: 'device.os.supported',
+        subjects: devices(Array(20).fill(true)),
+      }),
     );
     expect(result.state).toBe('SATISFIED');
   });
@@ -403,7 +488,10 @@ describe('assessControl — aggregation semantics', () => {
       baseline,
       input({
         subjects: [
-          identity('id-1', [claim('identity.mfa.enforced', true), claim('identity.account.enabled', true)]),
+          identity('id-1', [
+            claim('identity.mfa.enforced', true),
+            claim('identity.account.enabled', true),
+          ]),
           identity('id-2', [
             claim('identity.mfa.enforced', false, { id: 'c2a' }),
             claim('identity.account.enabled', true, { id: 'c2b' }),
@@ -444,7 +532,10 @@ describe('assessControl — organisation-level rules', () => {
   it('reports NO_EVIDENCE when no organisation claims exist at all', () => {
     const result = assessControl(
       baseline,
-      input({ ruleKey: 'identity.admin.count_limited', controlKey: 'identity.admin.count_limited' }),
+      input({
+        ruleKey: 'identity.admin.count_limited',
+        controlKey: 'identity.admin.count_limited',
+      }),
     );
     expect(result.state).toBe('UNKNOWN');
     expect(result.unknownReason).toBe('NO_EVIDENCE');

@@ -216,7 +216,8 @@ export async function outboxStats(ctx: PlatformContext): Promise<OutboxStats> {
     pending: Number(row?.pending ?? 0),
     inFlight: Number(row?.in_flight ?? 0),
     deadLetter: Number(row?.dead_letter ?? 0),
-    oldestPendingAgeSeconds: row?.oldest_age === null || row?.oldest_age === undefined ? null : Number(row.oldest_age),
+    oldestPendingAgeSeconds:
+      row?.oldest_age === null || row?.oldest_age === undefined ? null : Number(row.oldest_age),
   };
 }
 

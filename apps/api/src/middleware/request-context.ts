@@ -4,7 +4,12 @@ import type { TenantContext } from '@adericel/graph';
 import { recordAudit } from '@adericel/graph';
 import { AdericelError, newCorrelationId, type Logger } from '@adericel/shared';
 import type { AppContext } from '../context.js';
-import { decide, organisationOwner, principalFromAccessToken, principalFromApiKey } from '../auth/principal.js';
+import {
+  decide,
+  organisationOwner,
+  principalFromAccessToken,
+  principalFromApiKey,
+} from '../auth/principal.js';
 
 /**
  * Per-request state.
@@ -225,7 +230,10 @@ async function writeDenial(
           requestId: request.id,
           correlationId: request.adericel.correlationId,
           sourceIp: request.ip,
-          userAgent: typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
+          userAgent:
+            typeof request.headers['user-agent'] === 'string'
+              ? request.headers['user-agent']
+              : null,
           metadata: { method: request.method, path: request.routeOptions?.url ?? request.url },
         },
         app.clock.nowIso(),
@@ -254,7 +262,12 @@ export async function auditDenialFromError(
   error: AdericelError,
 ): Promise<void> {
   if (request.adericel?.deniedAudited) return;
-  const denialCodes = new Set(['FORBIDDEN', 'TENANT_MISMATCH', 'POLICY_DENIED', 'APPROVAL_REQUIRED']);
+  const denialCodes = new Set([
+    'FORBIDDEN',
+    'TENANT_MISMATCH',
+    'POLICY_DENIED',
+    'APPROVAL_REQUIRED',
+  ]);
   if (!denialCodes.has(error.code)) return;
   request.adericel.deniedAudited = true;
 
@@ -302,7 +315,8 @@ export async function audit(
     requestId: request.id,
     correlationId: request.adericel.correlationId,
     sourceIp: request.ip,
-    userAgent: typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
+    userAgent:
+      typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
     metadata: entry.metadata ?? {},
   };
 

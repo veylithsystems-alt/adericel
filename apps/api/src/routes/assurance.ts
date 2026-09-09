@@ -88,7 +88,11 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           'Finding counts',
         );
 
-        const evidenceAges = await ctx.oneOrFail<{ total: string; expiring: string; expired: string }>(
+        const evidenceAges = await ctx.oneOrFail<{
+          total: string;
+          expiring: string;
+          expired: string;
+        }>(
           `SELECT count(*)::text AS total,
                   count(*) FILTER (WHERE valid_until IS NOT NULL
                                      AND valid_until BETWEEN now() AND now() + interval '7 days')::text AS expiring,
@@ -286,7 +290,12 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           [params.organisationId, params.id],
         );
 
-        const requirements = await ctx.many<{ id: string; key: string; title: string; framework: string }>(
+        const requirements = await ctx.many<{
+          id: string;
+          key: string;
+          title: string;
+          framework: string;
+        }>(
           `SELECT r.id, r.key, r.title, f.name AS framework
            FROM control_requirements cr
            JOIN requirements r ON r.id = cr.requirement_id

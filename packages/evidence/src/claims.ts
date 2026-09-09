@@ -50,7 +50,8 @@ function toRecord(row: ClaimRow): ClaimRecord {
     value: row.value,
     origin: row.origin as ClaimOrigin,
     status: row.status as ClaimStatus,
-    extractionConfidence: row.extraction_confidence === null ? null : Number(row.extraction_confidence),
+    extractionConfidence:
+      row.extraction_confidence === null ? null : Number(row.extraction_confidence),
     evidenceIds: row.evidence_ids ?? [],
     supersedesClaimId: row.supersedes_claim_id,
     observedAt: row.observed_at?.toISOString() ?? null,
@@ -242,7 +243,10 @@ export function createClaimRepository(ctx: TenantContext, clock: Clock): ClaimRe
          LIMIT $${values.length}`,
         values,
       );
-      return buildPage(rows.map(toRecord), limit, (claim) => ({ k: claim.assertedAt, i: claim.id }));
+      return buildPage(rows.map(toRecord), limit, (claim) => ({
+        k: claim.assertedAt,
+        i: claim.id,
+      }));
     },
 
     async forSubjects(nodeIds, predicates): Promise<readonly ClaimRecord[]> {

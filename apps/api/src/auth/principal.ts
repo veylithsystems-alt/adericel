@@ -49,10 +49,7 @@ async function loadGrants(
   }));
 }
 
-export async function principalFromAccessToken(
-  app: AppContext,
-  token: string,
-): Promise<Principal> {
+export async function principalFromAccessToken(app: AppContext, token: string): Promise<Principal> {
   const claims = verifyAccessToken(app.config.auth.jwtSecret, token, {
     issuer: app.config.auth.issuer,
     audience: app.config.auth.audience,
@@ -60,10 +57,13 @@ export async function principalFromAccessToken(
   });
 
   return app.db.withPlatform(async (ctx) => {
-    const user = await ctx.one<{ id: string; status: string; display_name: string; email: string; msp_id: string | null }>(
-      `SELECT id, status, display_name, email, msp_id FROM users WHERE id = $1`,
-      [claims.sub],
-    );
+    const user = await ctx.one<{
+      id: string;
+      status: string;
+      display_name: string;
+      email: string;
+      msp_id: string | null;
+    }>(`SELECT id, status, display_name, email, msp_id FROM users WHERE id = $1`, [claims.sub]);
     if (!user) throw new AdericelError('UNAUTHENTICATED', 'User no longer exists');
     if (user.status !== 'ACTIVE') {
       throw new AdericelError('UNAUTHENTICATED', `User account is ${user.status.toLowerCase()}`);

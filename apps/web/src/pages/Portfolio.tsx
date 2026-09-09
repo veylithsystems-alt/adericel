@@ -35,7 +35,12 @@ export function Portfolio({ me }: { me: Me }): ReactElement {
         <PageHeader title="Organisations" />
         <div className="grid grid--2">
           {me.organisations.map((org) => (
-            <Link key={org.id} to={`/organisations/${org.id}`} className="panel" style={{ textDecoration: 'none' }}>
+            <Link
+              key={org.id}
+              to={`/organisations/${org.id}`}
+              className="panel"
+              style={{ textDecoration: 'none' }}
+            >
               <h2>{org.name}</h2>
               <p className="meta">{org.slug}</p>
             </Link>
@@ -148,7 +153,10 @@ export function Portfolio({ me }: { me: Me }): ReactElement {
                   </td>
                   <td className="table__numeric">{org.counts.NOT_SATISFIED || '—'}</td>
                   <td className="table__numeric">{org.counts.UNKNOWN || '—'}</td>
-                  <td className="table__numeric" style={org.criticalFindings > 0 ? { color: 'var(--state-failing)' } : undefined}>
+                  <td
+                    className="table__numeric"
+                    style={org.criticalFindings > 0 ? { color: 'var(--state-failing)' } : undefined}
+                  >
                     {org.criticalFindings || '—'}
                   </td>
                   <td className="table__numeric">{org.awaitingApproval || '—'}</td>
@@ -161,10 +169,7 @@ export function Portfolio({ me }: { me: Me }): ReactElement {
       </Section>
 
       {recurring.data && recurring.data.controls.length > 0 ? (
-        <Section
-          title="Failing across several customers"
-          note="One fix, many customers"
-        >
+        <Section title="Failing across several customers" note="One fix, many customers">
           <div className="panel panel--flush table__wrap">
             <table className="table">
               <thead>

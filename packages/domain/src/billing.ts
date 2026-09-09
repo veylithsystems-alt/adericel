@@ -99,7 +99,12 @@ export function checkOrganisationEntitlement(
     subscription.trialEndsAt !== null &&
     Date.parse(subscription.trialEndsAt) <= Date.parse(atIso)
   ) {
-    return { allowed: false, reason: 'Trial period has ended', organisationsInUse, organisationLimit };
+    return {
+      allowed: false,
+      reason: 'Trial period has ended',
+      organisationsInUse,
+      organisationLimit,
+    };
   }
   if (organisationLimit !== null && organisationsInUse >= organisationLimit) {
     return {
@@ -149,6 +154,15 @@ export const DEFAULT_PLANS: readonly PlanDefinition[] = [
     currency: 'GBP',
     includedOrganisations: 0,
     volumeTiers: [[250, 9_900]],
-    features: ['assurance', 'evidence', 'findings', 'actions', 'integrations', 'portfolio', 'sso', 'custom-frameworks'],
+    features: [
+      'assurance',
+      'evidence',
+      'findings',
+      'actions',
+      'integrations',
+      'portfolio',
+      'sso',
+      'custom-frameworks',
+    ],
   },
 ];

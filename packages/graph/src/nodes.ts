@@ -196,7 +196,9 @@ export function createNodeRepository(ctx: TenantContext): NodeRepository {
       if (cursor) {
         const { k, i } = decodeCursor(cursor);
         values.push(k, i);
-        conditions.push(`(updated_at, id) < ($${values.length - 1}::timestamptz, $${values.length}::uuid)`);
+        conditions.push(
+          `(updated_at, id) < ($${values.length - 1}::timestamptz, $${values.length}::uuid)`,
+        );
       }
       values.push(limit + 1);
 

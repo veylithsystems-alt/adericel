@@ -13,11 +13,7 @@
  * Idempotent: running it twice converges rather than duplicating.
  */
 import { randomUUID } from 'node:crypto';
-import {
-  DEFAULT_PLANS,
-  organisationSettingsSchema,
-  type NewDomainEvent,
-} from '@adericel/domain';
+import { DEFAULT_PLANS, organisationSettingsSchema, type NewDomainEvent } from '@adericel/domain';
 import { createCollectionService, createAssessmentService } from '@adericel/actions';
 import { createBuiltInRegistry } from '@adericel/truth-engine';
 import {
@@ -94,7 +90,13 @@ async function main(): Promise<void> {
          ON CONFLICT (key, version) WHERE is_system
          DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description
          RETURNING id`,
-        [framework.key, framework.name, framework.version, framework.publisher, framework.description],
+        [
+          framework.key,
+          framework.name,
+          framework.version,
+          framework.publisher,
+          framework.description,
+        ],
         'Framework',
       );
       for (const requirement of framework.requirements) {
@@ -199,7 +201,7 @@ async function main(): Promise<void> {
     scopeId: msp,
   });
 
-  const mspAnalystId = await upsertUser(db, passwords, {
+  await upsertUser(db, passwords, {
     email: 'analyst@meridian.test',
     displayName: 'Dev Chandra',
     mspId: msp,
@@ -260,7 +262,9 @@ async function main(): Promise<void> {
       ).id;
 
     await db.withPlatform(async (ctx) => {
-      const settings = organisationSettingsSchema.parse({ defaultAutonomyLevel: demo.autonomyLevel });
+      const settings = organisationSettingsSchema.parse({
+        defaultAutonomyLevel: demo.autonomyLevel,
+      });
       await ctx.query(`UPDATE organisations SET settings = $2::jsonb WHERE id = $1`, [
         organisationId,
         JSON.stringify(settings),
@@ -392,7 +396,10 @@ async function main(): Promise<void> {
       actorUserId: platformAdminId,
       correlationId,
     });
-    logger.info({ organisationId: created.id }, 'Adericel now assesses itself with the same engine');
+    logger.info(
+      { organisationId: created.id },
+      'Adericel now assesses itself with the same engine',
+    );
   }
 
   logger.info({}, 'issuing an API key for workflow automation');
@@ -444,8 +451,12 @@ async function main(): Promise<void> {
   console.log('');
   console.log(`  Platform admin   admin@adericel.test      ${DEMO_PASSWORD}`);
   console.log(`  MSP owner        owner@meridian.test      ${DEMO_PASSWORD}`);
-  console.log(`  MSP analyst      analyst@meridian.test    ${DEMO_PASSWORD}   (can propose, cannot approve)`);
-  console.log(`  Approver         approver@meridian.test   ${DEMO_PASSWORD}   (can approve, cannot propose)`);
+  console.log(
+    `  MSP analyst      analyst@meridian.test    ${DEMO_PASSWORD}   (can propose, cannot approve)`,
+  );
+  console.log(
+    `  Approver         approver@meridian.test   ${DEMO_PASSWORD}   (can approve, cannot propose)`,
+  );
   console.log('');
   console.log('API key for n8n and automation (shown once, store it now):');
   console.log(`  ${apiKey.presented}`);
@@ -465,7 +476,9 @@ async function main(): Promise<void> {
   console.log('  4. Sign in as the approver and approve it. The analyst could not have done this.');
   console.log('  5. Execute, then verify. Verification re-collects from the source rather than');
   console.log('     trusting the execution report.');
-  console.log('  6. Reassess. The control moves to satisfied, and the audit trail holds every step.');
+  console.log(
+    '  6. Reassess. The control moves to satisfied, and the audit trail holds every step.',
+  );
   console.log('');
 }
 

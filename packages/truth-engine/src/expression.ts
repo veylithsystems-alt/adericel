@@ -56,32 +56,37 @@ export type Expression =
   | { readonly op: 'isTrue'; readonly operand: Expression }
   | { readonly op: 'olderThanDays'; readonly value: Expression; readonly days: Expression };
 
-const expressionSchema: z.ZodType<Expression> = z.lazy(() =>
-  z.discriminatedUnion('op', [
-    z.object({ op: z.literal('const'), value: z.unknown() }),
-    z.object({
-      op: z.literal('claim'),
-      predicate: z.string().min(1),
-      path: z.string().optional(),
-      default: z.unknown().optional(),
-    }),
-    z.object({ op: z.literal('param'), key: z.string().min(1), default: z.unknown().optional() }),
-    z.object({ op: z.literal('fact'), key: z.string().min(1) }),
-    z.object({ op: z.literal('exists'), predicate: z.string().min(1) }),
-    z.object({ op: z.literal('eq'), left: expressionSchema, right: expressionSchema }),
-    z.object({ op: z.literal('ne'), left: expressionSchema, right: expressionSchema }),
-    z.object({ op: z.literal('lt'), left: expressionSchema, right: expressionSchema }),
-    z.object({ op: z.literal('lte'), left: expressionSchema, right: expressionSchema }),
-    z.object({ op: z.literal('gt'), left: expressionSchema, right: expressionSchema }),
-    z.object({ op: z.literal('gte'), left: expressionSchema, right: expressionSchema }),
-    z.object({ op: z.literal('includes'), collection: expressionSchema, value: expressionSchema }),
-    z.object({ op: z.literal('matches'), value: expressionSchema, pattern: z.string() }),
-    z.object({ op: z.literal('and'), operands: z.array(expressionSchema) }),
-    z.object({ op: z.literal('or'), operands: z.array(expressionSchema) }),
-    z.object({ op: z.literal('not'), operand: expressionSchema }),
-    z.object({ op: z.literal('isTrue'), operand: expressionSchema }),
-    z.object({ op: z.literal('olderThanDays'), value: expressionSchema, days: expressionSchema }),
-  ]) as z.ZodType<Expression>,
+const expressionSchema: z.ZodType<Expression> = z.lazy(
+  () =>
+    z.discriminatedUnion('op', [
+      z.object({ op: z.literal('const'), value: z.unknown() }),
+      z.object({
+        op: z.literal('claim'),
+        predicate: z.string().min(1),
+        path: z.string().optional(),
+        default: z.unknown().optional(),
+      }),
+      z.object({ op: z.literal('param'), key: z.string().min(1), default: z.unknown().optional() }),
+      z.object({ op: z.literal('fact'), key: z.string().min(1) }),
+      z.object({ op: z.literal('exists'), predicate: z.string().min(1) }),
+      z.object({ op: z.literal('eq'), left: expressionSchema, right: expressionSchema }),
+      z.object({ op: z.literal('ne'), left: expressionSchema, right: expressionSchema }),
+      z.object({ op: z.literal('lt'), left: expressionSchema, right: expressionSchema }),
+      z.object({ op: z.literal('lte'), left: expressionSchema, right: expressionSchema }),
+      z.object({ op: z.literal('gt'), left: expressionSchema, right: expressionSchema }),
+      z.object({ op: z.literal('gte'), left: expressionSchema, right: expressionSchema }),
+      z.object({
+        op: z.literal('includes'),
+        collection: expressionSchema,
+        value: expressionSchema,
+      }),
+      z.object({ op: z.literal('matches'), value: expressionSchema, pattern: z.string() }),
+      z.object({ op: z.literal('and'), operands: z.array(expressionSchema) }),
+      z.object({ op: z.literal('or'), operands: z.array(expressionSchema) }),
+      z.object({ op: z.literal('not'), operand: expressionSchema }),
+      z.object({ op: z.literal('isTrue'), operand: expressionSchema }),
+      z.object({ op: z.literal('olderThanDays'), value: expressionSchema, days: expressionSchema }),
+    ]) as z.ZodType<Expression>,
 );
 
 export { expressionSchema };
@@ -221,8 +226,10 @@ function compare(
 ): Trilean {
   if (left === MISSING || right === MISSING) return 'UNKNOWN';
   if (left === null || right === null) return 'UNKNOWN';
-  if (typeof left === 'number' && typeof right === 'number') return fromBoolean(compareFn(left, right));
-  if (typeof left === 'string' && typeof right === 'string') return fromBoolean(compareFn(left, right));
+  if (typeof left === 'number' && typeof right === 'number')
+    return fromBoolean(compareFn(left, right));
+  if (typeof left === 'string' && typeof right === 'string')
+    return fromBoolean(compareFn(left, right));
   // Dates arrive as ISO strings; comparing them lexically is correct for
   // ISO-8601 with a fixed offset, which is the only form Adericel stores.
   return 'UNKNOWN';
@@ -252,11 +259,7 @@ function toTrilean(value: Value): Trilean {
   return 'UNKNOWN';
 }
 
-function evaluateInternal(
-  expression: Expression,
-  ctx: EvaluationContext,
-  out: Collector,
-): Trilean {
+function evaluateInternal(expression: Expression, ctx: EvaluationContext, out: Collector): Trilean {
   switch (expression.op) {
     case 'const':
     case 'claim':

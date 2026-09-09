@@ -105,8 +105,7 @@ return [
     adericelRequest('Post observations', [660, 0], {
       method: 'POST',
       url: '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/observations',
-      body:
-        '={{ JSON.stringify({ integrationId: $json.integrationId, observations: $json.observations }) }}',
+      body: '={{ JSON.stringify({ integrationId: $json.integrationId, observations: $json.observations }) }}',
       // The idempotency key is derived from the batch content, so an n8n retry
       // of the same batch is recognised rather than ingested twice.
       idempotencyKey:
@@ -115,11 +114,12 @@ return [
         'Adericel deduplicates observations on content as well, so a repeated batch converges ' +
         'rather than inflating the evidence base.',
     }),
-    ifNode(
-      'Accepted?',
-      [880, 0],
-      { left: '={{ $json.statusCode }}', operator: 'lt', right: '300', type: 'number' },
-    ),
+    ifNode('Accepted?', [880, 0], {
+      left: '={{ $json.statusCode }}',
+      operator: 'lt',
+      right: '300',
+      type: 'number',
+    }),
     node(
       'Respond accepted',
       'n8n-nodes-base.respondToWebhook',
@@ -139,7 +139,7 @@ return [
         respondWith: 'json',
         responseCode: 502,
         responseBody:
-          "={{ JSON.stringify({ accepted: false, status: $json.statusCode, detail: $json.body }) }}",
+          '={{ JSON.stringify({ accepted: false, status: $json.statusCode, detail: $json.body }) }}',
       },
       [1120, 100],
       {
@@ -150,7 +150,12 @@ return [
     ),
   ];
 
-  let connections = chain('Observations in', 'Configuration', 'Validate batch', 'Post observations');
+  let connections = chain(
+    'Observations in',
+    'Configuration',
+    'Validate batch',
+    'Post observations',
+  );
   connections = connect(connections, 'Post observations', 'Accepted?');
   connections = connect(connections, 'Accepted?', 'Respond accepted', 0);
   connections = connect(connections, 'Accepted?', 'Respond rejected', 1);
@@ -215,7 +220,8 @@ export function documentProcessingWorkflow(): N8nWorkflow {
   subjectNodeIds: $json.subjectNodeIds || [],
   metadata: { workflow: 'document-processing', executionId: $execution.id }
 }) }}`,
-      idempotencyKey: "={{ 'doc-' + $json.organisationId + '-' + ($json.documentUrl || $json.title) }}",
+      idempotencyKey:
+        "={{ 'doc-' + $json.organisationId + '-' + ($json.documentUrl || $json.title) }}",
       notes:
         'Integrity is recorded as UNVERIFIED: Adericel received this document from a workflow and ' +
         'can attest to what it stored, not to the document being genuine.',
@@ -223,7 +229,11 @@ export function documentProcessingWorkflow(): N8nWorkflow {
     ifNode(
       'AI extraction enabled?',
       [660, 0],
-      { left: "={{ $env.ADERICEL_AI_EXTRACTION_ENABLED === 'true' }}", operator: 'true', type: 'boolean' },
+      {
+        left: "={{ $env.ADERICEL_AI_EXTRACTION_ENABLED === 'true' }}",
+        operator: 'true',
+        type: 'boolean',
+      },
       'Extraction is off by default. Adericel works completely without it; AI only ever proposes.',
     ),
     codeNode(
@@ -310,18 +320,11 @@ return [
 ];`,
     ),
     executeSubWorkflow('Notify reviewer', [1620, -120], WORKFLOW_IDS.notifications),
-    node(
-      'Stored without extraction',
-      'n8n-nodes-base.noOp',
-      1,
-      {},
-      [900, 140],
-      {
-        notes:
-          'The document is evidence in its own right. Extraction is an optional convenience, not ' +
-          'a requirement for the document to count.',
-      },
-    ),
+    node('Stored without extraction', 'n8n-nodes-base.noOp', 1, {}, [900, 140], {
+      notes:
+        'The document is evidence in its own right. Extraction is an optional convenience, not ' +
+        'a requirement for the document to count.',
+    }),
   ];
 
   let connections = chain(
@@ -427,8 +430,7 @@ return [
     adericelRequest('Post observations', [660, 0], {
       method: 'POST',
       url: '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/observations',
-      body:
-        '={{ JSON.stringify({ integrationId: $json.integrationId, observations: $json.observations }) }}',
+      body: '={{ JSON.stringify({ integrationId: $json.integrationId, observations: $json.observations }) }}',
       idempotencyKey:
         "={{ 'norm-' + $json.organisationId + '-' + require('crypto').createHash('sha256').update(JSON.stringify($json.observations)).digest('hex').slice(0, 32) }}",
     }),

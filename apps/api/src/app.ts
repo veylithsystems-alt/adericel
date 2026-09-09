@@ -57,14 +57,21 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
     },
     crossOriginResourcePolicy: { policy: 'same-site' },
     referrerPolicy: { policy: 'no-referrer' },
-    hsts: app.config.nodeEnv === 'production' ? { maxAge: 31_536_000, includeSubDomains: true } : false,
+    hsts:
+      app.config.nodeEnv === 'production' ? { maxAge: 31_536_000, includeSubDomains: true } : false,
   });
 
   await server.register(cors, {
     origin: app.config.api.corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['authorization', 'content-type', 'x-api-key', 'idempotency-key', 'x-correlation-id'],
+    allowedHeaders: [
+      'authorization',
+      'content-type',
+      'x-api-key',
+      'idempotency-key',
+      'x-correlation-id',
+    ],
     exposedHeaders: ['x-correlation-id', 'x-request-id', 'x-content-hash'],
     maxAge: 600,
   });

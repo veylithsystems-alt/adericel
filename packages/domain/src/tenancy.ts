@@ -22,7 +22,13 @@ export interface MspRecord {
   readonly updatedAt: string;
 }
 
-export const ORGANISATION_STATUSES = ['ONBOARDING', 'ACTIVE', 'SUSPENDED', 'OFFBOARDING', 'CLOSED'] as const;
+export const ORGANISATION_STATUSES = [
+  'ONBOARDING',
+  'ACTIVE',
+  'SUSPENDED',
+  'OFFBOARDING',
+  'CLOSED',
+] as const;
 export type OrganisationStatus = (typeof ORGANISATION_STATUSES)[number];
 export const organisationStatusSchema = z.enum(ORGANISATION_STATUSES);
 

@@ -194,7 +194,12 @@ export function createS3Store(options: S3StoreOptions): ObjectStore {
       host: base.host,
       canonicalPath: base.pathname
         .split('/')
-        .map((segment) => encodeURIComponent(segment).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`))
+        .map((segment) =>
+          encodeURIComponent(segment).replace(
+            /[!'()*]/g,
+            (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+          ),
+        )
         .join('/'),
     };
   }
@@ -210,6 +215,11 @@ export function createS3Store(options: S3StoreOptions): ObjectStore {
     extraHeaders: Record<string, string> = {},
   ): Promise<Response> {
     const { url, host, canonicalPath } = urlFor(key);
+    // SigV4 requires the wall-clock time of the request itself: the signature is
+    // only valid within a window either side of it, and S3 compares it against
+    // its own clock. This is protocol time, not assurance time — nothing derived
+    // from it is ever recorded, so injecting a Clock here would be ceremony.
+    // eslint-disable-next-line no-restricted-syntax
     const now = new Date();
     const amzDate = `${now.toISOString().replace(/[:-]|\.\d{3}/g, '')}`;
     const dateStamp = amzDate.slice(0, 8);

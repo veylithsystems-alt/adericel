@@ -66,7 +66,8 @@ export function errorHandler(app: AppContext) {
       void auditDenialFromError(app, request, error);
 
       // A tenant-isolation refusal is a security event, not a routine 403.
-      const level = error.code === 'TENANT_MISMATCH' ? 'error' : error.status >= 500 ? 'error' : 'warn';
+      const level =
+        error.code === 'TENANT_MISMATCH' ? 'error' : error.status >= 500 ? 'error' : 'warn';
       logger[level](
         {
           code: error.code,

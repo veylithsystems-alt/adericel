@@ -1,12 +1,22 @@
 import { z } from 'zod';
-import { assuranceStateSchema, unknownReasonSchema, type AssuranceState, type UnknownReason } from './assurance.js';
+import {
+  assuranceStateSchema,
+  unknownReasonSchema,
+  type AssuranceState,
+  type UnknownReason,
+} from './assurance.js';
 
 /**
  * An assessment is a recorded, reproducible determination made by the Truth
  * Engine. Everything needed to re-run it is captured: which rules, which
  * version of those rules, which inputs, and at what instant.
  */
-export const ASSESSMENT_SUBJECT_KINDS = ['CONTROL', 'REQUIREMENT', 'FRAMEWORK', 'ORGANISATION'] as const;
+export const ASSESSMENT_SUBJECT_KINDS = [
+  'CONTROL',
+  'REQUIREMENT',
+  'FRAMEWORK',
+  'ORGANISATION',
+] as const;
 export type AssessmentSubjectKind = (typeof ASSESSMENT_SUBJECT_KINDS)[number];
 export const assessmentSubjectKindSchema = z.enum(ASSESSMENT_SUBJECT_KINDS);
 

@@ -23,7 +23,11 @@ import {
   type Clock,
 } from '@adericel/shared';
 import { databaseFromConfig, type Database } from '@adericel/graph';
-import { buildConnectorRegistry, createFixtureState, type FixtureState } from '@adericel/integrations';
+import {
+  buildConnectorRegistry,
+  createFixtureState,
+  type FixtureState,
+} from '@adericel/integrations';
 import { createFilesystemStore } from '@adericel/evidence';
 import { buildServer, createAppContext, type AppContext } from '@adericel/api';
 import { up as migrateUp } from '../../scripts/migrate.js';
@@ -35,15 +39,17 @@ let available: boolean | null = null;
 
 export function testDatabaseUrl(): string {
   return (
-    process.env.TEST_DATABASE_URL ??
-    'postgres://adericel:adericel@localhost:5432/adericel_test'
+    process.env.TEST_DATABASE_URL ?? 'postgres://adericel:adericel@localhost:5432/adericel_test'
   );
 }
 
 /** Whether a usable test database is reachable. Cached for the run. */
 export async function databaseAvailable(): Promise<boolean> {
   if (available !== null) return available;
-  const client = new pg.Client({ connectionString: testDatabaseUrl(), connectionTimeoutMillis: 2000 });
+  const client = new pg.Client({
+    connectionString: testDatabaseUrl(),
+    connectionTimeoutMillis: 2000,
+  });
   try {
     await client.connect();
     await client.query('SELECT 1');
@@ -188,7 +194,11 @@ export async function seedTenant(
   options: {
     slug: string;
     name?: string;
-    records?: readonly { kind: string; subjectExternalId: string | null; payload: Record<string, unknown> }[];
+    records?: readonly {
+      kind: string;
+      subjectExternalId: string | null;
+      payload: Record<string, unknown>;
+    }[];
     autonomyLevel?: number;
     frameworks?: readonly string[];
   },
@@ -219,11 +229,7 @@ export async function seedTenant(
     return row.id;
   });
 
-  const makeUser = async (
-    email: string,
-    name: string,
-    roles: readonly string[],
-  ): Promise<string> =>
+  const makeUser = async (email: string, name: string, roles: readonly string[]): Promise<string> =>
     db.withPlatform(async (ctx) => {
       const row = await ctx.oneOrFail<{ id: string }>(
         `INSERT INTO users (email, display_name, msp_id, status)
@@ -250,7 +256,9 @@ export async function seedTenant(
     });
 
   const ownerUserId = await makeUser(`owner-${options.slug}@test.invalid`, 'Owner', ['MSP_OWNER']);
-  const analystUserId = await makeUser(`analyst-${options.slug}@test.invalid`, 'Analyst', ['MSP_ANALYST']);
+  const analystUserId = await makeUser(`analyst-${options.slug}@test.invalid`, 'Analyst', [
+    'MSP_ANALYST',
+  ]);
   const approverUserId = await makeUser(`approver-${options.slug}@test.invalid`, 'Approver', [
     'MSP_READONLY',
     'ORG_APPROVER',

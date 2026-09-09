@@ -60,7 +60,8 @@ export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHan
         `SELECT settings FROM organisations WHERE id = $1`,
         [organisationId],
       );
-      return organisationSettingsSchema.parse(row?.settings ?? {}).defaultAutonomyLevel as AutonomyLevel;
+      return organisationSettingsSchema.parse(row?.settings ?? {})
+        .defaultAutonomyLevel as AutonomyLevel;
     });
   }
 
@@ -244,7 +245,11 @@ export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHan
               createCollectionService({
                 ctx,
                 clock,
-                logger: logger.child({ organisationId, integrationId: integration.id, correlationId }),
+                logger: logger.child({
+                  organisationId,
+                  integrationId: integration.id,
+                  correlationId,
+                }),
                 connectors: deps.connectors,
                 correlationId,
                 actor: 'scheduler',
@@ -385,7 +390,10 @@ export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHan
         ctx.one<{ id: string }>(`SELECT id FROM organisations WHERE slug = 'adericel'`),
       );
       if (!selfOrg) {
-        return { status: 'SKIPPED', detail: 'No Adericel self-assurance organisation is configured' };
+        return {
+          status: 'SKIPPED',
+          detail: 'No Adericel self-assurance organisation is configured',
+        };
       }
 
       const correlationId = newCorrelationId();

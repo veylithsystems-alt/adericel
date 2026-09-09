@@ -1,6 +1,6 @@
 import type { ActionRiskClass, ObservationInput } from '@adericel/domain';
 import type { Logger } from '@adericel/shared';
-import { z } from 'zod';
+import { type z } from 'zod';
 
 /**
  * The connector contract.
@@ -28,7 +28,13 @@ export const CONNECTOR_CATEGORIES = [
 ] as const;
 export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number];
 
-export const AUTH_KINDS = ['NONE', 'API_KEY', 'BASIC', 'OAUTH2_CLIENT_CREDENTIALS', 'BEARER'] as const;
+export const AUTH_KINDS = [
+  'NONE',
+  'API_KEY',
+  'BASIC',
+  'OAUTH2_CLIENT_CREDENTIALS',
+  'BEARER',
+] as const;
 export type AuthKind = (typeof AUTH_KINDS)[number];
 
 /** A capability the connector can execute against the external system. */
@@ -112,7 +118,10 @@ export interface ConnectionCheck {
   readonly missingScopes?: readonly string[];
 }
 
-export interface Connector<TConfig = Record<string, unknown>, TCredentials = Record<string, unknown>> {
+export interface Connector<
+  TConfig = Record<string, unknown>,
+  TCredentials = Record<string, unknown>,
+> {
   readonly key: string;
   readonly name: string;
   readonly vendor: string;
@@ -188,11 +197,12 @@ export function createConnectorRegistry(initial: readonly Connector[] = []): Con
       return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
     },
     capabilities() {
-      return registry
-        .list()
-        .flatMap((connector) =>
-          connector.capabilities.map((capability) => ({ ...capability, connectorKey: connector.key })),
-        );
+      return registry.list().flatMap((connector) =>
+        connector.capabilities.map((capability) => ({
+          ...capability,
+          connectorKey: connector.key,
+        })),
+      );
     },
     capabilityFor(actionType: string) {
       return registry.capabilities().find((c) => c.actionType === actionType) ?? null;

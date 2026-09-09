@@ -5,7 +5,6 @@ import type {
   Connector,
   ConnectorContext,
   CollectionResult,
-  ExecutionRequest,
   ExecutionResult,
 } from '../connector.js';
 import { createHttpClient, type EgressPolicy } from '../http.js';
@@ -98,14 +97,19 @@ export function createMicrosoftEntraConnector(
       scope: 'https://graph.microsoft.com/.default',
       grant_type: 'client_credentials',
     });
-    const response = await http(context).json<{ access_token?: string; error_description?: string }>({
+    const response = await http(context).json<{
+      access_token?: string;
+      error_description?: string;
+    }>({
       method: 'POST',
       url: `${config.loginBaseUrl}/${config.tenantId}/oauth2/v2.0/token`,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
     if (!response.access_token) {
-      throw new Error(`Entra token request failed: ${response.error_description ?? 'no token returned'}`);
+      throw new Error(
+        `Entra token request failed: ${response.error_description ?? 'no token returned'}`,
+      );
     }
     return response.access_token;
   }
@@ -172,7 +176,8 @@ export function createMicrosoftEntraConnector(
       {
         actionType: 'identity.account.disable',
         title: 'Disable the account',
-        description: 'Sets accountEnabled to false, preventing sign-in while preserving the account.',
+        description:
+          'Sets accountEnabled to false, preventing sign-in while preserving the account.',
         riskClass: 'DISRUPTIVE',
         parameterSchema: z.object({ reason: z.string().min(1).max(500) }),
         verification: {
@@ -237,7 +242,9 @@ export function createMicrosoftEntraConnector(
         usersUrl.toString(),
       );
       if (truncated) {
-        warnings.push('User collection stopped at the page limit; some identities were not collected.');
+        warnings.push(
+          'User collection stopped at the page limit; some identities were not collected.',
+        );
       }
 
       // MFA registration state lives behind a separate permission. If it is not

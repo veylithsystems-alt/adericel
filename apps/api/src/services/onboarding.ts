@@ -70,11 +70,19 @@ export async function provisionOrganisation(
       if (!clash) break;
       slug = `${baseSlug}-${attempt + 1}`;
       if (attempt === 20) {
-        throw new AdericelError('CONFLICT', 'Could not allocate a unique slug for this organisation');
+        throw new AdericelError(
+          'CONFLICT',
+          'Could not allocate a unique slug for this organisation',
+        );
       }
     }
 
-    const organisation = await ctx.oneOrFail<{ id: string; name: string; slug: string; status: string }>(
+    const organisation = await ctx.oneOrFail<{
+      id: string;
+      name: string;
+      slug: string;
+      status: string;
+    }>(
       `INSERT INTO organisations (msp_id, name, slug, status, country_code, industry, size_band, settings)
        VALUES ($1, $2, $3, 'ONBOARDING', $4, $5, $6, $7::jsonb)
        RETURNING id, name, slug, status`,
@@ -268,7 +276,10 @@ interface CreateControlInput {
 }
 
 async function createControl(
-  ctx: { query: (text: string, values?: readonly unknown[]) => Promise<{ rowCount: number }>; oneOrFail: <T>(t: string, v: readonly unknown[], r: string) => Promise<T> },
+  ctx: {
+    query: (text: string, values?: readonly unknown[]) => Promise<{ rowCount: number }>;
+    oneOrFail: <T>(t: string, v: readonly unknown[], r: string) => Promise<T>;
+  },
   input: CreateControlInput,
 ): Promise<number> {
   const node = await ctx.oneOrFail<{ id: string }>(

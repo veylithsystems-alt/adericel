@@ -116,7 +116,12 @@ export function registerEvidenceRoutes(server: FastifyInstance, app: AppContext)
            WHERE s.evidence_id = $1 AND s.organisation_id = $2`,
           [params.id, params.organisationId],
         );
-        const claims = await ctx.many<{ id: string; predicate: string; value: unknown; status: string }>(
+        const claims = await ctx.many<{
+          id: string;
+          predicate: string;
+          value: unknown;
+          status: string;
+        }>(
           `SELECT c.id, c.predicate, c.value, c.status FROM claim_evidence ce
            JOIN claims c ON c.id = ce.claim_id
            WHERE ce.evidence_id = $1 AND ce.organisation_id = $2`,
@@ -351,7 +356,10 @@ export function registerEvidenceRoutes(server: FastifyInstance, app: AppContext)
             integrityLevel: 'HASH_VERIFIED',
             observedAt: null,
             subjectNodeIds,
-            metadata: { originalFilename: file.filename, uploadedBy: principal?.displayName ?? 'api' },
+            metadata: {
+              originalFilename: file.filename,
+              uploadedBy: principal?.displayName ?? 'api',
+            },
           },
           principal?.displayName ?? 'api',
           subjectNodeIds[0] ?? rootNode.id,
@@ -428,7 +436,9 @@ export function registerEvidenceRoutes(server: FastifyInstance, app: AppContext)
         metadata: { reason: body.reason },
       });
 
-      return reply.status(200).send({ id: record.id, status: record.status, revokedAt: record.revokedAt });
+      return reply
+        .status(200)
+        .send({ id: record.id, status: record.status, revokedAt: record.revokedAt });
     },
   );
 

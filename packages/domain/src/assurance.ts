@@ -113,7 +113,12 @@ export function aggregateAssurance(states: readonly AssuranceState[]): Aggregate
   const inScope = states.length - counts.NOT_APPLICABLE;
 
   if (inScope === 0) {
-    return { state: states.length === 0 ? 'UNKNOWN' : 'NOT_APPLICABLE', counts, inScope: 0, coverage: 0 };
+    return {
+      state: states.length === 0 ? 'UNKNOWN' : 'NOT_APPLICABLE',
+      counts,
+      inScope: 0,
+      coverage: 0,
+    };
   }
 
   const determinate = inScope - counts.UNKNOWN;

@@ -37,7 +37,14 @@ export function Ask(): ReactElement {
       outgoing: { id: string; kind: string; toNodeId: string }[];
       incoming: { id: string; kind: string; fromNodeId: string }[];
     };
-    claims: { id: string; predicate: string; value: unknown; origin: string; status: string; assertedAt: string }[];
+    claims: {
+      id: string;
+      predicate: string;
+      value: unknown;
+      origin: string;
+      status: string;
+      assertedAt: string;
+    }[];
     evidenceCount: number;
     openFindings: { id: string; title: string; severity: string }[];
   }>(selected && organisationId ? `/v1/organisations/${organisationId}/nodes/${selected}` : null);
@@ -163,8 +170,8 @@ export function Ask(): ReactElement {
             <div className="panel stack">
               <h3>Connections</h3>
               <p className="meta">
-                {detail.data.edges.outgoing.length} outgoing, {detail.data.edges.incoming.length} incoming
-                · {detail.data.evidenceCount} piece
+                {detail.data.edges.outgoing.length} outgoing, {detail.data.edges.incoming.length}{' '}
+                incoming · {detail.data.evidenceCount} piece
                 {detail.data.evidenceCount === 1 ? '' : 's'} of evidence
               </p>
               {detail.data.openFindings.length > 0 ? (

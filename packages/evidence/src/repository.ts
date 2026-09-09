@@ -59,11 +59,33 @@ interface EvidenceRow {
 }
 
 const COLUMN_NAMES = [
-  'id', 'organisation_id', 'node_id', 'source_type', 'collection_method', 'integration_id',
-  'source_system', 'source_reference', 'title', 'content_hash', 'content_type',
-  'content_size_bytes', 'storage_key', 'payload', 'integrity_level', 'status',
-  'supersedes_evidence_id', 'revocation_reason', 'observed_at', 'collected_at', 'valid_from',
-  'valid_until', 'revoked_at', 'superseded_at', 'collected_by_actor', 'metadata', 'created_at',
+  'id',
+  'organisation_id',
+  'node_id',
+  'source_type',
+  'collection_method',
+  'integration_id',
+  'source_system',
+  'source_reference',
+  'title',
+  'content_hash',
+  'content_type',
+  'content_size_bytes',
+  'storage_key',
+  'payload',
+  'integrity_level',
+  'status',
+  'supersedes_evidence_id',
+  'revocation_reason',
+  'observed_at',
+  'collected_at',
+  'valid_from',
+  'valid_until',
+  'revoked_at',
+  'superseded_at',
+  'collected_by_actor',
+  'metadata',
+  'created_at',
 ] as const;
 
 /**
@@ -182,8 +204,7 @@ export function createEvidenceRepository(ctx: TenantContext, clock: Clock): Evid
         });
 
       const validUntil =
-        input.validUntil ??
-        defaultValidUntil(input.sourceType, input.observedAt ?? collectedAt);
+        input.validUntil ?? defaultValidUntil(input.sourceType, input.observedAt ?? collectedAt);
 
       const existing = await ctx.one<EvidenceRow>(
         `SELECT ${COLUMNS} FROM evidence
@@ -238,7 +259,9 @@ export function createEvidenceRepository(ctx: TenantContext, clock: Clock): Evid
           input.contentType,
           input.contentSizeBytes ?? null,
           input.storageKey ?? null,
-          input.payload === null || input.payload === undefined ? null : JSON.stringify(input.payload),
+          input.payload === null || input.payload === undefined
+            ? null
+            : JSON.stringify(input.payload),
           input.integrityLevel,
           input.supersedesEvidenceId ?? null,
           input.observedAt ?? null,

@@ -27,7 +27,11 @@ import { withIdempotency } from '../middleware/idempotency.js';
 
 const orgChild = z.object({ organisationId: z.string().uuid(), id: z.string().uuid() });
 
-async function serviceDeps(app: AppContext, request: Parameters<typeof requirePrincipal>[0], organisationId: string) {
+async function serviceDeps(
+  app: AppContext,
+  request: Parameters<typeof requirePrincipal>[0],
+  organisationId: string,
+) {
   const principal = requirePrincipal(request);
   const { policy, policyId, autonomyLevel } = await app.db.withPlatform(async (ctx) => {
     const row = await ctx.one<{ id: string; definition: Record<string, unknown> }>(
@@ -287,12 +291,12 @@ export function registerActionRoutes(server: FastifyInstance, app: AppContext): 
       const outcome = await withIdempotency(app, request, async () => {
         const result = await app.db.withTenant(organisationId, async (ctx) => {
           const severity = body.findingId
-            ? (
+            ? ((
                 await ctx.one<{ severity: string }>(
                   `SELECT severity FROM findings WHERE id = $1 AND organisation_id = $2`,
                   [body.findingId, organisationId],
                 )
-              )?.severity ?? null
+              )?.severity ?? null)
             : null;
           return createActionService({ ctx, ...deps }).propose(body, severity as Severity | null);
         });

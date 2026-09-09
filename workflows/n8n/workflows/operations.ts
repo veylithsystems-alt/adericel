@@ -41,7 +41,10 @@ export function notificationsWorkflow(): N8nWorkflow {
       [560, 320],
       4,
     ),
-    subWorkflowTrigger([0, 0], 'Called with { subject, message, severity, organisationId, correlationId }.'),
+    subWorkflowTrigger(
+      [0, 0],
+      'Called with { subject, message, severity, organisationId, correlationId }.',
+    ),
     configurationNode([220, 0]),
     codeNode(
       'Normalise the message',
@@ -77,11 +80,10 @@ return [
   },
 ];`,
     ),
-    ifNode(
-      'Email configured?',
-      [660, -100],
-      { left: '={{ $json.notifyEmail }}', operator: 'notEmpty' },
-    ),
+    ifNode('Email configured?', [660, -100], {
+      left: '={{ $json.notifyEmail }}',
+      operator: 'notEmpty',
+    }),
     node(
       'Send email',
       'n8n-nodes-base.emailSend',
@@ -103,11 +105,10 @@ return [
           'event is already durably recorded in Adericel.',
       },
     ),
-    ifNode(
-      'Webhook configured?',
-      [660, 100],
-      { left: '={{ $json.notifyWebhookUrl }}', operator: 'notEmpty' },
-    ),
+    ifNode('Webhook configured?', [660, 100], {
+      left: '={{ $json.notifyWebhookUrl }}',
+      operator: 'notEmpty',
+    }),
     node(
       'Post to chat',
       'n8n-nodes-base.httpRequest',
@@ -124,21 +125,18 @@ return [
       [900, 180],
       { onError: 'continueRegularOutput' },
     ),
-    node(
-      'Recorded in the execution log',
-      'n8n-nodes-base.noOp',
-      1,
-      {},
-      [900, 0],
-      {
-        notes:
-          'No delivery channel is configured. The message is visible in this execution, and the ' +
-          'underlying event is in Adericel regardless.',
-      },
-    ),
+    node('Recorded in the execution log', 'n8n-nodes-base.noOp', 1, {}, [900, 0], {
+      notes:
+        'No delivery channel is configured. The message is visible in this execution, and the ' +
+        'underlying event is in Adericel regardless.',
+    }),
   ];
 
-  let connections = chain('When called by another workflow', 'Configuration', 'Normalise the message');
+  let connections = chain(
+    'When called by another workflow',
+    'Configuration',
+    'Normalise the message',
+  );
   connections = connect(connections, 'Normalise the message', 'Email configured?');
   connections = connect(connections, 'Normalise the message', 'Webhook configured?');
   connections = connect(connections, 'Email configured?', 'Send email', 0);
@@ -162,7 +160,7 @@ export function scheduledCollectionWorkflow(): N8nWorkflow {
     stickyNote(
       '## Scheduled collection\n\n' +
         'Refreshes evidence across the portfolio.\n\n' +
-        'This is a **safety net**, not the primary schedule — Adericel\'s worker ' +
+        "This is a **safety net**, not the primary schedule — Adericel's worker " +
         'holds the authoritative schedule in its database, so an n8n outage delays ' +
         'collection rather than losing it. Both paths are idempotent, so running ' +
         'both is harmless.',
@@ -433,11 +431,11 @@ return [
   },
 ];`,
     ),
-    ifNode(
-      'Anything to chase?',
-      [1100, -100],
-      { left: '={{ $json.anythingToChase }}', operator: 'true', type: 'boolean' },
-    ),
+    ifNode('Anything to chase?', [1100, -100], {
+      left: '={{ $json.anythingToChase }}',
+      operator: 'true',
+      type: 'boolean',
+    }),
     executeSubWorkflow('Notify', [1340, -180], WORKFLOW_IDS.notifications),
     node('Nothing to chase', 'n8n-nodes-base.noOp', 1, {}, [1340, -20]),
     node(
@@ -477,7 +475,7 @@ export function reportingWorkflow(): N8nWorkflow {
         'A weekly portfolio summary for the MSP.\n\n' +
         'Deliberately contains **no score**. It reports counts with their ' +
         'denominators, and it reports unknowns separately from failures, because ' +
-        'those need different responses: a failing control is the customer\'s ' +
+        "those need different responses: a failing control is the customer's " +
         'problem to fix, an unknown one is usually ours.',
       [-620, -200],
       [520, 300],
@@ -640,17 +638,22 @@ export function healthMonitorWorkflow(): N8nWorkflow {
   const nodes = [
     stickyNote(
       '## Health monitor\n\n' +
-        "Watches Adericel itself.\n\n" +
+        'Watches Adericel itself.\n\n' +
         'The distinction this workflow exists to preserve: **"the customer has an ' +
         'assurance problem" is not the same as "Adericel has an operational ' +
         'problem"**. A failed integration produces Unknown states that look ' +
         'identical to a customer with no controls in place, and only one of those ' +
-        'is the customer\'s fault.',
+        "is the customer's fault.",
       [-620, -220],
       [520, 320],
       3,
     ),
-    scheduleTrigger('Every 15 minutes', [0, 0], { field: 'minutes', interval: 15 }, 'Frequent enough to catch a stalled worker before a whole assessment cycle is missed.'),
+    scheduleTrigger(
+      'Every 15 minutes',
+      [0, 0],
+      { field: 'minutes', interval: 15 },
+      'Frequent enough to catch a stalled worker before a whole assessment cycle is missed.',
+    ),
     configurationNode([220, 0]),
     adericelRequest('Read health', [440, 0], {
       url: '={{ $json.apiBaseUrl }}/v1/system/health',
@@ -724,7 +727,11 @@ return [
   },
 ];`,
     ),
-    ifNode('Degraded?', [1100, 0], { left: '={{ $json.degraded }}', operator: 'true', type: 'boolean' }),
+    ifNode('Degraded?', [1100, 0], {
+      left: '={{ $json.degraded }}',
+      operator: 'true',
+      type: 'boolean',
+    }),
     executeSubWorkflow('Alert', [1340, -80], WORKFLOW_IDS.notifications),
     node('Healthy', 'n8n-nodes-base.noOp', 1, {}, [1340, 80]),
   ];
@@ -866,7 +873,12 @@ export function deadLetterRecoveryWorkflow(): N8nWorkflow {
       [560, 340],
       2,
     ),
-    scheduleTrigger('Hourly', [0, 0], { field: 'hours', interval: 1 }, 'Frequent enough that a backlog is noticed within the hour.'),
+    scheduleTrigger(
+      'Hourly',
+      [0, 0],
+      { field: 'hours', interval: 1 },
+      'Frequent enough that a backlog is noticed within the hour.',
+    ),
     configurationNode([220, 0]),
     adericelRequest('Read outbox', [440, 0], {
       url: '={{ $json.apiBaseUrl }}/v1/system/outbox',
@@ -920,11 +932,11 @@ return [
   },
 ];`,
     ),
-    ifNode(
-      'Needs attention?',
-      [880, 0],
-      { left: '={{ $json.needsAttention }}', operator: 'true', type: 'boolean' },
-    ),
+    ifNode('Needs attention?', [880, 0], {
+      left: '={{ $json.needsAttention }}',
+      operator: 'true',
+      type: 'boolean',
+    }),
     executeSubWorkflow('Alert', [1120, -80], WORKFLOW_IDS.notifications),
     node('Delivery healthy', 'n8n-nodes-base.noOp', 1, {}, [1120, 80]),
   ];

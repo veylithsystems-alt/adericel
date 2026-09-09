@@ -1,6 +1,7 @@
 // @ts-check
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   {
@@ -58,6 +59,17 @@ export default tseslint.config(
             'Do not construct wall-clock time directly. Inject a Clock (@adericel/shared) so assessments stay reproducible.',
         },
       ],
+    },
+  },
+  {
+    // The interface. Hook rules matter here for a specific reason: a stale
+    // closure over assurance data would render a state that is no longer true,
+    // and "the screen said SATISFIED" is not a defect this product can afford.
+    files: ['apps/web/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
     },
   },
   {

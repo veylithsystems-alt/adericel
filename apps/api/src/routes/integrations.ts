@@ -228,10 +228,11 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
           },
         );
 
-        await ctx.query(
-          `UPDATE integrations SET status = $2, last_error = $3 WHERE id = $1`,
-          [row.id, check.connected ? 'CONNECTED' : 'FAILED', check.connected ? null : check.detail],
-        );
+        await ctx.query(`UPDATE integrations SET status = $2, last_error = $3 WHERE id = $1`, [
+          row.id,
+          check.connected ? 'CONNECTED' : 'FAILED',
+          check.connected ? null : check.detail,
+        ]);
         return check;
       });
 
@@ -345,9 +346,7 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
           errorDetail: row.error_detail,
           startedAt: row.started_at.toISOString(),
           finishedAt: row.finished_at?.toISOString() ?? null,
-          durationMs: row.finished_at
-            ? row.finished_at.getTime() - row.started_at.getTime()
-            : null,
+          durationMs: row.finished_at ? row.finished_at.getTime() - row.started_at.getTime() : null,
         })),
       });
     },

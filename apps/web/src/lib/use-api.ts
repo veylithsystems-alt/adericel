@@ -51,6 +51,10 @@ export function useApi<T>(path: string | null, deps: readonly unknown[] = []): L
       });
 
     return () => controller.abort();
+    // The dependency list is spread from a caller-supplied array, which the
+    // exhaustive-deps rule cannot verify statically. The contract is stated in
+    // the signature instead: the caller passes everything `path` was derived
+    // from. `path` itself is a dependency, so a changed URL always refetches.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, nonce, ...deps]);
 

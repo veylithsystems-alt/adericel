@@ -129,7 +129,13 @@ export function nextRunFromCron(cron: string | null, fromIso: string): string {
   const fields = cron.trim().split(/\s+/);
   if (fields.length !== 5) return new Date(from.getTime() + 3_600_000).toISOString();
 
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = fields as [string, string, string, string, string];
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = fields as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
 
   const matches = (field: string, value: number, min: number, max: number): boolean => {
     if (field === '*') return true;
@@ -232,8 +238,15 @@ export interface RunJobsOptions {
   readonly handlers: Partial<Record<JobType, JobHandler>>;
 }
 
-export async function runDueJobs(options: RunJobsOptions): Promise<{ ran: number; failed: number }> {
-  const jobs = await claimDueJobs(options.db, options.workerId, options.limit, options.clock.nowIso());
+export async function runDueJobs(
+  options: RunJobsOptions,
+): Promise<{ ran: number; failed: number }> {
+  const jobs = await claimDueJobs(
+    options.db,
+    options.workerId,
+    options.limit,
+    options.clock.nowIso(),
+  );
   let ran = 0;
   let failed = 0;
 
@@ -248,7 +261,12 @@ export async function runDueJobs(options: RunJobsOptions): Promise<{ ran: number
 
     if (!handler) {
       logger.warn({}, 'no handler registered for job type');
-      await completeJob(options.db, job, { status: 'SKIPPED', detail: 'No handler registered' }, options.clock);
+      await completeJob(
+        options.db,
+        job,
+        { status: 'SKIPPED', detail: 'No handler registered' },
+        options.clock,
+      );
       continue;
     }
 

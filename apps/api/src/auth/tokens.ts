@@ -86,7 +86,9 @@ export function verifyAccessToken(
   let payload: AccessTokenClaims;
   try {
     header = JSON.parse(Buffer.from(headerPart, 'base64url').toString('utf8')) as Header;
-    payload = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8')) as AccessTokenClaims;
+    payload = JSON.parse(
+      Buffer.from(payloadPart, 'base64url').toString('utf8'),
+    ) as AccessTokenClaims;
   } catch {
     throw new AdericelError('UNAUTHENTICATED', 'Malformed access token');
   }

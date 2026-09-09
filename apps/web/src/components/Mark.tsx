@@ -21,17 +21,23 @@ export function Mark({ size = 24, mono = false }: { size?: number; mono?: boolea
     >
       <path d="M0 40 L16 0 H26 L10 40 Z" fill={mono ? 'currentColor' : 'var(--ink)'} />
       <path d="M18 40 L34 0 H44 L28 40 Z" fill={mono ? 'currentColor' : 'var(--slate)'} />
-      <path
-        d="M36 40 L52 0 H58 L58 40 Z"
-        fill={mono ? 'currentColor' : 'var(--state-proven)'}
-      />
+      <path d="M36 40 L52 0 H58 L58 40 Z" fill={mono ? 'currentColor' : 'var(--state-proven)'} />
     </svg>
   );
 }
 
-export function Wordmark({ size = 24, inverse = false }: { size?: number; inverse?: boolean }): ReactElement {
+export function Wordmark({
+  size = 24,
+  inverse = false,
+}: {
+  size?: number;
+  inverse?: boolean;
+}): ReactElement {
   return (
-    <span className="masthead__brand" style={inverse ? { color: 'var(--text-inverse)' } : undefined}>
+    <span
+      className="masthead__brand"
+      style={inverse ? { color: 'var(--text-inverse)' } : undefined}
+    >
       <Mark size={size} />
       <span>Adericel</span>
     </span>

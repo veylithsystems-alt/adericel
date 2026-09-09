@@ -116,7 +116,8 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
           criticalFindings: Number(row.critical_findings),
           highFindings: Number(row.high_findings),
           openFindings: Number(row.open_findings),
-          oldestFindingDays: row.oldest_finding_days === null ? null : Number(row.oldest_finding_days),
+          oldestFindingDays:
+            row.oldest_finding_days === null ? null : Number(row.oldest_finding_days),
           staleEvidence: Number(row.stale_evidence),
           awaitingApproval: Number(row.awaiting_approval),
           unverifiedActions: Number(row.unverified_actions),
@@ -139,7 +140,9 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
         };
       });
 
-      organisations.sort((a, b) => b.attentionRank - a.attentionRank || a.name.localeCompare(b.name));
+      organisations.sort(
+        (a, b) => b.attentionRank - a.attentionRank || a.name.localeCompare(b.name),
+      );
 
       return reply.status(200).send({
         mspId,
@@ -405,7 +408,10 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
           proposedAt: row.proposed_at.toISOString(),
           expiresAt: row.expires_at?.toISOString() ?? null,
           hoursRemaining: row.expires_at
-            ? Math.max(0, Math.round((row.expires_at.getTime() - app.clock.nowEpochMs()) / 3_600_000))
+            ? Math.max(
+                0,
+                Math.round((row.expires_at.getTime() - app.clock.nowEpochMs()) / 3_600_000),
+              )
             : null,
         })),
       });

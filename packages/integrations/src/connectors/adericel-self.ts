@@ -47,7 +47,9 @@ const credentialSchema = z.object({});
 type Config = z.infer<typeof configSchema>;
 type Credentials = z.infer<typeof credentialSchema>;
 
-export function createAdericelSelfConnector(probe: SelfAssuranceProbe): Connector<Config, Credentials> {
+export function createAdericelSelfConnector(
+  probe: SelfAssuranceProbe,
+): Connector<Config, Credentials> {
   return {
     key: 'adericel-self',
     name: 'Adericel self-assurance',
@@ -157,7 +159,8 @@ export function createAdericelSelfConnector(probe: SelfAssuranceProbe): Connecto
       });
 
       if (!snapshot.databaseReachable) warnings.push('Database probe reported unreachable.');
-      if (!snapshot.objectStorageReachable) warnings.push('Object storage probe reported unreachable.');
+      if (!snapshot.objectStorageReachable)
+        warnings.push('Object storage probe reported unreachable.');
       if (snapshot.outboxDeadLetterCount > 0) {
         warnings.push(`${snapshot.outboxDeadLetterCount} event(s) in the dead-letter queue.`);
       }

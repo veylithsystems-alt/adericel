@@ -188,7 +188,8 @@ export function registerMspRoutes(server: FastifyInstance, app: AppContext): voi
           }
           return checkOrganisationEntitlement(
             {
-              status: subscription.status as 'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED',
+              status: subscription.status as
+                'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED',
               trialEndsAt: subscription.trial_ends_at?.toISOString() ?? null,
             },
             Number(used.count),
@@ -280,7 +281,12 @@ export function registerMspRoutes(server: FastifyInstance, app: AppContext): voi
       await requireMsp(app, request, params.mspId, 'msp:read');
 
       const data = await app.db.withPlatform(async (ctx) => {
-        const baseline = await ctx.oneOrFail<{ id: string; key: string; name: string; description: string | null }>(
+        const baseline = await ctx.oneOrFail<{
+          id: string;
+          key: string;
+          name: string;
+          description: string | null;
+        }>(
           `SELECT id, key, name, description FROM msp_baselines WHERE id = $1 AND msp_id = $2`,
           [params.baselineId, params.mspId],
           'Baseline',

@@ -188,7 +188,9 @@ describe('policy explainability and integrity', () => {
   });
 
   it('hashes deterministically', () => {
-    expect(compilePolicy(DEFAULT_ACTION_POLICY).hash).toBe(compilePolicy(DEFAULT_ACTION_POLICY).hash);
+    expect(compilePolicy(DEFAULT_ACTION_POLICY).hash).toBe(
+      compilePolicy(DEFAULT_ACTION_POLICY).hash,
+    );
   });
 
   it('rejects duplicate rule ids', () => {

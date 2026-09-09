@@ -118,7 +118,13 @@ export function deriveRiskSeverity(
   return 'INFO';
 }
 
-export const EXCEPTION_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', 'EXPIRED', 'REVOKED'] as const;
+export const EXCEPTION_STATUSES = [
+  'REQUESTED',
+  'APPROVED',
+  'REJECTED',
+  'EXPIRED',
+  'REVOKED',
+] as const;
 export type ExceptionStatus = (typeof EXCEPTION_STATUSES)[number];
 
 /**

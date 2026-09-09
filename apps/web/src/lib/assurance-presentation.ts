@@ -13,12 +13,7 @@
  */
 
 export type AssuranceState =
-  | 'SATISFIED'
-  | 'PARTIALLY_SATISFIED'
-  | 'NOT_SATISFIED'
-  | 'EXCEPTED'
-  | 'NOT_APPLICABLE'
-  | 'UNKNOWN';
+  'SATISFIED' | 'PARTIALLY_SATISFIED' | 'NOT_SATISFIED' | 'EXCEPTED' | 'NOT_APPLICABLE' | 'UNKNOWN';
 
 export interface StatePresentation {
   readonly label: string;

@@ -44,7 +44,9 @@ export function Proof(): ReactElement {
 
   const items = evidence.data?.evidence ?? [];
   const usable = items.filter((item) => item.usable).length;
-  const stale = items.filter((item) => item.freshness === 'STALE' || item.freshness === 'EXPIRED').length;
+  const stale = items.filter(
+    (item) => item.freshness === 'STALE' || item.freshness === 'EXPIRED',
+  ).length;
   const ageing = items.filter((item) => item.freshness === 'AGEING').length;
 
   return (
@@ -56,7 +58,12 @@ export function Proof(): ReactElement {
 
       <Section title="Evidence position">
         <div className="grid grid--4">
-          <Metric value={usable} label="Usable now" note={`of ${items.length} held`} tone="proven" />
+          <Metric
+            value={usable}
+            label="Usable now"
+            note={`of ${items.length} held`}
+            tone="proven"
+          />
           <Metric
             value={ageing}
             label="Ageing"
@@ -175,7 +182,8 @@ export function Proof(): ReactElement {
                     <td>
                       <div>{item.title}</div>
                       <div className="meta">
-                        {item.collectionMethod.replace(/_/g, ' ').toLowerCase()} by {item.collectedByActor}
+                        {item.collectionMethod.replace(/_/g, ' ').toLowerCase()} by{' '}
+                        {item.collectedByActor}
                       </div>
                     </td>
                     <td className="meta">
@@ -197,7 +205,10 @@ export function Proof(): ReactElement {
                           {item.freshness === 'AGEING' ? 'ageing' : 'usable'}
                         </span>
                       ) : (
-                        <span className="state state--failing" title={item.usabilityReason ?? undefined}>
+                        <span
+                          className="state state--failing"
+                          title={item.usabilityReason ?? undefined}
+                        >
                           <span className="state__dot" aria-hidden="true" />
                           {item.freshness.toLowerCase()}
                         </span>
@@ -211,7 +222,9 @@ export function Proof(): ReactElement {
                       {item.validUntil ? formatInstant(item.validUntil) : 'no expiry'}
                     </td>
                     <td>
-                      <span className="hash">{item.contentHash.replace('sha256:', '').slice(0, 16)}…</span>
+                      <span className="hash">
+                        {item.contentHash.replace('sha256:', '').slice(0, 16)}…
+                      </span>
                       {item.hasStoredArtefact ? (
                         <div>
                           <a

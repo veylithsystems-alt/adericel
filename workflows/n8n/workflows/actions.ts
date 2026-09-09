@@ -6,7 +6,6 @@ import {
   configurationNode,
   connect,
   executeSubWorkflow,
-  ifNode,
   node,
   stickyNote,
   subWorkflowTrigger,
@@ -247,7 +246,7 @@ export function approvalWorkflow(): N8nWorkflow {
     stickyNote(
       '## Approval\n\n' +
         'This workflow **cannot approve anything**, by design.\n\n' +
-        "The Adericel API refuses an approval presented by an API key or a " +
+        'The Adericel API refuses an approval presented by an API key or a ' +
         'workflow, and refuses one from the person who proposed the action. ' +
         'Four-eyes control is meaningless if the system that proposed a change can ' +
         'also authorise it.\n\n' +
@@ -260,8 +259,7 @@ export function approvalWorkflow(): N8nWorkflow {
     subWorkflowTrigger([0, 0], 'Invoked on ActionApprovalRequested.'),
     configurationNode([220, 0]),
     adericelRequest('Read the action', [440, 0], {
-      url:
-        '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/actions/{{ $json.subjectId }}',
+      url: '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/actions/{{ $json.subjectId }}',
     }),
     codeNode(
       'Compose the request',
@@ -310,18 +308,11 @@ return [
 ];`,
     ),
     executeSubWorkflow('Notify approvers', [900, 0], WORKFLOW_IDS.notifications),
-    node(
-      'Awaiting a person',
-      'n8n-nodes-base.noOp',
-      1,
-      {},
-      [1140, 0],
-      {
-        notes:
-          'The workflow ends here. Approval happens in the Adericel interface, by a person, and is ' +
-          'recorded against their identity in the audit trail.',
-      },
-    ),
+    node('Awaiting a person', 'n8n-nodes-base.noOp', 1, {}, [1140, 0], {
+      notes:
+        'The workflow ends here. Approval happens in the Adericel interface, by a person, and is ' +
+        'recorded against their identity in the audit trail.',
+    }),
   ];
 
   const connections = chain(
@@ -406,8 +397,7 @@ return [
     ),
     adericelRequest('Execute', [660, 0], {
       method: 'POST',
-      url:
-        '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/actions/{{ $json.actionId }}/execute',
+      url: '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/actions/{{ $json.actionId }}/execute',
       retry: false,
       notes:
         'Deliberately NOT retried at the node level. Adericel makes execution exactly-once, and an ' +
@@ -605,8 +595,7 @@ return [
     ),
     adericelRequest('Verify', [660, 0], {
       method: 'POST',
-      url:
-        '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/actions/{{ $json.actionId }}/verify',
+      url: '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/actions/{{ $json.actionId }}/verify',
       notes:
         'Adericel re-collects from the integration rather than accepting the executor own report. ' +
         'A verification that trusted the execution would prove nothing.',

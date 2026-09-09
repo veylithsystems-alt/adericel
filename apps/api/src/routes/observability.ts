@@ -215,9 +215,7 @@ export function registerObservabilityRoutes(server: FastifyInstance, app: AppCon
   /** Readiness: can this instance serve traffic? Checks dependencies. */
   server.get('/health/ready', async (_request, reply) => {
     const health = await collectHealth(app, { deep: false });
-    const ready = health.components.every(
-      (c) => c.status === 'HEALTHY' || c.status === 'DEGRADED',
-    );
+    const ready = health.components.every((c) => c.status === 'HEALTHY' || c.status === 'DEGRADED');
     return reply.status(ready ? 200 : 503).send({
       status: ready ? 'ready' : 'not-ready',
       components: health.components,

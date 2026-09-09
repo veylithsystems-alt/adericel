@@ -82,7 +82,10 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
         `UPDATE user_credentials SET failed_attempts = 0, locked_until = NULL WHERE user_id = $1`,
         [user.id],
       );
-      await ctx.query(`UPDATE users SET last_login_at = $2::timestamptz WHERE id = $1`, [user.id, now]);
+      await ctx.query(`UPDATE users SET last_login_at = $2::timestamptz WHERE id = $1`, [
+        user.id,
+        now,
+      ]);
 
       const refreshToken = newOpaqueToken(48);
       const session = await ctx.oneOrFail<{ id: string }>(
@@ -185,7 +188,12 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
          SET refresh_token_hash = $2, last_used_at = $3::timestamptz,
              expires_at = $3::timestamptz + ($4 || ' seconds')::interval
          WHERE id = $1`,
-        [session.id, hashRefreshToken(nextToken), now, String(app.config.auth.refreshTokenTtlSeconds)],
+        [
+          session.id,
+          hashRefreshToken(nextToken),
+          now,
+          String(app.config.auth.refreshTokenTtlSeconds),
+        ],
       );
       return { session, nextToken };
     });
@@ -215,26 +223,22 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
     });
   });
 
-  server.post(
-    '/v1/auth/logout',
-    { preHandler: server.authenticate },
-    async (request, reply) => {
-      const principal = requirePrincipal(request);
-      if (principal.sessionId) {
-        await app.db.withPlatform(async (ctx) => {
-          await ctx.query(`UPDATE sessions SET revoked_at = now() WHERE id = $1`, [
-            principal.sessionId,
-          ]);
-        });
-      }
-      await audit(app, request, {
-        action: 'auth:logout',
-        resourceType: 'Session',
-        resourceId: principal.sessionId,
+  server.post('/v1/auth/logout', { preHandler: server.authenticate }, async (request, reply) => {
+    const principal = requirePrincipal(request);
+    if (principal.sessionId) {
+      await app.db.withPlatform(async (ctx) => {
+        await ctx.query(`UPDATE sessions SET revoked_at = now() WHERE id = $1`, [
+          principal.sessionId,
+        ]);
       });
-      return reply.status(204).send();
-    },
-  );
+    }
+    await audit(app, request, {
+      action: 'auth:logout',
+      resourceType: 'Session',
+      resourceId: principal.sessionId,
+    });
+    return reply.status(204).send();
+  });
 
   /**
    * The caller's own identity and effective authority.
@@ -254,7 +258,12 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
         .filter((g) => g.scopeType === 'MSP' && g.scopeId)
         .map((g) => g.scopeId as string);
 
-      const organisations = await ctx.many<{ id: string; name: string; slug: string; msp_id: string | null }>(
+      const organisations = await ctx.many<{
+        id: string;
+        name: string;
+        slug: string;
+        msp_id: string | null;
+      }>(
         `SELECT id, name, slug, msp_id FROM organisations
          WHERE id = ANY($1::uuid[]) OR ($2::uuid[] IS NOT NULL AND msp_id = ANY($2::uuid[]))
          ORDER BY name`,

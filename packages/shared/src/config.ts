@@ -8,7 +8,9 @@ import { z } from 'zod';
  */
 const booleanish = z
   .union([z.boolean(), z.string()])
-  .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())));
+  .transform((v) =>
+    typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()),
+  );
 
 const port = z.coerce.number().int().min(1).max(65535);
 
@@ -23,7 +25,11 @@ export const configSchema = z.object({
     port: port.default(4000),
     publicUrl: z.string().url().default('http://localhost:4000'),
     corsOrigins: z.array(z.string()).default(['http://localhost:5173']),
-    bodyLimitBytes: z.coerce.number().int().positive().default(2 * 1024 * 1024),
+    bodyLimitBytes: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(2 * 1024 * 1024),
     rateLimit: z.object({
       max: z.coerce.number().int().positive().default(600),
       windowMs: z.coerce.number().int().positive().default(60_000),
@@ -44,7 +50,11 @@ export const configSchema = z.object({
     /** HS256 signing secret for session tokens. Minimum 32 bytes of entropy. */
     jwtSecret: z.string().min(32),
     accessTokenTtlSeconds: z.coerce.number().int().positive().default(3600),
-    refreshTokenTtlSeconds: z.coerce.number().int().positive().default(60 * 60 * 24 * 14),
+    refreshTokenTtlSeconds: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60 * 60 * 24 * 14),
     issuer: z.string().default('adericel'),
     audience: z.string().default('adericel-api'),
     /** Key used to encrypt integration credentials at rest (32 bytes, base64). */
@@ -72,7 +82,11 @@ export const configSchema = z.object({
         secretAccessKey: '',
         forcePathStyle: true,
       })),
-    maxUploadBytes: z.coerce.number().int().positive().default(50 * 1024 * 1024),
+    maxUploadBytes: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(50 * 1024 * 1024),
   }),
 
   worker: z.object({
@@ -252,7 +266,8 @@ function prune<T>(value: T): T {
 export function assertProductionSafety(config: AdericelConfig): void {
   if (config.nodeEnv !== 'production') return;
   const failures: string[] = [];
-  if (config.auth.jwtSecret === DEV_JWT_SECRET) failures.push('AUTH_JWT_SECRET is a dev placeholder');
+  if (config.auth.jwtSecret === DEV_JWT_SECRET)
+    failures.push('AUTH_JWT_SECRET is a dev placeholder');
   if (config.auth.credentialEncryptionKey === DEV_CREDENTIAL_KEY) {
     failures.push('AUTH_CREDENTIAL_ENCRYPTION_KEY is a dev placeholder');
   }
@@ -267,6 +282,8 @@ export function assertProductionSafety(config: AdericelConfig): void {
     failures.push('SECURITY_BLOCK_PRIVATE_EGRESS must remain enabled in production');
   }
   if (failures.length > 0) {
-    throw new Error(`Refusing to start in production:\n${failures.map((f) => `  - ${f}`).join('\n')}`);
+    throw new Error(
+      `Refusing to start in production:\n${failures.map((f) => `  - ${f}`).join('\n')}`,
+    );
   }
 }

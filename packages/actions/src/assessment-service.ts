@@ -9,10 +9,7 @@ import {
   type Severity,
   type UnknownReason,
 } from '@adericel/domain';
-import {
-  createClaimRepository,
-  createEvidenceRepository,
-} from '@adericel/evidence';
+import { createClaimRepository, createEvidenceRepository } from '@adericel/evidence';
 import { publish, type TenantContext } from '@adericel/graph';
 import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/shared';
 import {
@@ -76,8 +73,15 @@ interface ControlDbRow {
 }
 
 export interface AssessmentService {
-  assessControl(controlId: string, trigger: AssessmentTrigger, asOf?: string): Promise<AssessmentOutput>;
-  assessAllControls(trigger: AssessmentTrigger, asOf?: string): Promise<readonly AssessmentOutput[]>;
+  assessControl(
+    controlId: string,
+    trigger: AssessmentTrigger,
+    asOf?: string,
+  ): Promise<AssessmentOutput>;
+  assessAllControls(
+    trigger: AssessmentTrigger,
+    asOf?: string,
+  ): Promise<readonly AssessmentOutput[]>;
   rollUpRequirement(requirementId: string, asOf?: string): Promise<AssessmentOutput | null>;
   rollUpFramework(frameworkId: string, asOf?: string): Promise<AssessmentOutput | null>;
   rollUpOrganisation(asOf?: string): Promise<AssessmentOutput | null>;
@@ -134,7 +138,11 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
     const rule = ruleset.rules.find((r) => r.key === control.ruleKey);
     if (!rule) {
       throw new AdericelError('RULESET_NOT_FOUND', `Rule ${control.ruleKey} not found`, {
-        safeDetails: { rulesetKey: ruleset.key, rulesetVersion: ruleset.version, ruleKey: control.ruleKey },
+        safeDetails: {
+          rulesetKey: ruleset.key,
+          rulesetVersion: ruleset.version,
+          ruleKey: control.ruleKey,
+        },
       });
     }
     const predicates = ruleRequiredPredicates(rule);
@@ -142,7 +150,12 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
     const subjectRows =
       rule.subjectKinds.length === 0
         ? []
-        : await ctx.many<{ id: string; kind: string; label: string; attributes: Record<string, unknown> }>(
+        : await ctx.many<{
+            id: string;
+            kind: string;
+            label: string;
+            attributes: Record<string, unknown>;
+          }>(
             `SELECT id, kind, label, attributes FROM graph_nodes
              WHERE organisation_id = $1 AND kind = ANY($2::text[]) AND lifecycle_state = 'ACTIVE'`,
             [ctx.organisationId, rule.subjectKinds],
@@ -248,7 +261,11 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       };
     },
     trigger: AssessmentTrigger,
-  ): Promise<{ assessment: AssessmentRecord; previousState: AssuranceState | null; changed: boolean }> {
+  ): Promise<{
+    assessment: AssessmentRecord;
+    previousState: AssuranceState | null;
+    changed: boolean;
+  }> {
     const previous = await ctx.one<{ state: string; assessment_id: string; since: Date }>(
       `SELECT state, assessment_id, since FROM assurance_states
        WHERE organisation_id = $1 AND subject_kind = $2 AND subject_id = $3`,
@@ -443,7 +460,11 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
         control,
         assessment.id,
         outcome.severity,
-        outcome.failingSubjects.map((s) => ({ nodeId: s.nodeId, label: s.label, detail: s.detail })),
+        outcome.failingSubjects.map((s) => ({
+          nodeId: s.nodeId,
+          label: s.label,
+          detail: s.detail,
+        })),
         outcome.evidenceIds,
         asOfIso,
       );
@@ -556,7 +577,12 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
          WHERE cr.organisation_id = $1 AND cr.requirement_id = $2`,
         [ctx.organisationId, requirementId],
       );
-      return rollUp('REQUIREMENT', requirementId, rows.map((r) => r.state as AssuranceState), asOfIso);
+      return rollUp(
+        'REQUIREMENT',
+        requirementId,
+        rows.map((r) => r.state as AssuranceState),
+        asOfIso,
+      );
     },
 
     async rollUpFramework(frameworkId, asOf): Promise<AssessmentOutput | null> {
@@ -569,7 +595,12 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
          WHERE r.framework_id = $2`,
         [ctx.organisationId, frameworkId],
       );
-      return rollUp('FRAMEWORK', frameworkId, rows.map((r) => r.state as AssuranceState), asOfIso);
+      return rollUp(
+        'FRAMEWORK',
+        frameworkId,
+        rows.map((r) => r.state as AssuranceState),
+        asOfIso,
+      );
     },
 
     async rollUpOrganisation(asOf): Promise<AssessmentOutput | null> {

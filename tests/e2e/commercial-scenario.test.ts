@@ -65,7 +65,11 @@ describe.skipIf(!available)('end-to-end commercial scenario', () => {
   beforeAll(async () => {
     harness = await createHarness();
     await harness.truncate();
-    tenant = await seedTenant(harness, { slug: 'e2e-corp', records: DEMO_RECORDS, autonomyLevel: 3 });
+    tenant = await seedTenant(harness, {
+      slug: 'e2e-corp',
+      records: DEMO_RECORDS,
+      autonomyLevel: 3,
+    });
     analystToken = await signIn(harness, 'analyst-e2e-corp@test.invalid');
     approverToken = await signIn(harness, 'approver-e2e-corp@test.invalid');
   }, 120_000);
@@ -102,7 +106,12 @@ describe.skipIf(!available)('end-to-end commercial scenario', () => {
       headers: bearer(analystToken),
     });
     const body = response.json() as {
-      evidence: { contentHash: string; sourceSystem: string; usable: boolean; integrityLevel: string }[];
+      evidence: {
+        contentHash: string;
+        sourceSystem: string;
+        usable: boolean;
+        integrityLevel: string;
+      }[];
     };
     expect(body.evidence.length).toBeGreaterThan(0);
     for (const item of body.evidence) {
@@ -343,7 +352,9 @@ describe.skipIf(!available)('end-to-end commercial scenario', () => {
       url: `/v1/organisations/${tenant.organisationId}/audit?limit=200`,
       headers: bearer(analystToken),
     });
-    const actions = (audit.json() as { entries: { action: string }[] }).entries.map((e) => e.action);
+    const actions = (audit.json() as { entries: { action: string }[] }).entries.map(
+      (e) => e.action,
+    );
 
     for (const expected of [
       'integration:collect',
@@ -416,7 +427,10 @@ describe.skipIf(!available)('end-to-end commercial scenario', () => {
       'VerificationCompleted',
       'FindingResolved',
     ]) {
-      expect(body.events.map((e) => e.type), `no ${expected} event was published`).toContain(expected);
+      expect(
+        body.events.map((e) => e.type),
+        `no ${expected} event was published`,
+      ).toContain(expected);
     }
 
     correlationId = body.events.find((e) => e.type === 'ActionExecuted')!.correlationId;

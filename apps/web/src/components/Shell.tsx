@@ -135,7 +135,11 @@ export function Loading({ what }: { what: string }): ReactElement {
   return <div className="empty">Loading {what}…</div>;
 }
 
-export function ErrorNotice({ error }: { error: { message: string; code?: string; correlationId?: string } }): ReactElement {
+export function ErrorNotice({
+  error,
+}: {
+  error: { message: string; code?: string; correlationId?: string };
+}): ReactElement {
   return (
     <div className="notice notice--failing">
       <div className="notice__title">{error.code ?? 'Error'}</div>

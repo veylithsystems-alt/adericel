@@ -38,12 +38,12 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --text-h1: 1.5rem;      /* 24px / 1.3 */
-  --text-h2: 1.125rem;    /* 18px / 1.4 */
-  --text-h3: 1rem;        /* 16px / 1.5 */
-  --text-body: 1rem;      /* 16px / 1.55 */
+  --text-h1: 1.5rem; /* 24px / 1.3 */
+  --text-h2: 1.125rem; /* 18px / 1.4 */
+  --text-h3: 1rem; /* 16px / 1.5 */
+  --text-body: 1rem; /* 16px / 1.55 */
   --text-small: 0.875rem; /* 14px / 1.5 */
-  --text-meta: 0.75rem;   /* 12px / 1.4 */
+  --text-meta: 0.75rem; /* 12px / 1.4 */
 
   --leading-h1: 1.3;
   --leading-h2: 1.4;

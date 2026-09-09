@@ -81,7 +81,9 @@ export async function exportOrganisation(
   const data = await app.db.withTenant(organisationId, async (ctx) => {
     const q = async (sql: string) =>
       toApiShapes(
-        await ctx.many<Record<string, unknown>>(`${sql} LIMIT ${MAX_ROWS_PER_TABLE}`, [organisationId]),
+        await ctx.many<Record<string, unknown>>(`${sql} LIMIT ${MAX_ROWS_PER_TABLE}`, [
+          organisationId,
+        ]),
       );
 
     return {

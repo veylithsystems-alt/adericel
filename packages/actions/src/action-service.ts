@@ -156,7 +156,12 @@ export interface VerifyResult {
 
 export interface ActionService {
   propose(proposal: ActionProposal, severity: Severity | null): Promise<ProposeResult>;
-  decide(actionId: string, decision: ApprovalDecision, note: string | undefined, approverUserId: string): Promise<ApproveResult>;
+  decide(
+    actionId: string,
+    decision: ApprovalDecision,
+    note: string | undefined,
+    approverUserId: string,
+  ): Promise<ApproveResult>;
   execute(actionId: string): Promise<ExecuteResult>;
   verify(actionId: string, observedValue: unknown): Promise<VerifyResult>;
   cancel(actionId: string, reason: string): Promise<ActionRecord>;
@@ -416,13 +421,9 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
           actor,
         });
       } else {
-        action = await transition(
-          action.id,
-          'POLICY_EVALUATED',
-          'AUTHORISED',
-          decision.reason,
-          { authorised_at: now },
-        );
+        action = await transition(action.id, 'POLICY_EVALUATED', 'AUTHORISED', decision.reason, {
+          authorised_at: now,
+        });
       }
 
       for (const event of events) await publish(ctx, event, now);
@@ -433,10 +434,16 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
       const now = clock.nowIso();
       const action = await service.requireById(actionId);
       if (action.state !== 'AWAITING_APPROVAL') {
-        throw new AdericelError('PRECONDITION_FAILED', `Action is ${action.state}, not awaiting approval`);
+        throw new AdericelError(
+          'PRECONDITION_FAILED',
+          `Action is ${action.state}, not awaiting approval`,
+        );
       }
       if (!action.approvalId) {
-        throw new AdericelError('INTERNAL_ERROR', 'Action is awaiting approval but has no approval record');
+        throw new AdericelError(
+          'INTERNAL_ERROR',
+          'Action is awaiting approval but has no approval record',
+        );
       }
 
       // Four-eyes. A person who proposed a change may not also approve it, and
@@ -452,7 +459,11 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         });
       }
 
-      const approval = await ctx.oneOrFail<{ id: string; required_approvals: number; expires_at: Date }>(
+      const approval = await ctx.oneOrFail<{
+        id: string;
+        required_approvals: number;
+        expires_at: Date;
+      }>(
         `SELECT id, required_approvals, expires_at FROM approvals
          WHERE id = $1 AND organisation_id = $2 AND decision IS NULL`,
         [action.approvalId, ctx.organisationId],
@@ -528,9 +539,15 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         'APPROVED',
         `Approved by ${recorded} approver(s)`,
       );
-      const authorised = await transition(approved.id, 'APPROVED', 'AUTHORISED', 'Approval satisfied', {
-        authorised_at: now,
-      });
+      const authorised = await transition(
+        approved.id,
+        'APPROVED',
+        'AUTHORISED',
+        'Approval satisfied',
+        {
+          authorised_at: now,
+        },
+      );
 
       await publish(
         ctx,
@@ -596,12 +613,21 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
       }
 
       if (action.state !== 'AUTHORISED') {
-        throw new AdericelError('PRECONDITION_FAILED', `Action is ${action.state}, not authorised`, {
-          safeDetails: { actionId, state: action.state },
-        });
+        throw new AdericelError(
+          'PRECONDITION_FAILED',
+          `Action is ${action.state}, not authorised`,
+          {
+            safeDetails: { actionId, state: action.state },
+          },
+        );
       }
       if (action.expiresAt && Date.parse(action.expiresAt) <= Date.parse(now)) {
-        await transition(actionId, 'AUTHORISED', 'CANCELLED', 'Authorisation expired before execution');
+        await transition(
+          actionId,
+          'AUTHORISED',
+          'CANCELLED',
+          'Authorisation expired before execution',
+        );
         throw new AdericelError('PRECONDITION_FAILED', 'Authorisation expired before execution');
       }
 
@@ -634,7 +660,12 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
            WHERE id = $1`,
           [executionRow.id],
         );
-        const failed = await transition(executing.id, 'EXECUTING', 'FAILED', 'No connector capability');
+        const failed = await transition(
+          executing.id,
+          'EXECUTING',
+          'FAILED',
+          'No connector capability',
+        );
         return {
           action: failed,
           execution: {
@@ -647,12 +678,19 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         };
       }
 
-      const runtime = await loadIntegrationRuntime(ctx, action.integrationId, deps.unsealCredentials);
+      const runtime = await loadIntegrationRuntime(
+        ctx,
+        action.integrationId,
+        deps.unsealCredentials,
+      );
       let result: ExecutionResult;
       try {
         const connector = connectors.get(runtime.connectorKey);
         if (!connector.execute) {
-          throw new AdericelError('NOT_IMPLEMENTED', `Connector ${connector.key} cannot execute actions`);
+          throw new AdericelError(
+            'NOT_IMPLEMENTED',
+            `Connector ${connector.key} cannot execute actions`,
+          );
         }
         result = await connector.execute(
           connector.configSchema.parse(runtime.config),
@@ -705,7 +743,12 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
           executed_at: now,
           external_operation_ref: result.externalOperationRef,
         });
-        finalAction = await transition(executed.id, 'EXECUTED', 'VERIFYING', 'Awaiting verification');
+        finalAction = await transition(
+          executed.id,
+          'EXECUTED',
+          'VERIFYING',
+          'Awaiting verification',
+        );
         await publish(
           ctx,
           {
@@ -745,7 +788,8 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
           now,
         );
       } else {
-        const to: ActionState = result.status === 'UNKNOWN_OUTCOME' ? 'ROLLBACK_REQUIRED' : 'FAILED';
+        const to: ActionState =
+          result.status === 'UNKNOWN_OUTCOME' ? 'ROLLBACK_REQUIRED' : 'FAILED';
         finalAction = await transition(executing.id, 'EXECUTING', to, result.detail, {
           last_error: result.detail.slice(0, 2000),
         });
@@ -756,7 +800,11 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
             organisationId: ctx.organisationId,
             subjectType: 'Action',
             subjectId: actionId,
-            payload: { status: result.status, detail: result.detail, errorCode: result.errorCode ?? null },
+            payload: {
+              status: result.status,
+              detail: result.detail,
+              errorCode: result.errorCode ?? null,
+            },
             correlationId,
             actor,
           },
@@ -775,7 +823,10 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
       }
       const capability = connectors.capabilityFor(action.actionType);
       if (!capability) {
-        throw new AdericelError('INTERNAL_ERROR', 'Capability disappeared between execution and verification');
+        throw new AdericelError(
+          'INTERNAL_ERROR',
+          'Capability disappeared between execution and verification',
+        );
       }
 
       const expected = capability.verification.expectedValue;

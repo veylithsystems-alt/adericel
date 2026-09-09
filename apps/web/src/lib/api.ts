@@ -99,7 +99,14 @@ export function clearSession(): void {
 }
 
 function makeError(status: number, body: unknown): ApiError {
-  const parsed = body as { error?: { code?: string; message?: string; details?: Record<string, unknown>; correlationId?: string } };
+  const parsed = body as {
+    error?: {
+      code?: string;
+      message?: string;
+      details?: Record<string, unknown>;
+      correlationId?: string;
+    };
+  };
   const error = new Error(parsed?.error?.message ?? `Request failed with status ${status}`) as {
     -readonly [K in keyof ApiError]: ApiError[K];
   };
@@ -112,7 +119,8 @@ function makeError(status: number, body: unknown): ApiError {
 }
 
 async function refresh(): Promise<void> {
-  if (!tokens) throw makeError(401, { error: { code: 'UNAUTHENTICATED', message: 'Not signed in' } });
+  if (!tokens)
+    throw makeError(401, { error: { code: 'UNAUTHENTICATED', message: 'Not signed in' } });
   // Several concurrent 401s must not each attempt a refresh: the token rotates
   // on use, so the second attempt would present an already-spent token.
   refreshInFlight ??= (async () => {

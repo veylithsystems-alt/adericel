@@ -107,7 +107,8 @@ export function applyTransform(value: unknown, mapping: FieldMapping): unknown {
         return value === mapping.trueValue;
       }
       if (typeof value === 'boolean') return value;
-      if (typeof value === 'string') return ['true', 'yes', 'enabled', '1', 'on'].includes(value.toLowerCase());
+      if (typeof value === 'string')
+        return ['true', 'yes', 'enabled', '1', 'on'].includes(value.toLowerCase());
       if (typeof value === 'number') return value !== 0;
       return undefined;
     case 'negate': {
@@ -194,7 +195,10 @@ export function createGenericHttpConnector(deps: {
             detail: `Expected an array at path "${config.recordsPath || '(root)'}" but found ${typeof records}.`,
           };
         }
-        return { connected: true, detail: `Endpoint reachable; ${records.length} record(s) in the first page.` };
+        return {
+          connected: true,
+          detail: `Endpoint reachable; ${records.length} record(s) in the first page.`,
+        };
       } catch (error) {
         return { connected: false, detail: (error as Error).message };
       }
@@ -215,7 +219,9 @@ export function createGenericHttpConnector(deps: {
           method: config.method,
           url: config.url,
           headers,
-          ...(config.pagination && cursor ? { query: { [config.pagination.cursorQueryParam]: cursor } } : {}),
+          ...(config.pagination && cursor
+            ? { query: { [config.pagination.cursorQueryParam]: cursor } }
+            : {}),
           ...(config.requestBody ? { body: config.requestBody } : {}),
           ...(context.signal ? { signal: context.signal } : {}),
         });
@@ -243,11 +249,11 @@ export function createGenericHttpConnector(deps: {
           const observedAt =
             observedAtRaw === null || observedAtRaw === undefined
               ? context.nowIso
-              : (applyTransform(observedAtRaw, {
+              : ((applyTransform(observedAtRaw, {
                   from: '',
                   to: '',
                   transform: 'iso8601',
-                }) as string | undefined) ?? context.nowIso;
+                }) as string | undefined) ?? context.nowIso);
 
           observations.push({
             kind: config.observationKind as ObservationKind,

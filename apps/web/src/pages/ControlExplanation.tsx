@@ -26,10 +26,12 @@ export function ControlExplanation(): ReactElement {
   const explanation = useApi<Explanation>(path);
   const [replayResult, setReplayResult] = useState<string | null>(null);
 
-  const replay = useMutation<string, { reproduced: boolean; explanation: string }>((assessmentId) => ({
-    path: `/v1/organisations/${organisationId}/assessments/${assessmentId}/replay`,
-    options: { method: 'POST' },
-  }));
+  const replay = useMutation<string, { reproduced: boolean; explanation: string }>(
+    (assessmentId) => ({
+      path: `/v1/organisations/${organisationId}/assessments/${assessmentId}/replay`,
+      options: { method: 'POST' },
+    }),
+  );
 
   const reassess = useMutation<void, unknown>(() => ({
     path: `/v1/organisations/${organisationId}/assessments`,
@@ -149,7 +151,8 @@ export function ControlExplanation(): ReactElement {
                 <div>
                   <span className="metric__label">Ruleset</span>
                   <div className="data">
-                    {data.assessment.provenance.rulesetKey}@{data.assessment.provenance.rulesetVersion}
+                    {data.assessment.provenance.rulesetKey}@
+                    {data.assessment.provenance.rulesetVersion}
                   </div>
                 </div>
                 <div>

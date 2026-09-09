@@ -79,7 +79,12 @@ export function Assurance(): ReactElement {
           </div>
           <CountBar counts={data.counts} />
           <div className="grid grid--4">
-            <Metric value={proven} label="Proven" note={`of ${data.inScope} in scope`} tone="proven" />
+            <Metric
+              value={proven}
+              label="Proven"
+              note={`of ${data.inScope} in scope`}
+              tone="proven"
+            />
             <Metric
               value={data.counts.NOT_SATISFIED}
               label="Failing"
@@ -91,11 +96,7 @@ export function Assurance(): ReactElement {
               tone={data.counts.UNKNOWN > 0 ? 'unknown' : undefined}
               note="Insufficient evidence to say"
             />
-            <Metric
-              value={data.counts.EXCEPTED}
-              label="Excepted"
-              note="Authorised deviations"
-            />
+            <Metric value={data.counts.EXCEPTED} label="Excepted" note="Authorised deviations" />
           </div>
         </div>
       </Section>
@@ -105,8 +106,8 @@ export function Assurance(): ReactElement {
           <div className="notice__title">What Unknown means here</div>
           <p>
             Adericel does not hold sufficient trustworthy evidence to make a statement about{' '}
-            {data.counts.UNKNOWN} control{data.counts.UNKNOWN === 1 ? '' : 's'}. That is not the same
-            as compliant or non-compliant. Each unknown control below states its reason.
+            {data.counts.UNKNOWN} control{data.counts.UNKNOWN === 1 ? '' : 's'}. That is not the
+            same as compliant or non-compliant. Each unknown control below states its reason.
           </p>
         </div>
       ) : null}
@@ -183,7 +184,9 @@ export function Assurance(): ReactElement {
             tone={data.openFindings.critical > 0 ? 'failing' : undefined}
           />
           <Metric
-            value={data.openFindings.oldestDetectedAt ? since(data.openFindings.oldestDetectedAt) : '—'}
+            value={
+              data.openFindings.oldestDetectedAt ? since(data.openFindings.oldestDetectedAt) : '—'
+            }
             label="Oldest finding"
             note="Measured from first detection"
           />

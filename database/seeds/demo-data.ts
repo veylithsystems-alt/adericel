@@ -31,11 +31,7 @@ export interface DemoOrganisation {
   readonly records: readonly DemoRecord[];
 }
 
-function identity(
-  id: string,
-  name: string,
-  overrides: Record<string, unknown> = {},
-): DemoRecord {
+function identity(id: string, name: string, overrides: Record<string, unknown> = {}): DemoRecord {
   return {
     kind: 'IDENTITY_STATE',
     subjectExternalId: id,

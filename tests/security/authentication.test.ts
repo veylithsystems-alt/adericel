@@ -65,7 +65,9 @@ describe('access token verification', () => {
     const payload = Buffer.from(
       JSON.stringify({ ...claims(), iat: NOW, exp: NOW + 3600 }),
     ).toString('base64url');
-    const signature = createHmac('sha256', SECRET).update(`${header}.${payload}`).digest('base64url');
+    const signature = createHmac('sha256', SECRET)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
     expect(() =>
       verifyAccessToken(SECRET, `${header}.${payload}.${signature}`, verifyOptions),
     ).toThrow(/algorithm/i);

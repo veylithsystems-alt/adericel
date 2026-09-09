@@ -28,7 +28,11 @@ const errorSchema = z.object({
 });
 
 function json(schema: z.ZodType): Record<string, unknown> {
-  return { 'application/json': { schema: z.toJSONSchema(schema, { io: 'output', unrepresentable: 'any' }) } };
+  return {
+    'application/json': {
+      schema: z.toJSONSchema(schema, { io: 'output', unrepresentable: 'any' }),
+    },
+  };
 }
 
 interface OperationSpec {
@@ -46,7 +50,8 @@ const ORG_PARAM = {
   in: 'path',
   required: true,
   schema: { type: 'string', format: 'uuid' },
-  description: 'The organisation this request operates on. Access is decided from the caller grants, never from this value alone.',
+  description:
+    'The organisation this request operates on. Access is decided from the caller grants, never from this value alone.',
 };
 
 const ID_PARAM = {
@@ -85,7 +90,10 @@ function operation(spec: OperationSpec): Record<string, unknown> {
       ),
       '400': { description: 'Request validation failed', content: json(errorSchema) },
       '401': { description: 'Authentication required or invalid', content: json(errorSchema) },
-      '403': { description: 'The caller holds no grant conveying this permission', content: json(errorSchema) },
+      '403': {
+        description: 'The caller holds no grant conveying this permission',
+        content: json(errorSchema),
+      },
       '429': { description: 'Rate limited', content: json(errorSchema) },
       '500': { description: 'Unexpected error', content: json(errorSchema) },
     },
@@ -181,8 +189,6 @@ export function buildOpenApiDocument(app: AppContext): Record<string, unknown> {
 }
 
 function buildPaths(): Record<string, unknown> {
-  const stateRef = { $ref: '#/components/schemas/AssuranceState' };
-
   return {
     '/v1/auth/login': {
       post: operation({
@@ -439,7 +445,8 @@ function buildPaths(): Record<string, unknown> {
     '/v1/organisations/{organisationId}/evidence/upload': {
       post: operation({
         summary: 'Upload a file as evidence',
-        description: 'Multipart upload. The artefact is stored, hashed and linked in one operation.',
+        description:
+          'Multipart upload. The artefact is stored, hashed and linked in one operation.',
         tags: ['Evidence'],
         parameters: [ORG_PARAM],
         responses: { '201': { description: 'Uploaded' } },
@@ -513,7 +520,8 @@ function buildPaths(): Record<string, unknown> {
     '/v1/organisations/{organisationId}/nodes': {
       get: operation({
         summary: 'List graph nodes',
-        description: 'People, identities, devices, applications, cloud resources, suppliers and more.',
+        description:
+          'People, identities, devices, applications, cloud resources, suppliers and more.',
         tags: ['Graph'],
         parameters: [ORG_PARAM],
         responses: { '200': { description: 'Nodes' } },
@@ -567,7 +575,8 @@ function buildPaths(): Record<string, unknown> {
       }),
       post: operation({
         summary: 'Request an exception',
-        description: 'Requires a justification and an expiry date. Open-ended exceptions are refused.',
+        description:
+          'Requires a justification and an expiry date. Open-ended exceptions are refused.',
         tags: ['Findings'],
         parameters: [ORG_PARAM],
         responses: { '201': { description: 'Requested' } },
@@ -625,7 +634,9 @@ function buildPaths(): Record<string, unknown> {
         parameters: [ORG_PARAM, ID_PARAM],
         responses: {
           '200': { description: 'Dispatched; verification still required' },
-          '409': { description: 'A previous attempt had an unknown outcome and needs reconciliation' },
+          '409': {
+            description: 'A previous attempt had an unknown outcome and needs reconciliation',
+          },
         },
       }),
     },
@@ -721,7 +732,12 @@ function buildPaths(): Record<string, unknown> {
         tags: ['Observability'],
         parameters: [
           ORG_PARAM,
-          { name: 'correlationId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+          {
+            name: 'correlationId',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
         ],
         responses: { '200': { description: 'Trace' } },
       }),
@@ -749,7 +765,8 @@ function buildPaths(): Record<string, unknown> {
     '/health/ready': {
       get: operation({
         summary: 'Readiness probe',
-        description: 'Checks dependencies. Returns 503 when this instance should not receive traffic.',
+        description:
+          'Checks dependencies. Returns 503 when this instance should not receive traffic.',
         tags: ['Observability'],
         security: [],
         responses: {
@@ -769,8 +786,18 @@ function buildPaths(): Record<string, unknown> {
         tags: ['Webhooks'],
         security: [],
         parameters: [
-          { name: 'X-Adericel-Signature', in: 'header', required: true, schema: { type: 'string' } },
-          { name: 'X-Adericel-Timestamp', in: 'header', required: true, schema: { type: 'string' } },
+          {
+            name: 'X-Adericel-Signature',
+            in: 'header',
+            required: true,
+            schema: { type: 'string' },
+          },
+          {
+            name: 'X-Adericel-Timestamp',
+            in: 'header',
+            required: true,
+            schema: { type: 'string' },
+          },
         ],
         responses: { '202': { description: 'Accepted and processed' } },
       }),

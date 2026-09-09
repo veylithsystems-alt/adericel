@@ -45,6 +45,11 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   const level = options.level ?? 'info';
   const threshold = LEVEL_VALUE[level];
   const sink = options.sink ?? ((line: string) => process.stdout.write(`${line}\n`));
+  // A log line records when the process emitted it. That is not a temporal
+  // dimension of any assessment, and a test that cares about it passes
+  // `nowIso`. Injecting a Clock into the logger would mean the logger could not
+  // be constructed before the Clock, which is exactly backwards.
+  // eslint-disable-next-line no-restricted-syntax
   const nowIso = options.nowIso ?? (() => new Date().toISOString());
   const bindings = options.bindings ?? {};
   const pretty = options.pretty ?? false;

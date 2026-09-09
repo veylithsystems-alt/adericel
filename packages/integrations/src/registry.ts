@@ -4,8 +4,15 @@ import type { EgressPolicy } from './http.js';
 import { createMicrosoftEntraConnector } from './connectors/microsoft-entra.js';
 import { createMicrosoftIntuneConnector } from './connectors/microsoft-intune.js';
 import { createGenericHttpConnector } from './connectors/generic-http.js';
-import { createAdericelSelfConnector, type SelfAssuranceProbe } from './connectors/adericel-self.js';
-import { createDemoFixtureConnector, createFixtureState, type FixtureState } from './connectors/demo-fixture.js';
+import {
+  createAdericelSelfConnector,
+  type SelfAssuranceProbe,
+} from './connectors/adericel-self.js';
+import {
+  createDemoFixtureConnector,
+  createFixtureState,
+  type FixtureState,
+} from './connectors/demo-fixture.js';
 
 export interface RegistryOptions {
   readonly egressPolicy: EgressPolicy;

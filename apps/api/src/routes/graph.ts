@@ -1,7 +1,17 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { EDGE_KINDS, NODE_KINDS, graphEdgeInputSchema, graphNodeInputSchema } from '@adericel/domain';
-import { createEdgeRepository, createNodeRepository, neighbourhood, shortestPath } from '@adericel/graph';
+import {
+  EDGE_KINDS,
+  NODE_KINDS,
+  graphEdgeInputSchema,
+  graphNodeInputSchema,
+} from '@adericel/domain';
+import {
+  createEdgeRepository,
+  createNodeRepository,
+  neighbourhood,
+  shortestPath,
+} from '@adericel/graph';
 import { pageRequestSchema } from '@adericel/shared';
 import type { AppContext } from '../context.js';
 import { audit, requireOrganisation } from '../middleware/request-context.js';
@@ -103,7 +113,12 @@ export function registerGraphRoutes(server: FastifyInstance, app: AppContext): v
           [params.organisationId, params.id],
           'Evidence count',
         );
-        const findings = await ctx.many<{ id: string; title: string; severity: string; status: string }>(
+        const findings = await ctx.many<{
+          id: string;
+          title: string;
+          severity: string;
+          status: string;
+        }>(
           `SELECT id, title, severity, status FROM findings
            WHERE organisation_id = $1 AND subject_node_id = $2
              AND status IN ('OPEN','ACKNOWLEDGED','IN_REMEDIATION')`,
@@ -236,7 +251,12 @@ export function registerGraphRoutes(server: FastifyInstance, app: AppContext): v
       const body = parseBody(request, graphEdgeInputSchema);
 
       const edge = await app.db.withTenant(organisationId, async (ctx) =>
-        createEdgeRepository(ctx).connect(body.kind, body.fromNodeId, body.toNodeId, body.attributes),
+        createEdgeRepository(ctx).connect(
+          body.kind,
+          body.fromNodeId,
+          body.toNodeId,
+          body.attributes,
+        ),
       );
 
       await audit(app, request, {

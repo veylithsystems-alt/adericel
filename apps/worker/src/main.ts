@@ -98,7 +98,10 @@ async function main(): Promise<void> {
   await db.ping();
   await storage.ping();
   logger.info(
-    { subscribers: subscribers.map((s) => s.name), connectors: connectors.list().map((c) => c.key) },
+    {
+      subscribers: subscribers.map((s) => s.name),
+      connectors: connectors.list().map((c) => c.key),
+    },
     'worker started',
   );
 

@@ -62,10 +62,7 @@ const FORBIDDEN_PATTERNS: { pattern: RegExp; message: string }[] = [
  * variable. Everything outside that shape is a genuine hard-coding.
  */
 function withoutPermittedFallbacks(serialised: string): string {
-  return serialised.replace(
-    /\$env\.[A-Z_]+ \|\| '[^']*'/g,
-    '$env.CONFIGURED_VALUE',
-  );
+  return serialised.replace(/\$env\.[A-Z_]+ \|\| '[^']*'/g, '$env.CONFIGURED_VALUE');
 }
 
 export function validateWorkflows(workflows: readonly N8nWorkflow[]): Finding[] {
@@ -140,7 +137,10 @@ export function validateWorkflows(workflows: readonly N8nWorkflow[]): Finding[] 
       for (const output of outputs.main) {
         for (const target of output ?? []) {
           if (!nodeNames.has(target.node)) {
-            report('error', `connection from "${from}" targets "${target.node}", which does not exist`);
+            report(
+              'error',
+              `connection from "${from}" targets "${target.node}", which does not exist`,
+            );
           }
         }
       }

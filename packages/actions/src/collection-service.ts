@@ -57,7 +57,9 @@ export interface CollectionService {
   runIntegration(integrationId: string, trigger: string): Promise<CollectionOutcome>;
   /** Process observations pushed in from outside, e.g. by n8n or a webhook. */
   ingestObservations(
-    observations: readonly Parameters<ReturnType<typeof createObservationRepository>['record']>[0][number][],
+    observations: readonly Parameters<
+      ReturnType<typeof createObservationRepository>['record']
+    >[0][number][],
     options: { integrationId: string | null; sourceSystem: string },
   ): Promise<IngestOutcome>;
   /** Re-read one predicate for one subject, used by action verification. */
@@ -201,10 +203,12 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
       for (const claimInput of normalisation.claims) {
         const subjectNodeId = claimInput.subjectExternalId
           ? (nodeIdByExternalId.get(claimInput.subjectExternalId) ??
-            (await nodes.findByExternalId(
-              inferKind(claimInput.predicate),
-              claimInput.subjectExternalId,
-            ))?.id ??
+            (
+              await nodes.findByExternalId(
+                inferKind(claimInput.predicate),
+                claimInput.subjectExternalId,
+              )
+            )?.id ??
             null)
           : null;
 
@@ -345,10 +349,7 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
         };
       } catch (error) {
         const message = (error as Error).message;
-        logger.error(
-          { integrationId, ...errorFields(error) },
-          'integration collection failed',
-        );
+        logger.error({ integrationId, ...errorFields(error) }, 'integration collection failed');
 
         await ctx.query(
           `UPDATE integration_runs

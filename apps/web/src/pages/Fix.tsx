@@ -76,7 +76,10 @@ export function Fix({ me }: { me: Me }): ReactElement {
       />
 
       {awaiting.length > 0 ? (
-        <Section title="Waiting for a decision" note={`${awaiting.length} action${awaiting.length === 1 ? '' : 's'}`}>
+        <Section
+          title="Waiting for a decision"
+          note={`${awaiting.length} action${awaiting.length === 1 ? '' : 's'}`}
+        >
           <div className="stack">
             {awaiting.map((action) => (
               <div key={action.id} className="panel stack">
@@ -84,8 +87,9 @@ export function Fix({ me }: { me: Me }): ReactElement {
                   <div>
                     <h3>{action.actionType}</h3>
                     <div className="meta">
-                      Target {action.target ?? '—'} · risk {action.riskClass.toLowerCase().replace(/_/g, ' ')} ·
-                      autonomy L{action.autonomyLevel ?? '?'}
+                      Target {action.target ?? '—'} · risk{' '}
+                      {action.riskClass.toLowerCase().replace(/_/g, ' ')} · autonomy L
+                      {action.autonomyLevel ?? '?'}
                     </div>
                   </div>
                   <div className="meta">
@@ -151,8 +155,9 @@ export function Fix({ me }: { me: Me }): ReactElement {
                   </>
                 ) : (
                   <div className="notice">
-                    You do not hold approval authority for this organisation. Approval is deliberately
-                    separated from proposal, so the person who proposed a change cannot also authorise it.
+                    You do not hold approval authority for this organisation. Approval is
+                    deliberately separated from proposal, so the person who proposed a change cannot
+                    also authorise it.
                   </div>
                 )}
                 {decide.error ? <ErrorNotice error={decide.error} /> : null}
@@ -169,9 +174,7 @@ export function Fix({ me }: { me: Me }): ReactElement {
               <div key={action.id} className="panel row row--between">
                 <div>
                   <strong>{action.actionType}</strong>
-                  <div className="meta">
-                    {action.target} · approved and awaiting execution
-                  </div>
+                  <div className="meta">{action.target} · approved and awaiting execution</div>
                 </div>
                 <button
                   type="button"
@@ -189,7 +192,10 @@ export function Fix({ me }: { me: Me }): ReactElement {
       ) : null}
 
       {verifying.length > 0 ? (
-        <Section title="Executed, awaiting verification" note="Executed is not the same as successful">
+        <Section
+          title="Executed, awaiting verification"
+          note="Executed is not the same as successful"
+        >
           <div className="stack">
             {verifying.map((action) => (
               <div key={action.id} className="panel row row--between">
@@ -240,7 +246,10 @@ export function Fix({ me }: { me: Me }): ReactElement {
 
       <Section title="Open findings" note={`${openFindings.length} open`}>
         {openFindings.length === 0 ? (
-          <Empty>No open findings. Note that this is not the same as everything being proven — check the unknown count on the assurance page.</Empty>
+          <Empty>
+            No open findings. Note that this is not the same as everything being proven — check the
+            unknown count on the assurance page.
+          </Empty>
         ) : (
           <div className="panel panel--flush table__wrap">
             <table className="table">
@@ -265,7 +274,9 @@ export function Fix({ me }: { me: Me }): ReactElement {
                     </td>
                     <td>
                       {finding.control?.id ? (
-                        <Link to={`/organisations/${organisationId}/controls/${finding.control.id}`}>
+                        <Link
+                          to={`/organisations/${organisationId}/controls/${finding.control.id}`}
+                        >
                           <code className="meta">{finding.control.key}</code>
                         </Link>
                       ) : (

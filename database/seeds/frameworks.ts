@@ -43,7 +43,10 @@ export const SYSTEM_FRAMEWORKS: readonly SeedFramework[] = [
       {
         key: 'CE.2',
         title: 'Secure configuration',
-        controlKeys: ['ce.secure_config.no_default_credentials', 'ce.secure_config.autorun_disabled'],
+        controlKeys: [
+          'ce.secure_config.no_default_credentials',
+          'ce.secure_config.autorun_disabled',
+        ],
       },
       {
         key: 'CE.3',
@@ -85,7 +88,11 @@ export const SYSTEM_FRAMEWORKS: readonly SeedFramework[] = [
       {
         key: 'AB.2',
         title: 'Endpoints are hardened and current',
-        controlKeys: ['device.disk.encrypted', 'device.endpoint_protection.active', 'device.os.supported'],
+        controlKeys: [
+          'device.disk.encrypted',
+          'device.endpoint_protection.active',
+          'device.os.supported',
+        ],
         weight: 2,
       },
       {
@@ -103,7 +110,11 @@ export const SYSTEM_FRAMEWORKS: readonly SeedFramework[] = [
       {
         key: 'AB.5',
         title: 'Governance is maintained',
-        controlKeys: ['policy.published_and_current', 'supplier.assurance_current', 'training.completion_rate'],
+        controlKeys: [
+          'policy.published_and_current',
+          'supplier.assurance_current',
+          'training.completion_rate',
+        ],
       },
       {
         key: 'AB.6',

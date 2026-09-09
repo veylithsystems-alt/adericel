@@ -44,7 +44,11 @@ const configSchema = z.object({
   /** Action types this fixture will accept and apply to its dataset. */
   executableActionTypes: z
     .array(z.string())
-    .default(['identity.mfa.require', 'identity.account.disable', 'cloud.storage.block_public_access']),
+    .default([
+      'identity.mfa.require',
+      'identity.account.disable',
+      'cloud.storage.block_public_access',
+    ]),
   /** Simulate an execution that reports success but does not change state. */
   failVerificationFor: z.array(z.string()).default([]),
 });
@@ -219,7 +223,8 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
         return {
           status: 'SUCCEEDED',
           externalOperationRef: `fixture-${request.idempotencyKey}`,
-          detail: 'Execution reported success (state deliberately unchanged for verification testing).',
+          detail:
+            'Execution reported success (state deliberately unchanged for verification testing).',
         };
       }
 

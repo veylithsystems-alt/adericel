@@ -3,8 +3,19 @@ import type { AssuranceState, Severity } from './assurance-presentation.js';
 /** API response shapes the interface consumes. */
 
 export interface Me {
-  principal: { type: string; id: string; displayName: string; email: string | null; mspId: string | null };
-  grants: { scopeType: string; scopeId: string | null; roles: string[]; expiresAt: string | null }[];
+  principal: {
+    type: string;
+    id: string;
+    displayName: string;
+    email: string | null;
+    mspId: string | null;
+  };
+  grants: {
+    scopeType: string;
+    scopeId: string | null;
+    roles: string[];
+    expiresAt: string | null;
+  }[];
   permissions: string[];
   organisations: { id: string; name: string; slug: string; mspId: string | null }[];
   msps: { id: string; name: string; slug: string }[];
@@ -94,7 +105,14 @@ export interface ReasoningStep {
 }
 
 export interface ControlExplanation {
-  control: { id: string; key: string; title: string; description: string | null; enabled: boolean; parameters: Record<string, unknown> };
+  control: {
+    id: string;
+    key: string;
+    title: string;
+    description: string | null;
+    enabled: boolean;
+    parameters: Record<string, unknown>;
+  };
   state: AssuranceState;
   unknownReason: string | null;
   rationale: string;
@@ -145,8 +163,19 @@ export interface ControlExplanation {
     subject: string | null;
     assertedAt: string;
   }[];
-  openFindings: { id: string; title: string; severity: Severity; status: string; firstDetectedAt: string }[];
-  activeExceptions: { id: string; justification: string; expiresAt: string; subjectNodeId: string | null }[];
+  openFindings: {
+    id: string;
+    title: string;
+    severity: Severity;
+    status: string;
+    firstDetectedAt: string;
+  }[];
+  activeExceptions: {
+    id: string;
+    justification: string;
+    expiresAt: string;
+    subjectNodeId: string | null;
+  }[];
   requirements: { id: string; key: string; title: string; framework: string }[];
 }
 

@@ -24,8 +24,16 @@ export const cyberEssentialsV1 = {
       expression: {
         op: 'and',
         operands: [
-          { op: 'eq', left: { op: 'claim', predicate: 'network.firewall.present' }, right: { op: 'const', value: true } },
-          { op: 'eq', left: { op: 'claim', predicate: 'network.firewall.default_deny_inbound' }, right: { op: 'const', value: true } },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'network.firewall.present' },
+            right: { op: 'const', value: true },
+          },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'network.firewall.default_deny_inbound' },
+            right: { op: 'const', value: true },
+          },
         ],
       },
       severity: 'HIGH',
@@ -128,7 +136,8 @@ export const cyberEssentialsV1 = {
       aggregation: 'ALL',
       severity: 'HIGH',
       failureTitle: 'Unsupported software is in use.',
-      failureDescription: 'Remove, replace or upgrade software that no longer receives vendor security updates.',
+      failureDescription:
+        'Remove, replace or upgrade software that no longer receives vendor security updates.',
       remediation: null,
       maxEvidenceAgeDays: 30,
     },
@@ -139,8 +148,16 @@ export const cyberEssentialsV1 = {
       applicability: {
         op: 'and',
         operands: [
-          { op: 'ne', left: { op: 'claim', predicate: 'identity.account.type', default: 'USER' }, right: { op: 'const', value: 'SERVICE' } },
-          { op: 'eq', left: { op: 'claim', predicate: 'identity.account.enabled', default: true }, right: { op: 'const', value: true } },
+          {
+            op: 'ne',
+            left: { op: 'claim', predicate: 'identity.account.type', default: 'USER' },
+            right: { op: 'const', value: 'SERVICE' },
+          },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'identity.account.enabled', default: true },
+            right: { op: 'const', value: true },
+          },
         ],
       },
       expression: {
@@ -151,7 +168,8 @@ export const cyberEssentialsV1 = {
       aggregation: 'ALL',
       severity: 'CRITICAL',
       failureTitle: 'Multi-factor authentication is not applied to all cloud service accounts.',
-      failureDescription: 'Cyber Essentials requires MFA on cloud services for all users. Enforce it on the affected accounts.',
+      failureDescription:
+        'Cyber Essentials requires MFA on cloud services for all users. Enforce it on the affected accounts.',
       remediation: {
         actionType: 'identity.mfa.require',
         riskClass: 'CONFIGURATION',
@@ -194,8 +212,16 @@ export const cyberEssentialsV1 = {
       expression: {
         op: 'and',
         operands: [
-          { op: 'eq', left: { op: 'claim', predicate: 'device.endpoint_protection.installed' }, right: { op: 'const', value: true } },
-          { op: 'eq', left: { op: 'claim', predicate: 'device.endpoint_protection.realtime_enabled' }, right: { op: 'const', value: true } },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'device.endpoint_protection.installed' },
+            right: { op: 'const', value: true },
+          },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'device.endpoint_protection.realtime_enabled' },
+            right: { op: 'const', value: true },
+          },
         ],
       },
       aggregation: 'ALL',

@@ -1,6 +1,12 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
-import { AdericelError, withRetry, withTimeout, type Logger, type RetryPolicy } from '@adericel/shared';
+import {
+  AdericelError,
+  withRetry,
+  withTimeout,
+  type Logger,
+  type RetryPolicy,
+} from '@adericel/shared';
 
 /**
  * Outbound HTTP for connectors.
@@ -41,7 +47,11 @@ export function isPrivateAddress(address: string): boolean {
   if (family === 6) {
     const normalised = address.toLowerCase();
     if (normalised === '::1' || normalised === '::') return true;
-    if (normalised.startsWith('fe80') || normalised.startsWith('fc') || normalised.startsWith('fd')) {
+    if (
+      normalised.startsWith('fe80') ||
+      normalised.startsWith('fc') ||
+      normalised.startsWith('fd')
+    ) {
       return true;
     }
     // IPv4-mapped addresses would otherwise bypass the v4 checks entirely.
@@ -176,7 +186,10 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
           },
           ...(request.body === undefined
             ? {}
-            : { body: typeof request.body === 'string' ? request.body : JSON.stringify(request.body) }),
+            : {
+                body:
+                  typeof request.body === 'string' ? request.body : JSON.stringify(request.body),
+              }),
           signal,
           redirect: 'error',
         });

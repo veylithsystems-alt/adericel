@@ -54,7 +54,10 @@ describe('aggregateAssurance', () => {
 
 describe('summarise', () => {
   it('keeps satisfaction and coverage as separate dimensions', () => {
-    const highSatisfactionLowCoverage = summarise(['SATISFIED', ...Array(9).fill('UNKNOWN')] as AssuranceState[]);
+    const highSatisfactionLowCoverage = summarise([
+      'SATISFIED',
+      ...Array(9).fill('UNKNOWN'),
+    ] as AssuranceState[]);
     expect(highSatisfactionLowCoverage.satisfactionOfKnown).toBe(1);
     expect(highSatisfactionLowCoverage.coverage).toBeCloseTo(0.1);
     expect(highSatisfactionLowCoverage.state).toBe('UNKNOWN');
@@ -80,7 +83,10 @@ describe('assuranceSeverityRank', () => {
       'NOT_SATISFIED',
       'EXCEPTED',
       'PARTIALLY_SATISFIED',
-    ].sort((a, b) => assuranceSeverityRank(a as AssuranceState) - assuranceSeverityRank(b as AssuranceState)) as AssuranceState[];
+    ].sort(
+      (a, b) =>
+        assuranceSeverityRank(a as AssuranceState) - assuranceSeverityRank(b as AssuranceState),
+    ) as AssuranceState[];
     expect(sorted[0]).toBe('NOT_SATISFIED');
     expect(sorted[1]).toBe('UNKNOWN');
   });

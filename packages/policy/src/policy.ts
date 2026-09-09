@@ -267,8 +267,7 @@ export function evaluatePolicy(policy: CompiledPolicy, question: PolicyQuestion)
     }
   }
 
-  const humanRequired =
-    ruleEffect === 'REQUIRE_APPROVAL' || !definition.mayExecuteWithoutApproval;
+  const humanRequired = ruleEffect === 'REQUIRE_APPROVAL' || !definition.mayExecuteWithoutApproval;
 
   checks.push({
     check: 'human-approval',
@@ -281,7 +280,8 @@ export function evaluatePolicy(policy: CompiledPolicy, question: PolicyQuestion)
   return {
     outcome: humanRequired ? 'REQUIRE_APPROVAL' : 'ALLOW',
     reason: humanRequired
-      ? matched?.reason || `Approval required for ${question.riskClass} action at autonomy L${level}`
+      ? matched?.reason ||
+        `Approval required for ${question.riskClass} action at autonomy L${level}`
       : matched?.reason || `Autonomously authorised at autonomy L${level}`,
     matchedRuleId: matched?.id ?? null,
     effectiveAutonomyLevel: level,

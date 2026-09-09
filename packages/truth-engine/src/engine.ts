@@ -167,7 +167,10 @@ function resolveClaims(
         asOfIso,
         maxEvidenceAgeDays === null
           ? undefined
-          : { maxAgeDays: maxEvidenceAgeDays, warnAfterDays: Math.floor(maxEvidenceAgeDays * 0.75) },
+          : {
+              maxAgeDays: maxEvidenceAgeDays,
+              warnAfterDays: Math.floor(maxEvidenceAgeDays * 0.75),
+            },
       );
       return { usable: result.usable, reason: result.reason };
     });
@@ -190,8 +193,7 @@ function resolveClaims(
   const resolved = new Map<string, ResolvedClaim>();
   for (const [predicate, candidates] of byPredicate) {
     const ranked = [...candidates].sort((a, b) => {
-      const usableDelta =
-        Number(a.unusableReason !== null) - Number(b.unusableReason !== null);
+      const usableDelta = Number(a.unusableReason !== null) - Number(b.unusableReason !== null);
       if (usableDelta !== 0) return usableDelta;
       const timeDelta = Date.parse(b.claim.assertedAt) - Date.parse(a.claim.assertedAt);
       if (timeDelta !== 0) return timeDelta;
@@ -223,7 +225,11 @@ function unknownReasonFor(
     if (!claim) continue;
     const reason = claim.unusableReason ?? '';
     if (reason.includes('revoked')) return 'EVIDENCE_REVOKED';
-    if (reason.includes('stale') || reason.includes('days old') || reason.includes('validity period')) {
+    if (
+      reason.includes('stale') ||
+      reason.includes('days old') ||
+      reason.includes('validity period')
+    ) {
       return 'STALE_EVIDENCE';
     }
     if (reason.includes('AI-suggested')) return 'INSUFFICIENT_EVIDENCE';
@@ -292,10 +298,7 @@ function computeInputDigest(input: ControlAssessmentInput, ruleset: Ruleset, rul
 }
 
 /** Evaluate one control against one ruleset rule. Pure. */
-export function assessControl(
-  ruleset: Ruleset,
-  input: ControlAssessmentInput,
-): AssessmentOutcome {
+export function assessControl(ruleset: Ruleset, input: ControlAssessmentInput): AssessmentOutcome {
   const rule = findRule(ruleset, input.ruleKey);
   const parameters = { ...rule.defaultParameters, ...input.parameters };
   const asOfEpochMs = Date.parse(input.asOfIso);
@@ -342,9 +345,7 @@ export function assessControl(
   }
 
   const exceptedSubjects = new Set(
-    input.activeExceptions
-      .map((e) => e.subjectNodeId)
-      .filter((id): id is string => id !== null),
+    input.activeExceptions.map((e) => e.subjectNodeId).filter((id): id is string => id !== null),
   );
 
   // ---- Organisation-level rule (SINGLE aggregation) -----------------------
@@ -366,7 +367,11 @@ export function assessControl(
     for (const id of result.evidenceIds) allEvidenceIds.add(id);
 
     const state: AssuranceState =
-      result.value === 'TRUE' ? 'SATISFIED' : result.value === 'FALSE' ? 'NOT_SATISFIED' : 'UNKNOWN';
+      result.value === 'TRUE'
+        ? 'SATISFIED'
+        : result.value === 'FALSE'
+          ? 'NOT_SATISFIED'
+          : 'UNKNOWN';
 
     reasoning.push({
       step: rule.key,
@@ -409,11 +414,21 @@ export function assessControl(
   for (const subject of input.subjects) {
     if (!inScopeKinds.has(subject.kind)) continue;
 
-    const claims = resolveClaims(subject.claims, evidenceById, input.asOfIso, rule.maxEvidenceAgeDays);
+    const claims = resolveClaims(
+      subject.claims,
+      evidenceById,
+      input.asOfIso,
+      rule.maxEvidenceAgeDays,
+    );
     const ctx: EvaluationContext = {
       claims,
       parameters,
-      facts: { ...subject.attributes, nodeId: subject.nodeId, kind: subject.kind, label: subject.label },
+      facts: {
+        ...subject.attributes,
+        nodeId: subject.nodeId,
+        kind: subject.kind,
+        label: subject.label,
+      },
       asOfEpochMs,
     };
 
@@ -528,7 +543,13 @@ export function assessControl(
     };
   }
 
-  const state = aggregateSubjects(rule, inScope.length, passing.length, failing.length, unknown.length);
+  const state = aggregateSubjects(
+    rule,
+    inScope.length,
+    passing.length,
+    failing.length,
+    unknown.length,
+  );
 
   reasoning.push({
     step: `${rule.key}:scope`,
@@ -555,7 +576,15 @@ export function assessControl(
             ? 'RULE_INPUTS_MISSING'
             : 'INSUFFICIENT_EVIDENCE'
         : null,
-    rationale: buildRationale(rule, state, inScope.length, passing.length, failing.length, unknown.length, allMissing),
+    rationale: buildRationale(
+      rule,
+      state,
+      inScope.length,
+      passing.length,
+      failing.length,
+      unknown.length,
+      allMissing,
+    ),
     reasoning,
     severity: rule.severity,
     claimIds: [...allClaimIds].sort(),
@@ -611,7 +640,9 @@ function describeMissing(
   if (missing.length === 0) return 'Required inputs were not available.';
   const parts = missing.map((predicate) => {
     const claim = claims.get(predicate);
-    return claim?.unusableReason ? `${predicate} (${claim.unusableReason})` : `${predicate} (no claim recorded)`;
+    return claim?.unusableReason
+      ? `${predicate} (${claim.unusableReason})`
+      : `${predicate} (no claim recorded)`;
   });
   return `Missing or unusable: ${parts.join('; ')}.`;
 }

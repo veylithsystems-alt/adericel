@@ -3,7 +3,12 @@ import { z } from 'zod';
 import { organisationCreateSchema, organisationSettingsSchema } from '@adericel/domain';
 import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
-import { audit, requireOrganisation, requirePlatform, requirePrincipal } from '../middleware/request-context.js';
+import {
+  audit,
+  requireOrganisation,
+  requirePlatform,
+  requirePrincipal,
+} from '../middleware/request-context.js';
 import { parseBody, parseParams, organisationParam } from '../middleware/validation.js';
 import { provisionOrganisation } from '../services/onboarding.js';
 import { exportOrganisation } from '../services/export.js';
@@ -234,7 +239,12 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
           }
         }
 
-        return ctx.oneOrFail<{ id: string; enabled: boolean; parameters: Record<string, unknown>; source: string }>(
+        return ctx.oneOrFail<{
+          id: string;
+          enabled: boolean;
+          parameters: Record<string, unknown>;
+          source: string;
+        }>(
           `UPDATE controls
            SET enabled = COALESCE($3, enabled),
                parameters = COALESCE($4::jsonb, parameters),

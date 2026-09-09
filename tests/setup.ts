@@ -13,4 +13,5 @@ process.env.AUTH_JWT_SECRET ??= 'test-jwt-secret-value-that-is-long-enough-32';
 process.env.AUTH_CREDENTIAL_ENCRYPTION_KEY ??= 'test-credential-encryption-key-32-bytes!!';
 process.env.STORAGE_DRIVER ??= 'filesystem';
 process.env.STORAGE_FILESYSTEM_ROOT ??= './var/test-storage';
-process.env.DATABASE_URL ??= process.env.TEST_DATABASE_URL ?? 'postgres://adericel:adericel@localhost:5432/adericel_test';
+process.env.DATABASE_URL ??=
+  process.env.TEST_DATABASE_URL ?? 'postgres://adericel:adericel@localhost:5432/adericel_test';

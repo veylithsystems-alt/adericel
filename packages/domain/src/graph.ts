@@ -372,7 +372,11 @@ export type GraphEdgeInput = z.infer<typeof graphEdgeInputSchema>;
 /** A single hop in an explanation path, rendered directly in the UI. */
 export interface GraphPathStep {
   readonly node: Pick<GraphNode, 'id' | 'kind' | 'label'>;
-  readonly viaEdge: { readonly id: string; readonly kind: EdgeKind; readonly reversed: boolean } | null;
+  readonly viaEdge: {
+    readonly id: string;
+    readonly kind: EdgeKind;
+    readonly reversed: boolean;
+  } | null;
 }
 
 export interface GraphPath {

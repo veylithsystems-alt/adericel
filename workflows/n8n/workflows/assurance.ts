@@ -45,11 +45,12 @@ export function assessmentWorkflow(): N8nWorkflow {
         'Assesses every control, then rolls up requirements, frameworks and the organisation so ' +
         'each level aggregates freshly assessed children.',
     }),
-    ifNode(
-      'Assessed?',
-      [660, 0],
-      { left: '={{ $json.statusCode }}', operator: 'lt', right: '300', type: 'number' },
-    ),
+    ifNode('Assessed?', [660, 0], {
+      left: '={{ $json.statusCode }}',
+      operator: 'lt',
+      right: '300',
+      type: 'number',
+    }),
     codeNode(
       'Report outcome',
       [900, -100],
@@ -136,7 +137,7 @@ export function assuranceChangeWorkflow(): N8nWorkflow {
         'Classifies what actually happened, then notifies proportionately.\n\n' +
         '**Losing visibility is its own event.** A control moving from Proven to ' +
         'Unknown is not a smaller failure — it usually means a source stopped ' +
-        'collecting, which is Adericel\'s problem to fix, not the customer\'s.',
+        "collecting, which is Adericel's problem to fix, not the customer's.",
       [-620, -200],
       [520, 280],
       4,
@@ -223,14 +224,9 @@ return [
       'Improvements are recorded but do not page anyone. Alert fatigue is how real alerts get ignored.',
     ),
     executeSubWorkflow('Notify', [900, -100], WORKFLOW_IDS.notifications),
-    node(
-      'Recorded only',
-      'n8n-nodes-base.noOp',
-      1,
-      {},
-      [900, 120],
-      { notes: 'The change is already durably recorded in Adericel; no notification is warranted.' },
-    ),
+    node('Recorded only', 'n8n-nodes-base.noOp', 1, {}, [900, 120], {
+      notes: 'The change is already durably recorded in Adericel; no notification is warranted.',
+    }),
   ];
 
   let connections = chain(
@@ -278,8 +274,7 @@ export function findingTriageWorkflow(): N8nWorkflow {
     subWorkflowTrigger([0, 0], 'Invoked on FindingCreated.'),
     configurationNode([220, 0]),
     adericelRequest('Read the finding', [440, 0], {
-      url:
-        '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/findings?openOnly=true&limit=200',
+      url: '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/findings?openOnly=true&limit=200',
     }),
     adericelRequest('Read available capabilities', [660, 0], {
       url: "={{ $('Configuration').first().json.apiBaseUrl }}/v1/capabilities",
@@ -365,11 +360,11 @@ return [
   },
 ];`,
     ),
-    ifNode(
-      'Propose a remediation?',
-      [1340, 0],
-      { left: '={{ $json.propose }}', operator: 'true', type: 'boolean' },
-    ),
+    ifNode('Propose a remediation?', [1340, 0], {
+      left: '={{ $json.propose }}',
+      operator: 'true',
+      type: 'boolean',
+    }),
     executeSubWorkflow('Propose action', [1580, -100], WORKFLOW_IDS.actionProposal),
     codeNode(
       'Record for a human',

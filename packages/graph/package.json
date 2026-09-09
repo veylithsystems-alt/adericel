@@ -12,6 +12,13 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "scripts": { "build": "tsc -b" },
-  "dependencies": { "@adericel/shared": "workspace:*", "@adericel/domain": "workspace:*", "pg": "^8.16.3", "zod": "^4.1.11" }
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@adericel/shared": "workspace:*",
+    "@adericel/domain": "workspace:*",
+    "pg": "^8.16.3",
+    "zod": "^4.1.11"
+  }
 }

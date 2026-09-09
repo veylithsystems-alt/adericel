@@ -31,7 +31,8 @@ function splitDirections(sql: string, filename: string): { up: string; down: str
   const downIndex = sql.search(downMarker);
   if (upIndex === -1) throw new Error(`${filename}: missing "-- migrate:up" marker`);
   if (downIndex === -1) throw new Error(`${filename}: missing "-- migrate:down" marker`);
-  if (downIndex < upIndex) throw new Error(`${filename}: "-- migrate:down" precedes "-- migrate:up"`);
+  if (downIndex < upIndex)
+    throw new Error(`${filename}: "-- migrate:down" precedes "-- migrate:up"`);
   const up = sql.slice(sql.indexOf('\n', upIndex) + 1, downIndex).trim();
   const down = sql.slice(sql.indexOf('\n', downIndex) + 1).trim();
   if (up === '') throw new Error(`${filename}: empty up migration`);
@@ -97,7 +98,10 @@ export async function status(client: pg.Client): Promise<MigrationStatus[]> {
   });
 }
 
-export async function up(client: pg.Client, log: (m: string) => void = console.log): Promise<number> {
+export async function up(
+  client: pg.Client,
+  log: (m: string) => void = console.log,
+): Promise<number> {
   await client.query(BOOTSTRAP);
   const migrations = await loadMigrations();
   const { rows } = await client.query<{ id: string; checksum: string }>(
@@ -177,7 +181,10 @@ export async function down(
 }
 
 /** Drop everything and re-apply. Refuses to run against a production database. */
-export async function reset(client: pg.Client, log: (m: string) => void = console.log): Promise<void> {
+export async function reset(
+  client: pg.Client,
+  log: (m: string) => void = console.log,
+): Promise<void> {
   if (process.env.NODE_ENV === 'production' || process.env.ADERICEL_ALLOW_RESET !== 'yes') {
     throw new Error(
       'Refusing to reset: set ADERICEL_ALLOW_RESET=yes and ensure NODE_ENV is not production.',

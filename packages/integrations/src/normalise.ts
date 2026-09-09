@@ -17,7 +17,10 @@ export interface NormalisedSubject {
   readonly attributes: Record<string, unknown>;
 }
 
-export interface NormalisedClaim extends Omit<ClaimInput, 'evidenceIds' | 'origin' | 'status' | 'metadata'> {
+export interface NormalisedClaim extends Omit<
+  ClaimInput,
+  'evidenceIds' | 'origin' | 'status' | 'metadata'
+> {
   readonly subjectExternalId: string | null;
 }
 
@@ -96,7 +99,13 @@ export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = {
     push(claims, 'identity.mfa.enforced', bool(p.mfaEnforced), externalId, observedAt);
     push(claims, 'identity.mfa.methods', p.mfaMethods, externalId, observedAt);
     push(claims, 'identity.privileged', bool(p.privileged), externalId, observedAt);
-    push(claims, 'identity.admin_account_separate', bool(p.adminAccountSeparate), externalId, observedAt);
+    push(
+      claims,
+      'identity.admin_account_separate',
+      bool(p.adminAccountSeparate),
+      externalId,
+      observedAt,
+    );
     push(claims, 'identity.last_sign_in_at', str(p.lastSignInAt), externalId, observedAt);
     return {
       subjects: [
@@ -127,11 +136,35 @@ export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = {
     push(claims, 'device.os.supported', bool(p.osSupported), externalId, observedAt);
     push(claims, 'device.os.version', str(p.osVersion), externalId, observedAt);
     push(claims, 'device.patch.last_applied_at', str(p.lastPatchedAt), externalId, observedAt);
-    push(claims, 'device.endpoint_protection.installed', bool(p.endpointProtectionInstalled), externalId, observedAt);
-    push(claims, 'device.endpoint_protection.realtime_enabled', bool(p.endpointProtectionRealtime), externalId, observedAt);
-    push(claims, 'device.endpoint_protection.signatures_updated_at', str(p.signaturesUpdatedAt), externalId, observedAt);
+    push(
+      claims,
+      'device.endpoint_protection.installed',
+      bool(p.endpointProtectionInstalled),
+      externalId,
+      observedAt,
+    );
+    push(
+      claims,
+      'device.endpoint_protection.realtime_enabled',
+      bool(p.endpointProtectionRealtime),
+      externalId,
+      observedAt,
+    );
+    push(
+      claims,
+      'device.endpoint_protection.signatures_updated_at',
+      str(p.signaturesUpdatedAt),
+      externalId,
+      observedAt,
+    );
     push(claims, 'asset.vendor_supported', bool(p.vendorSupported), externalId, observedAt);
-    push(claims, 'asset.default_credentials_present', bool(p.defaultCredentialsPresent), externalId, observedAt);
+    push(
+      claims,
+      'asset.default_credentials_present',
+      bool(p.defaultCredentialsPresent),
+      externalId,
+      observedAt,
+    );
     return {
       subjects: [
         {
@@ -156,15 +189,31 @@ export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = {
     const claims: NormalisedClaim[] = [];
     push(claims, 'cloud.resource.category', str(p.category), externalId, observedAt);
     push(claims, 'cloud.storage.public_access', bool(p.publicAccess), externalId, observedAt);
-    push(claims, 'cloud.storage.encryption_enabled', bool(p.encryptionEnabled), externalId, observedAt);
-    push(claims, 'asset.default_credentials_present', bool(p.defaultCredentialsPresent), externalId, observedAt);
+    push(
+      claims,
+      'cloud.storage.encryption_enabled',
+      bool(p.encryptionEnabled),
+      externalId,
+      observedAt,
+    );
+    push(
+      claims,
+      'asset.default_credentials_present',
+      bool(p.defaultCredentialsPresent),
+      externalId,
+      observedAt,
+    );
     return {
       subjects: [
         {
           kind: 'CloudResource',
           externalId,
           label: str(p.name) ?? externalId,
-          attributes: { provider: p.provider ?? null, region: p.region ?? null, category: p.category ?? null },
+          attributes: {
+            provider: p.provider ?? null,
+            region: p.region ?? null,
+            category: p.category ?? null,
+          },
         },
       ],
       claims,
@@ -177,7 +226,13 @@ export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = {
     const observedAt = observation.observedAt;
     const claims: NormalisedClaim[] = [];
     push(claims, 'vulnerability.critical_overdue', bool(p.criticalOverdue), externalId, observedAt);
-    push(claims, 'vulnerability.high_or_critical_overdue_14d', bool(p.highOrCriticalOverdue14d), externalId, observedAt);
+    push(
+      claims,
+      'vulnerability.high_or_critical_overdue_14d',
+      bool(p.highOrCriticalOverdue14d),
+      externalId,
+      observedAt,
+    );
     push(claims, 'vulnerability.open_count', num(p.openCount), externalId, observedAt);
     return { subjects: [], claims };
   },
@@ -210,14 +265,38 @@ export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = {
     // Organisation-wide settings carry no subject: they are claims about the
     // organisation itself, which is how SINGLE-aggregation rules consume them.
     push(claims, 'organisation.password.min_length', num(p.passwordMinLength), null, observedAt);
-    push(claims, 'organisation.password.breach_screening_enabled', bool(p.passwordBreachScreening), null, observedAt);
+    push(
+      claims,
+      'organisation.password.breach_screening_enabled',
+      bool(p.passwordBreachScreening),
+      null,
+      observedAt,
+    );
     push(claims, 'organisation.identity.admin_count', num(p.adminCount), null, observedAt);
     push(claims, 'organisation.logging.enabled', bool(p.loggingEnabled), null, observedAt);
     push(claims, 'organisation.logging.retention_days', num(p.logRetentionDays), null, observedAt);
-    push(claims, 'organisation.backup.last_restore_test_at', str(p.lastRestoreTestAt), null, observedAt);
-    push(claims, 'organisation.training.completion_rate', num(p.trainingCompletionRate), null, observedAt);
+    push(
+      claims,
+      'organisation.backup.last_restore_test_at',
+      str(p.lastRestoreTestAt),
+      null,
+      observedAt,
+    );
+    push(
+      claims,
+      'organisation.training.completion_rate',
+      num(p.trainingCompletionRate),
+      null,
+      observedAt,
+    );
     push(claims, 'network.firewall.present', bool(p.boundaryFirewallPresent), null, observedAt);
-    push(claims, 'network.firewall.default_deny_inbound', bool(p.firewallDefaultDenyInbound), null, observedAt);
+    push(
+      claims,
+      'network.firewall.default_deny_inbound',
+      bool(p.firewallDefaultDenyInbound),
+      null,
+      observedAt,
+    );
     return { subjects: [], claims };
   },
 
@@ -268,7 +347,13 @@ export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = {
     const observedAt = observation.observedAt;
     const claims: NormalisedClaim[] = [];
     push(claims, 'asset.vendor_supported', bool(p.vendorSupported), externalId, observedAt);
-    push(claims, 'asset.default_credentials_present', bool(p.defaultCredentialsPresent), externalId, observedAt);
+    push(
+      claims,
+      'asset.default_credentials_present',
+      bool(p.defaultCredentialsPresent),
+      externalId,
+      observedAt,
+    );
     return {
       subjects: [
         {

@@ -150,7 +150,9 @@ export async function listAudit(
   if (cursor) {
     const { k, i } = decodeCursor(cursor);
     values.push(k, i);
-    conditions.push(`(occurred_at, id) < ($${values.length - 1}::timestamptz, $${values.length}::uuid)`);
+    conditions.push(
+      `(occurred_at, id) < ($${values.length - 1}::timestamptz, $${values.length}::uuid)`,
+    );
   }
   values.push(limit + 1);
 

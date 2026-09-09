@@ -38,36 +38,24 @@ export interface Queryable {
 export interface TenantContext extends Queryable {
   readonly organisationId: string;
   /** One row or null. Throws if the query returns more than one row. */
-  one<T = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<T | null>;
+  one<T = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<T | null>;
   /** One row, throwing NOT_FOUND when absent. */
   oneOrFail<T = QueryResultRow>(
     text: string,
     values: readonly unknown[],
     resource: string,
   ): Promise<T>;
-  many<T = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<T[]>;
+  many<T = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<T[]>;
 }
 
 export interface PlatformContext extends Queryable {
-  one<T = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<T | null>;
+  one<T = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<T | null>;
   oneOrFail<T = QueryResultRow>(
     text: string,
     values: readonly unknown[],
     resource: string,
   ): Promise<T>;
-  many<T = QueryResultRow>(
-    text: string,
-    values?: readonly unknown[],
-  ): Promise<T[]>;
+  many<T = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<T[]>;
 }
 
 export interface Database {
@@ -82,7 +70,12 @@ export interface Database {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function translateError(error: unknown): never {
-  const pgError = error as { code?: string; constraint?: string; detail?: string; message?: string };
+  const pgError = error as {
+    code?: string;
+    constraint?: string;
+    detail?: string;
+    message?: string;
+  };
   switch (pgError.code) {
     case '23505':
       throw new AdericelError('CONFLICT', 'Resource already exists', {
@@ -141,11 +134,7 @@ function makeHelpers(client: pg.PoolClient): Omit<TenantContext, 'organisationId
       }
       return rows[0] ?? null;
     },
-    async oneOrFail<T>(
-      text: string,
-      values: readonly unknown[],
-      resource: string,
-    ) {
+    async oneOrFail<T>(text: string, values: readonly unknown[], resource: string) {
       const { rows } = await query<T>(text, values);
       const row = rows[0];
       if (row === undefined) {
@@ -212,7 +201,10 @@ export function createDatabase(options: DatabaseOptions): Database {
   return {
     pool,
 
-    async withTenant<T>(organisationId: string, fn: (ctx: TenantContext) => Promise<T>): Promise<T> {
+    async withTenant<T>(
+      organisationId: string,
+      fn: (ctx: TenantContext) => Promise<T>,
+    ): Promise<T> {
       if (!UUID_RE.test(organisationId)) {
         // Guarding here keeps a malformed identifier from ever reaching
         // set_config, where it would silently become an empty context.

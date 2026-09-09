@@ -364,18 +364,11 @@ export function noOp(name: string, position: [number, number], notes?: string): 
 }
 
 export function stopAndError(name: string, position: [number, number], message: string): N8nNode {
-  return node(
-    name,
-    'n8n-nodes-base.stopAndError',
-    1,
-    { errorMessage: message },
-    position,
-    {
-      notes:
-        'Stops the execution with a described failure rather than continuing on partial data. ' +
-        'The error handler workflow records it against the correlation id.',
-    },
-  );
+  return node(name, 'n8n-nodes-base.stopAndError', 1, { errorMessage: message }, position, {
+    notes:
+      'Stops the execution with a described failure rather than continuing on partial data. ' +
+      'The error handler workflow records it against the correlation id.',
+  });
 }
 
 export function scheduleTrigger(

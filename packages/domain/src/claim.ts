@@ -86,9 +86,10 @@ export type ClaimInput = z.infer<typeof claimInputSchema>;
  * AI-suggested claims are excluded unless a human or a verification has
  * confirmed them. This is the enforcement point for the AI/truth boundary.
  */
-export function isRuleEligible(
-  claim: Pick<ClaimRecord, 'origin' | 'status'>,
-): { eligible: boolean; reason: string | null } {
+export function isRuleEligible(claim: Pick<ClaimRecord, 'origin' | 'status'>): {
+  eligible: boolean;
+  reason: string | null;
+} {
   if (claim.status === 'REJECTED') return { eligible: false, reason: 'Claim was rejected' };
   if (claim.status === 'WITHDRAWN') return { eligible: false, reason: 'Claim was withdrawn' };
   if (claim.status === 'SUPERSEDED') return { eligible: false, reason: 'Claim was superseded' };

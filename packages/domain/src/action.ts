@@ -79,7 +79,13 @@ export function assertTransition(from: ActionState, to: ActionState): void {
 }
 
 /** Risk class of an action, used by policy to decide approval requirements. */
-export const ACTION_RISK_CLASSES = ['READ_ONLY', 'LOW_IMPACT', 'CONFIGURATION', 'DISRUPTIVE', 'DESTRUCTIVE'] as const;
+export const ACTION_RISK_CLASSES = [
+  'READ_ONLY',
+  'LOW_IMPACT',
+  'CONFIGURATION',
+  'DISRUPTIVE',
+  'DESTRUCTIVE',
+] as const;
 export type ActionRiskClass = (typeof ACTION_RISK_CLASSES)[number];
 export const actionRiskClassSchema = z.enum(ACTION_RISK_CLASSES);
 

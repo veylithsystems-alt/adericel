@@ -118,7 +118,13 @@ export function registerFindingRoutes(server: FastifyInstance, app: AppContext):
       const body = parseBody(
         request,
         z.object({
-          status: z.enum(['ACKNOWLEDGED', 'IN_REMEDIATION', 'RESOLVED', 'FALSE_POSITIVE', 'ACCEPTED_RISK']),
+          status: z.enum([
+            'ACKNOWLEDGED',
+            'IN_REMEDIATION',
+            'RESOLVED',
+            'FALSE_POSITIVE',
+            'ACCEPTED_RISK',
+          ]),
           reason: z.string().min(3).max(2000),
         }),
       );
@@ -237,7 +243,11 @@ export function registerFindingRoutes(server: FastifyInstance, app: AppContext):
           [organisationId],
           'Organisation node',
         );
-        const inserted = await ctx.oneOrFail<{ id: string; inherent_severity: string; status: string }>(
+        const inserted = await ctx.oneOrFail<{
+          id: string;
+          inherent_severity: string;
+          status: string;
+        }>(
           `INSERT INTO risks
              (organisation_id, node_id, title, description, likelihood, impact,
               inherent_severity, status, treatment, review_due_at)
@@ -455,10 +465,7 @@ export function registerFindingRoutes(server: FastifyInstance, app: AppContext):
         );
         if (!row) throw new AdericelError('NOT_FOUND', 'No pending exception with that id');
         if (row.requested_by_user_id === principal.principalId) {
-          throw new AdericelError(
-            'FORBIDDEN',
-            'The requester of an exception may not approve it',
-          );
+          throw new AdericelError('FORBIDDEN', 'The requester of an exception may not approve it');
         }
         const approved = await ctx.oneOrFail<{ id: string; status: string; expires_at: Date }>(
           `UPDATE exceptions
@@ -475,7 +482,10 @@ export function registerFindingRoutes(server: FastifyInstance, app: AppContext):
             organisationId: params.organisationId,
             subjectType: 'Exception',
             subjectId: params.id,
-            payload: { approvedBy: principal.principalId, expiresAt: approved.expires_at.toISOString() },
+            payload: {
+              approvedBy: principal.principalId,
+              expiresAt: approved.expires_at.toISOString(),
+            },
             correlationId: request.adericel.correlationId,
             actor: principal.displayName,
           },

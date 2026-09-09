@@ -96,14 +96,19 @@ export function createMicrosoftIntuneConnector(deps: {
       scope: 'https://graph.microsoft.com/.default',
       grant_type: 'client_credentials',
     });
-    const response = await http(context).json<{ access_token?: string; error_description?: string }>({
+    const response = await http(context).json<{
+      access_token?: string;
+      error_description?: string;
+    }>({
       method: 'POST',
       url: `${config.loginBaseUrl}/${config.tenantId}/oauth2/v2.0/token`,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
     if (!response.access_token) {
-      throw new Error(`Intune token request failed: ${response.error_description ?? 'no token returned'}`);
+      throw new Error(
+        `Intune token request failed: ${response.error_description ?? 'no token returned'}`,
+      );
     }
     return response.access_token;
   }

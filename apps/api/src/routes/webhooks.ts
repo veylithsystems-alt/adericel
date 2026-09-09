@@ -5,7 +5,7 @@ import { createCollectionService } from '@adericel/actions';
 import { observationBatchSchema } from '@adericel/domain';
 import type { AppContext } from '../context.js';
 import { audit } from '../middleware/request-context.js';
-import { parseBody, parseParams } from '../middleware/validation.js';
+import { parseBody } from '../middleware/validation.js';
 
 /**
  * Inbound webhooks.
@@ -61,7 +61,10 @@ export function registerWebhookRoutes(server: FastifyInstance, app: AppContext):
     // resubmitted indefinitely.
     const ageMs = Math.abs(app.clock.nowEpochMs() - Number(timestamp));
     if (ageMs > 300_000) {
-      throw new AdericelError('UNAUTHENTICATED', 'Webhook timestamp is outside the accepted window');
+      throw new AdericelError(
+        'UNAUTHENTICATED',
+        'Webhook timestamp is outside the accepted window',
+      );
     }
     const signedPayload = `${timestamp}.${request.rawBody ?? ''}`;
     if (!verifyHmacSha256(secret, signedPayload, signature)) {
@@ -83,9 +86,10 @@ export function registerWebhookRoutes(server: FastifyInstance, app: AppContext):
     );
 
     const organisation = await app.db.withPlatform(async (ctx) =>
-      ctx.one<{ id: string; status: string }>(`SELECT id, status FROM organisations WHERE id = $1`, [
-        body.organisationId,
-      ]),
+      ctx.one<{ id: string; status: string }>(
+        `SELECT id, status FROM organisations WHERE id = $1`,
+        [body.organisationId],
+      ),
     );
     if (!organisation || organisation.status === 'CLOSED') {
       throw new AdericelError('NOT_FOUND', 'Organisation not found');

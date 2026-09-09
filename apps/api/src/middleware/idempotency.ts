@@ -144,9 +144,7 @@ async function claimKey(
 /** Remove expired keys. Run from the worker's maintenance sweep. */
 export async function purgeExpiredIdempotencyKeys(app: AppContext): Promise<number> {
   return app.db.withPlatform(async (ctx) => {
-    const { rowCount } = await ctx.query(
-      `DELETE FROM idempotency_keys WHERE expires_at < now()`,
-    );
+    const { rowCount } = await ctx.query(`DELETE FROM idempotency_keys WHERE expires_at < now()`);
     return rowCount;
   });
 }

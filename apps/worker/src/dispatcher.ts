@@ -110,13 +110,7 @@ export async function dispatchOnce(options: DispatcherOptions): Promise<Dispatch
 
     const nextDelay = backoffDelayMs(DEFAULT_RETRY_POLICY, event.attempts);
     const outcome = await db.withPlatform(async (ctx) =>
-      markFailed(
-        ctx,
-        event.id,
-        failures.join('; '),
-        config.worker.maxDeliveryAttempts,
-        nextDelay,
-      ),
+      markFailed(ctx, event.id, failures.join('; '), config.worker.maxDeliveryAttempts, nextDelay),
     );
 
     if (outcome === 'DEAD_LETTER') {

@@ -30,8 +30,16 @@ export const adericelBaselineV1 = {
           // Absence of an account-type claim means "not known to be a service
           // account", which conservatively keeps the identity in scope. The
           // default is stated here so it forms part of the ruleset hash.
-          { op: 'ne', left: { op: 'claim', predicate: 'identity.account.type', default: 'USER' }, right: { op: 'const', value: 'SERVICE' } },
-          { op: 'ne', left: { op: 'claim', predicate: 'identity.account.enabled', default: true }, right: { op: 'const', value: false } },
+          {
+            op: 'ne',
+            left: { op: 'claim', predicate: 'identity.account.type', default: 'USER' },
+            right: { op: 'const', value: 'SERVICE' },
+          },
+          {
+            op: 'ne',
+            left: { op: 'claim', predicate: 'identity.account.enabled', default: true },
+            right: { op: 'const', value: false },
+          },
         ],
       },
       expression: {
@@ -178,8 +186,16 @@ export const adericelBaselineV1 = {
       expression: {
         op: 'and',
         operands: [
-          { op: 'eq', left: { op: 'claim', predicate: 'device.endpoint_protection.installed' }, right: { op: 'const', value: true } },
-          { op: 'eq', left: { op: 'claim', predicate: 'device.endpoint_protection.realtime_enabled' }, right: { op: 'const', value: true } },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'device.endpoint_protection.installed' },
+            right: { op: 'const', value: true },
+          },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'device.endpoint_protection.realtime_enabled' },
+            right: { op: 'const', value: true },
+          },
           {
             op: 'not',
             operand: {
@@ -264,7 +280,8 @@ export const adericelBaselineV1 = {
       threshold: 0.9,
       severity: 'MEDIUM',
       failureTitle: 'Devices have not received security updates within the agreed cadence.',
-      failureDescription: 'Investigate update delivery for the affected devices and bring them current.',
+      failureDescription:
+        'Investigate update delivery for the affected devices and bring them current.',
       remediation: null,
       maxEvidenceAgeDays: 7,
     },
@@ -282,7 +299,11 @@ export const adericelBaselineV1 = {
       expression: {
         op: 'and',
         operands: [
-          { op: 'eq', left: { op: 'claim', predicate: 'data.backup.last_status' }, right: { op: 'const', value: 'SUCCEEDED' } },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'data.backup.last_status' },
+            right: { op: 'const', value: 'SUCCEEDED' },
+          },
           {
             op: 'not',
             operand: {
@@ -332,7 +353,11 @@ export const adericelBaselineV1 = {
       expression: {
         op: 'and',
         operands: [
-          { op: 'eq', left: { op: 'claim', predicate: 'policy.published' }, right: { op: 'const', value: true } },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'policy.published' },
+            right: { op: 'const', value: true },
+          },
           {
             op: 'not',
             operand: {
@@ -437,7 +462,11 @@ export const adericelBaselineV1 = {
       expression: {
         op: 'and',
         operands: [
-          { op: 'eq', left: { op: 'claim', predicate: 'organisation.logging.enabled' }, right: { op: 'const', value: true } },
+          {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'organisation.logging.enabled' },
+            right: { op: 'const', value: true },
+          },
           {
             op: 'gte',
             left: { op: 'claim', predicate: 'organisation.logging.retention_days' },
