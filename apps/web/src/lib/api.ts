@@ -194,7 +194,39 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return body as T;
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
+interface TokenResponse {
+  readonly accessToken: string;
+  readonly refreshToken: string;
+  readonly expiresIn: number;
+}
+
+function adoptTokens(parsed: TokenResponse): void {
+  tokens = {
+    accessToken: parsed.accessToken,
+    refreshToken: parsed.refreshToken,
+    expiresAtMs: Date.now() + parsed.expiresIn * 1000,
+  };
+  storeRefreshToken(parsed.refreshToken);
+  announce();
+}
+
+/**
+ * A challenge is what sign-in returns when the account has a second factor.
+ *
+ * It is deliberately not a session: it is held in a component's state, never
+ * stored, and conveys nothing but "the password was correct". If the tab is
+ * closed the user starts again from the password, which is the right outcome.
+ */
+export interface MfaChallenge {
+  readonly challengeToken: string;
+  readonly expiresIn: number;
+  readonly methods: readonly string[];
+}
+
+export type SignInResult =
+  { kind: 'signed-in' } | { kind: 'mfa-required'; challenge: MfaChallenge };
+
+export async function signIn(email: string, password: string): Promise<SignInResult> {
   const response = await fetch('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -203,14 +235,39 @@ export async function signIn(email: string, password: string): Promise<void> {
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) throw makeError(response.status, body);
 
-  const parsed = body as { accessToken: string; refreshToken: string; expiresIn: number };
-  tokens = {
-    accessToken: parsed.accessToken,
-    refreshToken: parsed.refreshToken,
-    expiresAtMs: Date.now() + parsed.expiresIn * 1000,
+  const parsed = body as TokenResponse & {
+    mfaRequired?: boolean;
+    challengeToken?: string;
+    methods?: string[];
   };
-  storeRefreshToken(parsed.refreshToken);
-  announce();
+  if (parsed.mfaRequired && parsed.challengeToken) {
+    return {
+      kind: 'mfa-required',
+      challenge: {
+        challengeToken: parsed.challengeToken,
+        expiresIn: parsed.expiresIn,
+        methods: parsed.methods ?? ['TOTP'],
+      },
+    };
+  }
+
+  adoptTokens(parsed);
+  return { kind: 'signed-in' };
+}
+
+/** Complete sign-in by presenting the second factor. */
+export async function completeMfa(
+  challengeToken: string,
+  credential: { code: string } | { recoveryCode: string },
+): Promise<void> {
+  const response = await fetch('/api/v1/auth/mfa/verify', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ challengeToken, ...credential }),
+  });
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) throw makeError(response.status, body);
+  adoptTokens(body as TokenResponse);
 }
 
 export async function signOut(): Promise<void> {

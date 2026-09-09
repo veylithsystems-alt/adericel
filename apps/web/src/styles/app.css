@@ -209,6 +209,15 @@ code,
   flex-direction: column;
   gap: var(--space-3);
 }
+/* A button in a vertical stack sizes to its label. Stretching a destructive
+   action to the full width of the page makes it the most prominent thing on
+   the screen, which is the opposite of what it should be. */
+.stack > .button--small,
+.stack > .button--danger,
+.stack > .button--quiet {
+  align-self: start;
+}
+
 .row {
   display: flex;
   align-items: center;
@@ -416,10 +425,28 @@ code,
   padding: var(--space-1) var(--space-3);
   font-size: var(--text-meta);
 }
+.button--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.button--quiet:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
 .button--danger {
   background: var(--state-failing);
   border-color: var(--state-failing);
   color: #fff;
+}
+
+.form-note {
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .field {
@@ -587,4 +614,28 @@ code,
   .nav {
     overflow-x: auto;
   }
+}
+
+/* ------------------------------------------------------- account security */
+
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.recovery-codes code,
+.setup-key {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-body);
+  letter-spacing: 0.08em;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken, transparent);
+  /* Codes get copied by hand off a screen. Breaking the run of characters is
+     the difference between a code that is typed correctly and a support call. */
+  word-break: break-all;
+}
+.setup-key {
+  display: inline-block;
 }

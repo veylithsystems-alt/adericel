@@ -19,7 +19,7 @@ export interface NewAuditEntry {
   readonly action: string;
   readonly resourceType: string;
   readonly resourceId?: string | null;
-  readonly outcome: 'SUCCESS' | 'DENIED' | 'FAILURE';
+  readonly outcome: 'SUCCESS' | 'DENIED' | 'FAILURE' | 'PENDING';
   readonly reason?: string | null;
   readonly requestId?: string | null;
   readonly correlationId?: string | null;

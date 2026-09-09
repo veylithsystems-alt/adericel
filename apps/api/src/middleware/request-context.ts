@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { Permission, Principal } from '@adericel/domain';
+import { MFA_DENIAL_PREFIX, type Permission, type Principal } from '@adericel/domain';
 import type { TenantContext } from '@adericel/graph';
 import { recordAudit } from '@adericel/graph';
 import { AdericelError, newCorrelationId, type Logger } from '@adericel/shared';
@@ -147,6 +147,19 @@ export async function requireOrganisation(
 
   if (!answer.allowed) {
     await writeDenial(app, request, permission, candidateOrganisationId, answer.reason);
+    // Every denial is deliberately uniform so that probing cannot distinguish
+    // "does not exist" from "not yours" — with one exception. A caller refused
+    // for want of a second factor is already authorised for this organisation,
+    // so the uniform message tells them nothing they do not know and leaves
+    // them with no way to act. It gets its own code.
+    if (answer.reason.startsWith(MFA_DENIAL_PREFIX)) {
+      throw new AdericelError(
+        'MFA_REQUIRED',
+        'This action requires a second factor. Sign in again with your authenticator, ' +
+          'or enrol one under your account.',
+        { safeDetails: { permission } },
+      );
+    }
     throw new AdericelError('FORBIDDEN', 'No access to the requested organisation', {
       safeDetails: { permission },
     });
@@ -294,7 +307,7 @@ export async function audit(
     action: string;
     resourceType: string;
     resourceId?: string | null;
-    outcome?: 'SUCCESS' | 'DENIED' | 'FAILURE';
+    outcome?: 'SUCCESS' | 'DENIED' | 'FAILURE' | 'PENDING';
     reason?: string | null;
     metadata?: Record<string, unknown>;
     ctx?: TenantContext;

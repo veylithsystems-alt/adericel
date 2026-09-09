@@ -22,6 +22,7 @@ function principal(overrides: Partial<Principal> = {}): Principal {
     sessionId: null,
     apiKeyId: null,
     viaDelegation: false,
+    mfaSatisfied: true,
     ...overrides,
   };
 }
@@ -214,6 +215,71 @@ describe('permissions only a human may hold', () => {
     expect(HUMAN_ONLY_PERMISSIONS.has('org:action:propose')).toBe(false);
     expect(HUMAN_ONLY_PERMISSIONS.has('org:action:execute')).toBe(false);
     expect(HUMAN_ONLY_PERMISSIONS.has('org:evidence:write')).toBe(false);
+  });
+});
+
+describe('permissions that require a second factor', () => {
+  const ORG = '22222222-2222-4222-8222-222222222222';
+  const approver = (mfaSatisfied: boolean) =>
+    principal({
+      mfaSatisfied,
+      grants: [
+        { scopeType: 'ORGANISATION', scopeId: ORG, roles: ['ORG_APPROVER'], expiresAt: null },
+      ],
+    });
+
+  it('refuses approval on a session that presented only a password', () => {
+    const answer = authorise(
+      approver(false),
+      { permission: 'org:action:approve', organisationId: ORG },
+      { atIso: AT },
+    );
+    expect(answer.allowed).toBe(false);
+    expect(answer.reason).toContain('requires a second factor');
+  });
+
+  it('allows approval once a second factor has been presented', () => {
+    expect(
+      authorise(
+        approver(true),
+        { permission: 'org:action:approve', organisationId: ORG },
+        { atIso: AT },
+      ).allowed,
+    ).toBe(true);
+  });
+
+  it('does not gate ordinary work behind a second factor', () => {
+    const analyst = principal({
+      mfaSatisfied: false,
+      grants: [
+        { scopeType: 'ORGANISATION', scopeId: ORG, roles: ['ORG_ANALYST'], expiresAt: null },
+      ],
+    });
+    for (const permission of ['org:read', 'org:evidence:write', 'org:action:propose'] as const) {
+      expect(
+        authorise(analyst, { permission, organisationId: ORG }, { atIso: AT }).allowed,
+        `${permission} should not require MFA`,
+      ).toBe(true);
+    }
+  });
+
+  it('refuses a non-human principal before it even considers the factor', () => {
+    // Both gates would refuse this. The message proves which one ran first,
+    // because "enrol a second factor" is the wrong advice to give a workflow.
+    const workflow = principal({
+      principalType: 'WORKFLOW',
+      mfaSatisfied: true,
+      grants: [
+        { scopeType: 'ORGANISATION', scopeId: ORG, roles: ['ORG_APPROVER'], expiresAt: null },
+      ],
+    });
+    const answer = authorise(
+      workflow,
+      { permission: 'org:action:approve', organisationId: ORG },
+      { atIso: AT },
+    );
+    expect(answer.allowed).toBe(false);
+    expect(answer.reason).toContain('requires a human principal');
   });
 });
 

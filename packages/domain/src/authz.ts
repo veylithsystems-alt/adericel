@@ -242,6 +242,12 @@ export interface Principal {
   readonly apiKeyId: string | null;
   /** True when the principal is acting through an MSP's delegated authority. */
   readonly viaDelegation: boolean;
+  /**
+   * Whether a second factor was presented for this session. Loaded from the
+   * session row, never from the token — a claim in a token would make this a
+   * statement the client controls.
+   */
+  readonly mfaSatisfied: boolean;
 }
 
 export interface AuthorisationQuestion {
@@ -274,6 +280,26 @@ export const HUMAN_ONLY_PERMISSIONS: ReadonlySet<Permission> = new Set<Permissio
   'org:action:approve',
 ]);
 
+/**
+ * Permissions that require a second factor to have been presented in this
+ * session.
+ *
+ * Approval is the point where a human takes responsibility for a change to
+ * somebody else's production estate. A stolen password should not be able to
+ * reach it, and four-eyes control backed by one factor is one credential
+ * theft away from being one pair of eyes.
+ *
+ * This is checked against the session, not the token, because authority is
+ * resolved per request (ADR-0008): revoking a factor takes effect on the next
+ * call rather than at token expiry.
+ */
+export const MFA_DENIAL_PREFIX = 'mfa-required: ';
+
+export const MFA_REQUIRED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
+  'org:action:approve',
+  'org:exception:approve',
+]);
+
 function grantIsLive(grant: Grant, atIso: string): boolean {
   return grant.expiresAt === null || Date.parse(grant.expiresAt) > Date.parse(atIso);
 }
@@ -303,6 +329,22 @@ export function authorise(
       reason:
         `${question.permission} requires a human principal; ` +
         `this caller is a ${principal.principalType}`,
+      viaScope: null,
+      viaScopeId: null,
+    };
+  }
+
+  if (MFA_REQUIRED_PERMISSIONS.has(question.permission) && !principal.mfaSatisfied) {
+    return {
+      allowed: false,
+      // Prefixed so the API edge can tell this denial apart from a tenancy
+      // denial and answer it specifically. Every other refusal is deliberately
+      // indistinguishable to the caller; this one must not be, because the
+      // person is authorised and simply needs to present their factor, and
+      // saying "no access" to them is both wrong and unactionable.
+      reason:
+        `${MFA_DENIAL_PREFIX}${question.permission} requires a second factor; ` +
+        'this session was not authenticated with one',
       viaScope: null,
       viaScopeId: null,
     };

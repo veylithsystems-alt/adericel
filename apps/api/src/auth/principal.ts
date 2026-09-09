@@ -71,12 +71,17 @@ export async function principalFromAccessToken(app: AppContext, token: string): 
 
     // The session must still be live. A signed-out or revoked session cannot be
     // resurrected by an access token that has not yet expired.
-    const session = await ctx.one<{ id: string }>(
-      `SELECT id FROM sessions
+    const session = await ctx.one<{ id: string; mfa_satisfied_at: Date | null }>(
+      `SELECT id, mfa_satisfied_at FROM sessions
        WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL AND expires_at > $3::timestamptz`,
       [claims.sid, claims.sub, app.clock.nowIso()],
     );
     if (!session) throw new AdericelError('UNAUTHENTICATED', 'Session has been revoked or expired');
+
+    // Read from the session row rather than from a token claim. A claim would
+    // be a statement the client controls, and revoking a factor would not take
+    // effect until the access token expired.
+    const mfaSatisfied = session.mfa_satisfied_at !== null;
 
     const grants = await loadGrants(ctx, 'USER', user.id, app.clock.nowIso());
 
@@ -90,6 +95,7 @@ export async function principalFromAccessToken(app: AppContext, token: string): 
       sessionId: claims.sid,
       apiKeyId: null,
       viaDelegation: false,
+      mfaSatisfied,
     };
   });
 }
@@ -133,7 +139,12 @@ export async function principalFromApiKey(app: AppContext, presented: string): P
       grants,
       sessionId: null,
       apiKeyId: row.id,
+      // An API key has no second factor and never will. The permissions that
+      // require one are also the permissions a non-human principal cannot hold
+      // at all (HUMAN_ONLY_PERMISSIONS), so this is belt and braces rather than
+      // the only thing standing in the way.
       viaDelegation: false,
+      mfaSatisfied: false,
     };
   });
 }

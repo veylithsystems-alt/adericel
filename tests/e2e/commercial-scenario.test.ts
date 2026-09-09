@@ -5,6 +5,7 @@ import {
   databaseAvailable,
   seedTenant,
   signIn,
+  signInWithMfa,
   type Harness,
   type SeededTenant,
 } from '../helpers/harness.js';
@@ -71,7 +72,9 @@ describe.skipIf(!available)('end-to-end commercial scenario', () => {
       autonomyLevel: 3,
     });
     analystToken = await signIn(harness, 'analyst-e2e-corp@test.invalid');
-    approverToken = await signIn(harness, 'approver-e2e-corp@test.invalid');
+    // The approver signs in and enrols a second factor, because approval
+    // requires one. This is the real flow, not a shortcut around it.
+    approverToken = await signInWithMfa(harness, 'approver-e2e-corp@test.invalid');
   }, 120_000);
 
   afterAll(async () => {
@@ -239,7 +242,10 @@ describe.skipIf(!available)('end-to-end commercial scenario', () => {
         [tenant.analystUserId],
       );
     });
-    const freshToken = await signIn(harness, 'analyst-e2e-corp@test.invalid');
+    // They also enrol a second factor, so the refusal cannot be blamed on a
+    // missing one. Every other reason to say no is removed, leaving only the
+    // four-eyes rule.
+    const freshToken = await signInWithMfa(harness, 'analyst-e2e-corp@test.invalid');
 
     const response = await harness.server.inject({
       method: 'POST',
@@ -259,6 +265,24 @@ describe.skipIf(!available)('end-to-end commercial scenario', () => {
         [tenant.analystUserId],
       );
     });
+  });
+
+  it('7b. refuses approval from a session that presented only a password', async () => {
+    // A second approver exists with the right role and no second factor. The
+    // refusal must come from the missing factor, not from the role, which is
+    // why this is a different person from the proposer.
+    const passwordOnly = await signIn(harness, 'owner-e2e-corp@test.invalid');
+
+    const response = await harness.server.inject({
+      method: 'POST',
+      url: `/v1/organisations/${tenant.organisationId}/actions/${actionId}/decision`,
+      headers: bearer(passwordOnly),
+      payload: { decision: 'APPROVED' },
+    });
+    expect(response.statusCode).toBe(403);
+    expect((response.json() as { error: { message: string } }).error.message).toMatch(
+      /second factor/i,
+    );
   });
 
   it('8. authorises the action once a different person approves', async () => {

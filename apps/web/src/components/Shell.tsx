@@ -27,7 +27,9 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactE
           <Wordmark size={22} inverse />
         </NavLink>
         <div className="masthead__context">
-          <span>{me.principal.displayName}</span>
+          <NavLink to="/account" style={{ color: 'inherit' }}>
+            {me.principal.displayName}
+          </NavLink>
           <button
             type="button"
             className="button button--small button--secondary"

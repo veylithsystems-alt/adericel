@@ -16,9 +16,11 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import {
   createPasswordHasher,
-  fixedClock,
+  manualClock,
   loadConfig,
   nullLogger,
+  totpCodeForStep,
+  totpStep,
   type AdericelConfig,
   type Clock,
 } from '@adericel/shared';
@@ -95,7 +97,12 @@ export interface Harness {
   readonly app: AppContext;
   readonly server: FastifyInstance;
   readonly db: Database;
-  readonly clock: Clock;
+  /**
+   * A manual clock. It does not move on its own — determinism is the point —
+   * but tests that need two events to happen at different times can advance it,
+   * which is required for anything time-stepped such as TOTP.
+   */
+  readonly clock: Clock & { advance(ms: number): void };
   readonly fixtureState: FixtureState;
   readonly config: AdericelConfig;
   close(): Promise<void>;
@@ -118,7 +125,7 @@ export async function createHarness(options: { instant?: string } = {}): Promise
     API_RATE_LIMIT_MAX: '100000',
   });
 
-  const clock = fixedClock(options.instant ?? TEST_INSTANT);
+  const clock = manualClock(options.instant ?? TEST_INSTANT);
   const db = databaseFromConfig(config, nullLogger);
   const fixtureState = createFixtureState();
   const { registry: connectors } = buildConnectorRegistry({
@@ -339,11 +346,108 @@ export async function signIn(harness: Harness, email: string): Promise<string> {
   if (response.statusCode !== 200) {
     throw new Error(`Sign-in failed for ${email}: ${response.statusCode} ${response.body}`);
   }
-  return (response.json() as { accessToken: string }).accessToken;
+  const body = response.json() as { mfaRequired?: boolean; accessToken?: string };
+  if (body.mfaRequired || !body.accessToken) {
+    // Failing here rather than returning undefined turns "this user has a
+    // factor enrolled" into a legible message instead of a malformed-token
+    // error three calls later.
+    throw new Error(
+      `${email} has a second factor enrolled; use signInWithTotp or signInWithMfa instead`,
+    );
+  }
+  return body.accessToken;
 }
 
 export function bearer(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
+}
+
+/** One TOTP period. Advancing by this guarantees a fresh, unconsumed step. */
+export const TOTP_PERIOD_MS = 30_000;
+
+export interface EnrolledFactor {
+  readonly secret: string;
+  readonly recoveryCodes: readonly string[];
+}
+
+/**
+ * Enrol and confirm a TOTP factor for the signed-in user.
+ *
+ * Approval permissions require a second factor, so any test that exercises the
+ * approval path has to go through this. That is the point: the tests reach
+ * approval the same way a person does, rather than through a back door that
+ * would let the requirement quietly stop working.
+ */
+export async function enrolTotp(harness: Harness, accessToken: string): Promise<EnrolledFactor> {
+  const begin = await harness.server.inject({
+    method: 'POST',
+    url: '/v1/auth/mfa/totp',
+    headers: bearer(accessToken),
+  });
+  if (begin.statusCode !== 201) {
+    throw new Error(`MFA enrolment failed: ${begin.statusCode} ${begin.body}`);
+  }
+  const { secret } = begin.json() as { secret: string };
+
+  const confirm = await harness.server.inject({
+    method: 'POST',
+    url: '/v1/auth/mfa/totp/confirm',
+    headers: bearer(accessToken),
+    payload: { code: totpCodeForStep(secret, totpStep(harness.clock.nowEpochMs())) },
+  });
+  if (confirm.statusCode !== 200) {
+    throw new Error(`MFA confirmation failed: ${confirm.statusCode} ${confirm.body}`);
+  }
+  const { recoveryCodes } = confirm.json() as { recoveryCodes: string[] };
+  return { secret, recoveryCodes };
+}
+
+/**
+ * Sign in through the full two-step flow.
+ *
+ * `step` offsets the time step used to generate the code, so a test can present
+ * a code that has already been consumed without moving the fixed clock.
+ */
+export async function signInWithTotp(
+  harness: Harness,
+  email: string,
+  secret: string,
+  options: { step?: number } = {},
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const login = await harness.server.inject({
+    method: 'POST',
+    url: '/v1/auth/login',
+    payload: { email, password: TEST_PASSWORD },
+  });
+  const challenge = login.json() as { mfaRequired: boolean; challengeToken: string };
+  if (!challenge.mfaRequired) {
+    throw new Error(`Expected a second-factor challenge for ${email}, got ${login.body}`);
+  }
+
+  // Codes are single use, and the harness clock does not move on its own, so
+  // every sign-in advances it past the previous code's window. Without this the
+  // second sign-in in any test presents a step that has already been consumed —
+  // which is the system working correctly and the test being wrong about time.
+  if (options.step === undefined) harness.clock.advance(TOTP_PERIOD_MS);
+  const step = options.step ?? totpStep(harness.clock.nowEpochMs());
+  const verify = await harness.server.inject({
+    method: 'POST',
+    url: '/v1/auth/mfa/verify',
+    payload: { challengeToken: challenge.challengeToken, code: totpCodeForStep(secret, step) },
+  });
+  if (verify.statusCode !== 200) {
+    throw new Error(`MFA verification failed for ${email}: ${verify.statusCode} ${verify.body}`);
+  }
+  return verify.json() as { accessToken: string; refreshToken: string };
+}
+
+/** Sign in and enrol in one call, returning a session that may approve. */
+export async function signInWithMfa(harness: Harness, email: string): Promise<string> {
+  const first = await signIn(harness, email);
+  await enrolTotp(harness, first);
+  // Confirming enrolment elevates the current session, so this token is already
+  // good for approval — no second sign-in required.
+  return first;
 }
 
 export { TEST_PASSWORD };
