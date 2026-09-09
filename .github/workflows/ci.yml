@@ -1,0 +1,212 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run on the same ref. The exception is the
+# default branch, where every commit's result is a record worth keeping.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22.22.2'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  # Fast feedback: anything that does not need a database runs first and in one
+  # job, so a formatting mistake fails in a minute rather than after the full
+  # integration suite.
+  static:
+    name: Lint, format and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  # The Truth Engine and the domain model are pure functions. They have no
+  # database and no clock, so they are tested in isolation and must stay that
+  # way — if this job ever needs a service container, the boundary has leaked.
+  unit:
+    name: Unit tests (no I/O)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:unit
+
+  # Tenancy and security are separated from the rest deliberately. A failure
+  # here is not "a test broke"; it is a claim about isolation or authorisation
+  # that no longer holds, and the job name should say so in the checks list.
+  isolation:
+    name: Tenant isolation and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: adericel
+          POSTGRES_PASSWORD: adericel
+          POSTGRES_DB: adericel_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U adericel -d adericel_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://adericel:adericel@localhost:5432/adericel_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:tenancy
+      - run: pnpm test:security
+
+  integration:
+    name: Integration and end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: adericel
+          POSTGRES_PASSWORD: adericel
+          POSTGRES_DB: adericel_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U adericel -d adericel_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://adericel:adericel@localhost:5432/adericel_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+      - run: pnpm test:e2e
+
+  # Deliverable B is an artefact, not documentation. It has to be regenerable
+  # from source and identical to what is committed, or the file in the
+  # repository is not the file anything validated.
+  workflows:
+    name: n8n export
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Validation includes a drift check: it rebuilds the export and fails if
+      # the committed JSON differs.
+      - run: pnpm n8n:validate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adericel-n8n-export
+          path: workflows/n8n/adericel.n8n.json
+          retention-days: 30
+
+  # The interface is built separately from the server packages because its
+  # failure mode is different: a type error here breaks a page, not the truth.
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm build:web
+
+  # Building the images in CI is the only way to know the Dockerfiles still
+  # work. They are not pushed here — publishing is a separate, deliberate act.
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API and worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: adericel/app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile.web
+          push: false
+          load: true
+          tags: adericel/web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Compose file is valid
+        run: |
+          docker compose --profile core --profile workflow --profile ai config >/dev/null
+        env:
+          POSTGRES_PASSWORD: ci
+          MINIO_ROOT_PASSWORD: ci
+          AUTH_JWT_SECRET: ci
+          AUTH_CREDENTIAL_ENCRYPTION_KEY: ci
+          API_PUBLIC_URL: https://ci.invalid
+          API_CORS_ORIGINS: https://ci.invalid
+          ADERICEL_DOMAIN: ci.invalid
+          N8N_ENCRYPTION_KEY: ci
