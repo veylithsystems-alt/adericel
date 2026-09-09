@@ -136,7 +136,9 @@ describe.skipIf(!available)('tenant isolation', () => {
       expect(response.statusCode).toBe(200);
       const body = response.json() as { entries: { organisationId: string | null }[] };
       expect(
-        body.entries.every((e) => e.organisationId === alpha.organisationId || e.organisationId === null),
+        body.entries.every(
+          (e) => e.organisationId === alpha.organisationId || e.organisationId === null,
+        ),
       ).toBe(true);
     });
   });
@@ -203,7 +205,14 @@ describe.skipIf(!available)('tenant isolation', () => {
     });
 
     it('isolates evidence, claims, findings and actions alike', async () => {
-      for (const table of ['evidence', 'claims', 'findings', 'actions', 'assessments', 'audit_log']) {
+      for (const table of [
+        'evidence',
+        'claims',
+        'findings',
+        'actions',
+        'assessments',
+        'audit_log',
+      ]) {
         const alphaRows = await harness.db.withTenant(alpha.organisationId, async (ctx) =>
           ctx.many<{ organisation_id: string }>(`SELECT organisation_id FROM ${table}`),
         );
@@ -212,6 +221,51 @@ describe.skipIf(!available)('tenant isolation', () => {
           `${table} leaked rows from another tenant`,
         ).toBe(true);
       }
+    });
+
+    // The previous test names tables explicitly, which means it can only catch
+    // regressions in tables somebody remembered to add. This one is the
+    // structural guarantee: if a column called organisation_id exists, the
+    // table it lives in is tenant data, and tenant data is protected by the
+    // database whether or not anyone remembered.
+    it('protects every table carrying an organisation_id with forced row level security', async () => {
+      const rows = await harness.db.withPlatform(async (ctx) =>
+        ctx.many<{
+          table_name: string;
+          rowsecurity: boolean;
+          forcerowsecurity: boolean;
+          policies: string;
+        }>(
+          `SELECT c.relname          AS table_name,
+                  c.relrowsecurity   AS rowsecurity,
+                  c.relforcerowsecurity AS forcerowsecurity,
+                  COALESCE(COUNT(p.polname), 0)::text AS policies
+             FROM pg_class c
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             JOIN pg_attribute a ON a.attrelid = c.oid
+             LEFT JOIN pg_policy p ON p.polrelid = c.oid
+            WHERE n.nspname = 'adericel'
+              AND c.relkind = 'r'
+              AND a.attname = 'organisation_id'
+              AND a.attnum > 0
+              AND NOT a.attisdropped
+            GROUP BY c.relname, c.relrowsecurity, c.relforcerowsecurity
+            ORDER BY c.relname`,
+        ),
+      );
+
+      expect(
+        rows.length,
+        'no tenant tables found — the query is wrong, not the schema',
+      ).toBeGreaterThan(5);
+
+      const unprotected = rows.filter(
+        (r) => !r.rowsecurity || !r.forcerowsecurity || Number(r.policies) === 0,
+      );
+      expect(
+        unprotected.map((r) => r.table_name),
+        'these tables hold tenant data with no forced row level security policy',
+      ).toEqual([]);
     });
   });
 });
