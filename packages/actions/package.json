@@ -12,6 +12,17 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "scripts": { "build": "tsc -b" },
-  "dependencies": { "@adericel/shared": "workspace:*", "@adericel/domain": "workspace:*", "@adericel/policy": "workspace:*", "@adericel/graph": "workspace:*", "@adericel/integrations": "workspace:*", "zod": "^4.1.11" }
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@adericel/domain": "workspace:*",
+    "@adericel/evidence": "workspace:*",
+    "@adericel/graph": "workspace:*",
+    "@adericel/integrations": "workspace:*",
+    "@adericel/policy": "workspace:*",
+    "@adericel/shared": "workspace:*",
+    "@adericel/truth-engine": "workspace:*",
+    "zod": "^4.1.11"
+  }
 }

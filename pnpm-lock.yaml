@@ -170,6 +170,9 @@ importers:
       '@adericel/domain':
         specifier: workspace:*
         version: link:../domain
+      '@adericel/evidence':
+        specifier: workspace:*
+        version: link:../evidence
       '@adericel/graph':
         specifier: workspace:*
         version: link:../graph
@@ -182,6 +185,9 @@ importers:
       '@adericel/shared':
         specifier: workspace:*
         version: link:../shared
+      '@adericel/truth-engine':
+        specifier: workspace:*
+        version: link:../truth-engine
       zod:
         specifier: ^4.1.11
         version: 4.5.4
