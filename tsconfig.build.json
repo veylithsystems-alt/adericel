@@ -1,0 +1,15 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/domain" },
+    { "path": "./packages/graph" },
+    { "path": "./packages/evidence" },
+    { "path": "./packages/truth-engine" },
+    { "path": "./packages/policy" },
+    { "path": "./packages/actions" },
+    { "path": "./packages/integrations" },
+    { "path": "./apps/api" },
+    { "path": "./apps/worker" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@adericel/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx --conditions=development watch src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@adericel/shared": "workspace:*",
+    "@adericel/domain": "workspace:*",
+    "@adericel/graph": "workspace:*",
+    "@adericel/evidence": "workspace:*",
+    "@adericel/truth-engine": "workspace:*",
+    "@adericel/policy": "workspace:*",
+    "@adericel/actions": "workspace:*",
+    "@adericel/integrations": "workspace:*",
+    "pg": "^8.16.3",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.5"
+  }
+}
