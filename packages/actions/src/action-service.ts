@@ -933,10 +933,14 @@ interface IntegrationRuntime {
  * free of ambient key state and makes credential access explicit at every call
  * site that needs it.
  */
-export type CredentialUnsealer = (sealed: string, integrationId: string) => Record<string, unknown>;
+export type CredentialUnsealer = (
+  sealed: string,
+  integrationId: string,
+  organisationId: string,
+) => Promise<Record<string, unknown>>;
 
 /** Unsealer for contexts that never touch credentials, such as unit tests. */
-export const noCredentials: CredentialUnsealer = () => ({});
+export const noCredentials: CredentialUnsealer = async () => ({});
 
 async function loadIntegrationRuntime(
   ctx: TenantContext,
@@ -965,6 +969,8 @@ async function loadIntegrationRuntime(
     integrationId: row.id,
     connectorKey: row.connector_key,
     config: row.configuration,
-    credentials: row.sealed_credentials ? unsealCredentials(row.sealed_credentials, row.id) : {},
+    credentials: row.sealed_credentials
+      ? await unsealCredentials(row.sealed_credentials, row.id, ctx.organisationId)
+      : {},
   };
 }

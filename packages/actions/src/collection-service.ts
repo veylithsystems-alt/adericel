@@ -106,7 +106,7 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
       connector: connectors.get(row.connector_key),
       config: row.configuration,
       credentials: row.sealed_credentials
-        ? deps.unsealCredentials(row.sealed_credentials, row.id)
+        ? await deps.unsealCredentials(row.sealed_credentials, row.id, ctx.organisationId)
         : {},
       cursor: cursorRow?.cursor ?? null,
     };

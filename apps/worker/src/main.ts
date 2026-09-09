@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import {
-  createCredentialCipher,
+  createEnvelopeCipher,
+  createLocalRootKeyProvider,
   createLogger,
   errorFields,
   loadConfig,
   sleep,
   systemClock,
 } from '@adericel/shared';
-import { databaseFromConfig } from '@adericel/graph';
+import { createDataKeyStore, databaseFromConfig } from '@adericel/graph';
 import { createObjectStore } from '@adericel/evidence';
 import { buildConnectorRegistry } from '@adericel/integrations';
 import { compilePolicy, DEFAULT_ACTION_POLICY } from '@adericel/policy';
@@ -52,9 +53,16 @@ async function main(): Promise<void> {
 
   const db = databaseFromConfig(config, logger);
   const storage = createObjectStore(config);
-  const cipher = createCredentialCipher(config.auth.credentialEncryptionKey);
-  const unsealCredentials: CredentialUnsealer = (sealed, integrationId) =>
-    JSON.parse(cipher.decrypt(sealed, integrationId)) as Record<string, unknown>;
+  const cipher = createEnvelopeCipher({
+    rootKeys: createLocalRootKeyProvider(config.auth.credentialEncryptionKey),
+    store: createDataKeyStore(db),
+    legacySecret: config.auth.credentialEncryptionKey,
+  });
+  const unsealCredentials: CredentialUnsealer = async (sealed, integrationId, organisationId) =>
+    JSON.parse(await cipher.open(sealed, { organisationId, aad: integrationId })) as Record<
+      string,
+      unknown
+    >;
 
   const { registry: connectors } = buildConnectorRegistry({
     egressPolicy: {

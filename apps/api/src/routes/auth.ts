@@ -395,7 +395,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
       );
       if (!factor) return { ok: false as const, reason: 'no-factor' };
 
-      const secret = app.credentials.decrypt(factor.secret_sealed, challenge.user_id);
+      const secret = app.secrets.decrypt(factor.secret_sealed, challenge.user_id);
       const verified = verifyTotp(secret, body.code ?? '', {
         nowEpochMs: app.clock.nowEpochMs(),
         lastUsedStep: factor.last_used_step === null ? null : Number(factor.last_used_step),
@@ -520,7 +520,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
           'Authenticator app',
           // Sealed with the user id as additional authenticated data, so the
           // row cannot be moved to another user and decrypted there.
-          app.credentials.encrypt(secret, principal.principalId),
+          app.secrets.encrypt(secret, principal.principalId),
         ],
       );
     });
@@ -571,7 +571,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
         );
         if (!factor) return null;
 
-        const secret = app.credentials.decrypt(factor.secret_sealed, principal.principalId);
+        const secret = app.secrets.decrypt(factor.secret_sealed, principal.principalId);
         const verified = verifyTotp(secret, body.code, { nowEpochMs: app.clock.nowEpochMs() });
         if (!verified) return null;
 
@@ -670,7 +670,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
         );
         if (!factor) return false;
 
-        const secret = app.credentials.decrypt(factor.secret_sealed, principal.principalId);
+        const secret = app.secrets.decrypt(factor.secret_sealed, principal.principalId);
         const verified = verifyTotp(secret, body.code, {
           nowEpochMs: app.clock.nowEpochMs(),
           lastUsedStep: factor.last_used_step === null ? null : Number(factor.last_used_step),

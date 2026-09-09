@@ -319,7 +319,14 @@ export async function seedTenant(
     );
     await ctx.query(
       `UPDATE integrations SET sealed_credentials = $2, credential_updated_at = $3::timestamptz WHERE id = $1`,
-      [row.id, app.credentials.encrypt(JSON.stringify({}), row.id), clock.nowIso()],
+      [
+        row.id,
+        await app.credentials.seal(JSON.stringify({}), {
+          organisationId: organisation.id,
+          aad: row.id,
+        }),
+        clock.nowIso(),
+      ],
     );
     return row.id;
   });

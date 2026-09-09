@@ -156,9 +156,14 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
           'Integration',
         );
 
-        // The integration id is the AAD for the sealed credentials, so a blob
-        // copied to a different integration row simply fails to decrypt.
-        const sealed = app.credentials.encrypt(JSON.stringify(credentials), row.id);
+        // Sealed under this organisation's data key, with the integration id as
+        // additional authenticated data: a blob copied to a different
+        // integration row fails to open, and one copied to a different
+        // organisation fails before that, on the key lookup.
+        const sealed = await app.credentials.seal(JSON.stringify(credentials), {
+          organisationId,
+          aad: row.id,
+        });
         await ctx.query(
           `UPDATE integrations SET sealed_credentials = $2, credential_updated_at = now() WHERE id = $1`,
           [row.id, sealed],
@@ -216,7 +221,9 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
         const check = await connector.checkConnection(
           connector.configSchema.parse(row.configuration),
           connector.credentialSchema.parse(
-            row.sealed_credentials ? app.unsealCredentials(row.sealed_credentials, row.id) : {},
+            row.sealed_credentials
+              ? await app.unsealCredentials(row.sealed_credentials, row.id, params.organisationId)
+              : {},
           ),
           {
             organisationId: params.organisationId,
@@ -369,7 +376,10 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
         );
         const connector = app.connectors.get(row.connector_key);
         const parsed = connector.credentialSchema.parse(body.credentials);
-        const sealed = app.credentials.encrypt(JSON.stringify(parsed), row.id);
+        const sealed = await app.credentials.seal(JSON.stringify(parsed), {
+          organisationId: params.organisationId,
+          aad: row.id,
+        });
         await ctx.query(
           `UPDATE integrations
            SET sealed_credentials = $2, credential_updated_at = now(),

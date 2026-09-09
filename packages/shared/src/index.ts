@@ -10,3 +10,4 @@ export * from './config.js';
 export * from './crypto.js';
 export * from './pagination.js';
 export * from './totp.js';
+export * from './envelope.js';

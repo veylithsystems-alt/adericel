@@ -75,29 +75,41 @@ the area most worth re-reviewing on every change.
 
 ### T2 — Credential disclosure from the database
 
-**Controls.** AES-256-GCM sealing with the integration id as additional
+**Controls.** Envelope encryption (ADR-0019): each organisation has its own
+AES-256-GCM data key, and the root key encrypts data keys and nothing else. Two
+bindings, closing two different moves — the integration id as additional
 authenticated data, so a sealed value cannot be relocated to another integration
-record and decrypted (ADR-0019). The key lives in the environment, never in the
-database. No API endpoint returns a credential; replacement is the only
-operation. Passwords are salted, hashed and peppered with material held outside
-the database. Refresh tokens are stored hashed.
+record; and the data key, so a value carrying another organisation's key id is
+refused at lookup before any decryption is attempted. The root key lives in the
+environment, never in the database. No API endpoint returns a credential;
+replacement is the only operation. Passwords are salted, hashed and peppered
+with material held outside the database. Refresh tokens and TOTP seeds are never
+stored in the clear.
 
 **Residual risk.** Explicitly **not covered**: an attacker with code execution
-on the API container. The key is in that process's memory by necessity.
+on the API container. The root key is in that process's memory by necessity.
 Mitigation there is host hardening, egress restriction and detection — not
-cryptography. Key rotation is currently a re-seal of every credential; envelope
-encryption with per-organisation data keys is the recorded next step.
+cryptography.
+
+Also stated precisely, because envelope encryption is easy to oversell: while
+the root key sits in an environment variable it still opens every data key, so
+disclosing it discloses everything. What has changed is that the root key is now
+used rarely, on small inputs, through an interface whose entire surface is wrap
+and unwrap — which is what a KMS exposes. Moving it there means the application
+never holds it. That is the guarantee; this is the prerequisite for it.
 
 ### T3 — Unauthorised action execution
 
 An attacker who can make Adericel change a customer's production systems.
 
 **Controls.** The proposer cannot approve. `org:action:approve` is held by roles
-that do not hold `org:action:propose`. And — the strongest form — the permission
-is refused to any principal that is not a `USER`, checked before any grant is
-examined, so no scope or role combination reaches it (ADR-0015). n8n, API keys
-and any AI agent authenticate as non-human principals. **There is no
-configuration in which Adericel approves its own actions.**
+that do not hold `org:action:propose`. The permission is refused to any principal
+that is not a `USER`, checked before any grant is examined, so no scope or role
+combination reaches it (ADR-0015) — n8n, API keys and any AI agent authenticate
+as non-human principals. **There is no configuration in which Adericel approves
+its own actions.** And it is refused to any session that presented only a
+password: four-eyes control backed by one credential is one password theft away
+from being one pair of eyes.
 
 Execution runs under credentials scoped to one integration, and only against
 capabilities the connector declares. High-risk classes require explicit approval
@@ -118,14 +130,22 @@ A customer configures an endpoint; Adericel's server makes a request to it. The
 canonical path to a cloud metadata service.
 
 **Controls.** All connector HTTP goes through one client
-(`packages/integrations/src/http.ts`) which resolves DNS **first** and rejects
-private, loopback, link-local and carrier-grade NAT destinations before
-connecting — checking a hostname before resolution permits a DNS record that
-resolves inward. Redirects are re-checked. An allow-list is supported and the
-block is on by default.
+(`packages/integrations/src/http.ts`). The authoritative check is installed
+inside the connection, as the lookup function the socket itself uses: there is
+one resolution, its result is checked, and the address handed to the socket is
+the address that was checked. Private, loopback, link-local and carrier-grade
+NAT destinations are refused, and every returned address is checked rather than
+just the first — a host resolving to one public and one private address is a
+rebinding attempt with extra steps. Redirects are refused outright rather than
+re-validated, because a redirect is a destination chosen by the upstream rather
+than by configuration. An allow-list is supported and the block is on by
+default.
 
-**Residual risk.** DNS rebinding between the check and the connection. Narrowed
-by connecting to the resolved address, and not eliminated in every runtime path.
+**Residual risk.** Low. The rebinding window that resolve-then-fetch leaves is
+closed by construction, and the guard is tested directly rather than only
+through the client — an integration test alone could pass because a TLS
+handshake failed, whether or not the guard existed. What remains is the ordinary
+risk of a legitimate public endpoint being compromised, which is T5.
 
 ### T5 — Poisoned data from a compromised vendor
 
@@ -181,9 +201,19 @@ explicit `locked_until` that a subsequent failure cannot accidentally clear or
 extend. Refresh tokens rotate on use, so replay invalidates the legitimate
 session visibly. Rate limiting at the edge and in the API.
 
-**Residual risk.** No second factor on Adericel accounts yet. For a product that
-assesses other people's multi-factor coverage this is the most conspicuous gap
-in this document, and it is the highest-priority security item outstanding.
+TOTP (RFC 6238) is enrolled per user, verified against the published test
+vectors, and required for approval — see T3. Sign-in returns a challenge rather
+than a session when a factor is enrolled; the challenge asserts only that the
+password was correct, is single use, and is burned after five wrong codes.
+Verified codes record their time step, so a code observed over a shoulder cannot
+be replayed inside its own window. Removing a factor requires a current code
+rather than merely a live session.
+
+**Residual risk.** MFA is not yet _mandatory_ for every account — it is required
+for approval, which is where the authority is, and an organisation that wants it
+everywhere cannot currently enforce that centrally. Recovery codes are the
+remaining single-factor path by design; they are single use and their
+consumption is recorded.
 
 ### T9 — Supply-chain compromise
 
@@ -243,9 +273,9 @@ Stated so that nobody has to infer it:
 
 In priority order:
 
-1. Multi-factor authentication for Adericel accounts (T8).
-2. Envelope encryption with per-organisation data keys and a KMS-backed key
-   provider (T2, ADR-0019).
-3. Signed release artefacts and a published SBOM (T9).
-4. DNS-rebinding hardening on every connector path (T4).
-5. An automated restore test in CI against a synthetic dataset (ADR-0020).
+1. A KMS-backed `RootKeyProvider`, so the application never holds the root key
+   (T2, ADR-0019). The interface is in place; the implementation is not.
+2. Signed release artefacts and a published SBOM (T9).
+3. An automated restore test in CI against a synthetic dataset (ADR-0020).
+4. Organisation-wide enforcement of MFA, rather than only on approval (T8).
+5. Alerting on the denial stream. Denials are recorded; nothing watches them.
