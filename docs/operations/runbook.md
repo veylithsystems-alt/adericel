@@ -1,0 +1,171 @@
+# Operations runbook
+
+For the person on the other end of the alert. Each section is a symptom, what it
+means, and what to do — in that order, because at 3am the diagnosis matters more
+than the architecture.
+
+## First things to check
+
+```bash
+docker compose ps                          # what is running
+docker compose logs --tail=200 api         # recent API activity
+curl -s localhost/health/ready | jq        # API, database, object store
+docker stats --no-stream                   # memory against the limits
+```
+
+`/health/ready` failing while `/health/live` succeeds means the process is fine
+and a dependency is not. That distinction is the first fork in almost every
+diagnosis.
+
+---
+
+## The API will not start
+
+**`AUTH_JWT_SECRET must be set` / `AUTH_CREDENTIAL_ENCRYPTION_KEY must be set`**
+
+Working as designed: Adericel refuses to boot into a known-insecure default in
+production. Generate and set them:
+
+```bash
+openssl rand -base64 48   # AUTH_JWT_SECRET
+openssl rand -base64 32   # AUTH_CREDENTIAL_ENCRYPTION_KEY
+```
+
+**Do not regenerate `AUTH_CREDENTIAL_ENCRYPTION_KEY` on an existing
+deployment.** Every stored integration credential becomes unrecoverable and must
+be re-entered.
+
+**`migrate` exits non-zero**
+
+Read its logs before anything else. A checksum mismatch means a migration file
+changed after it was applied — restore the file to its applied content rather
+than forcing past it, because the schema and the code no longer agree about what
+that migration did.
+
+## Everything returns no data, but nothing errors
+
+The classic fail-closed signature: tenant context was not established, so
+row-level security correctly returned nothing (ADR-0007).
+
+Check that `DATABASE_APPLICATION_ROLE` is set and — this is the one that catches
+people — that the application is **not** connecting as the table owner. An owner
+connection bypasses nothing (`FORCE` is enabled) but a misconfigured role can
+fail to see rows at all.
+
+```sql
+SELECT current_user, session_user;
+SELECT current_setting('adericel.organisation_id', true);
+```
+
+## PostgreSQL was killed by the OOM killer
+
+```bash
+dmesg | grep -i 'killed process'
+```
+
+The compose limits exist to prevent this. If it happened anyway:
+
+1. Confirm the limits are actually applied — `docker stats` shows the limit.
+2. Confirm swap exists (2 GB, `vm.swappiness=10`; see the sizing document).
+3. If the `ai` profile is running, stop it and see whether the pressure goes.
+   Ollama is the only service large enough to displace PostgreSQL.
+
+## Actions are stuck in VERIFYING
+
+Usually not a fault. Verification re-observes through the connector, and many
+vendors take minutes to propagate a change. An action past its timeout becomes
+`TIMED_OUT`, which is a recorded outcome and not a failure to investigate on its
+own.
+
+Investigate when _every_ action for one integration times out: that is a
+collection problem, not a propagation delay. Check `integration_runs` for that
+organisation, then the connector's last successful collection.
+
+**Never** resolve this by marking an action confirmed. An unverified action is
+information; a falsely confirmed one closes a finding that is still open.
+
+## Outbox events are dead-lettering
+
+```sql
+SELECT event_type, COUNT(*), MAX(last_error)
+  FROM outbox_events WHERE status = 'DEAD_LETTER'
+ GROUP BY event_type;
+```
+
+Dead letters mean delivery failed `WORKER_MAX_DELIVERY_ATTEMPTS` times. The
+event is not lost — it is parked. Fix the downstream cause, then replay through
+the recovery workflow in the n8n export, which replays under an operator's
+control rather than automatically.
+
+Before replaying, confirm the idempotency retention window still exceeds the age
+of the dead letters. If it does not, a replay can re-execute (ADR-0016).
+
+## An integration is reporting DEGRADED
+
+`DEGRADED` means the last collection was **partial** — a truncated page or a
+refused permission — not that it failed. The consequence is that rules over the
+subject kinds it did not fully see resolve to UNKNOWN, which is correct and is
+the reason this matters.
+
+Check the integration's granted permissions at the vendor first. A vendor
+permission removed by a customer's own administrator is the most common cause.
+
+## n8n is not receiving events
+
+1. `N8N_ENABLED=true` in the API's environment.
+2. `N8N_WEBHOOK_SIGNING_SECRET` set to the _same_ value on both sides. Left
+   empty, webhook ingestion is disabled outright rather than accepting unsigned
+   deliveries.
+3. Clocks. Deliveries outside a five-minute window are rejected as replays.
+4. The workflow is active. Five activate on import; the rest are sub-workflows.
+
+## Disk is filling
+
+Largest consumers, in the order they usually appear:
+
+1. **n8n execution data.** Pruning is configured (14 days, 20,000 executions);
+   confirm it is actually running. None of this is Adericel truth.
+2. **Object storage** — evidence bytes. Apply the retention policy: bytes past
+   retention can move to cold storage while the evidence _record_ stays.
+3. **`outbox_events`** — completed rows are pruned; dead letters are not.
+4. **PostgreSQL WAL** if archiving is configured and the archive command is
+   failing. This one takes the database down if ignored.
+
+Never prune assessments, the event log, the audit log, or evidence records. If
+that becomes tempting, it is the signal to move PostgreSQL to its own host.
+
+## Restoring from backup
+
+```bash
+# Into a scratch database first. Always.
+createdb adericel_restore
+pg_restore --dbname=adericel_restore --clean --if-exists backup.dump
+```
+
+Then verify three things before pointing anything at it:
+
+1. `pnpm db:status` reports the schema clean.
+2. The tenancy suite passes against the restored data.
+3. A known assessment replays to the same state — this is the check that proves
+   the assurance history survived, not merely the bytes.
+
+Restore the evidence objects to match the same point in time. A database restore
+without them leaves records whose artefacts are missing: recoverable and
+inspectable, but it should be a known state rather than a discovery.
+
+## Rotating the credential encryption key
+
+There is no online rotation yet (ADR-0019). The procedure is:
+
+1. Stop the API and worker.
+2. Re-seal every integration credential with the new key.
+3. Update `AUTH_CREDENTIAL_ENCRYPTION_KEY` and start.
+
+Take a backup first, and keep the old key until the re-seal is verified.
+
+## Escalating
+
+Collect before asking: the correlation id, `docker compose ps`, the failing
+service's last 200 log lines, and `/health/ready`. The correlation id alone
+assembles the whole operation across API, worker and workflow — "send me the
+correlation id" is a complete diagnostic request (ADR-0021).

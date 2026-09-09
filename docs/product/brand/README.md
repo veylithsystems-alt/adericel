@@ -9,16 +9,16 @@ architectural constraints rather than styling preferences.
 
 ## Colour
 
-| Token | Hex | Use |
-|---|---|---|
-| Ink | `#14181F` | Text, headings, icons — ~60% of surface |
-| Slate | `#5A6270` | Secondary text, rules — ~20% |
-| Paper | `#FBFBF9` | Background — ~10% |
-| Rule | `#DCDDD8` | Borders, dividers |
-| Proven | `#1E5540` | Assurance state: satisfied |
-| Failing | `#A33326` | Assurance state: not satisfied |
-| Exception | `#D08B2F` | Assurance state: authorised deviation |
-| Unknown | diagonal hatch in Ink | Assurance state: not determinable |
+| Token     | Hex                   | Use                                     |
+| --------- | --------------------- | --------------------------------------- |
+| Ink       | `#14181F`             | Text, headings, icons — ~60% of surface |
+| Slate     | `#5A6270`             | Secondary text, rules — ~20%            |
+| Paper     | `#FBFBF9`             | Background — ~10%                       |
+| Rule      | `#DCDDD8`             | Borders, dividers                       |
+| Proven    | `#1E5540`             | Assurance state: satisfied              |
+| Failing   | `#A33326`             | Assurance state: not satisfied          |
+| Exception | `#D08B2F`             | Assurance state: authorised deviation   |
+| Unknown   | diagonal hatch in Ink | Assurance state: not determinable       |
 
 State colour is ~10% of any surface. Colour carries meaning here, so spending it
 on decoration devalues it.
@@ -55,14 +55,14 @@ needs precision for rules and audit; the interface needs language an MSP
 engineer can scan at speed. The mapping is in
 `apps/web/src/lib/assurance-presentation.ts` and is the only place it exists.
 
-| Domain state | UI label | Treatment |
-|---|---|---|
-| `SATISFIED` | Proven | Proven green |
-| `NOT_SATISFIED` | Failing | Failing red |
-| `PARTIALLY_SATISFIED` | Partial | Exception amber, outlined |
-| `EXCEPTED` | Exception | Exception amber |
-| `UNKNOWN` | Unknown | Ink hatch |
-| `NOT_APPLICABLE` | Not applicable | Slate, de-emphasised |
+| Domain state          | UI label       | Treatment                 |
+| --------------------- | -------------- | ------------------------- |
+| `SATISFIED`           | Proven         | Proven green              |
+| `NOT_SATISFIED`       | Failing        | Failing red               |
+| `PARTIALLY_SATISFIED` | Partial        | Exception amber, outlined |
+| `EXCEPTED`            | Exception      | Exception amber           |
+| `UNKNOWN`             | Unknown        | Ink hatch                 |
+| `NOT_APPLICABLE`      | Not applicable | Slate, de-emphasised      |
 
 ## Typography
 
