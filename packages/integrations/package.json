@@ -16,8 +16,9 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@adericel/shared": "workspace:*",
     "@adericel/domain": "workspace:*",
+    "@adericel/shared": "workspace:*",
+    "undici": "^7.29.1",
     "zod": "^4.1.11"
   }
 }

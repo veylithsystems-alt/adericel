@@ -1,5 +1,7 @@
+import { lookup as dnsLookupCallback } from 'node:dns';
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
+import { Agent, fetch as undiciFetch } from 'undici';
 import {
   AdericelError,
   withRetry,
@@ -14,10 +16,22 @@ import {
  * Connectors take URLs from tenant configuration, which makes them a natural
  * server-side request forgery vector: a customer administrator could point an
  * integration at the metadata service or at an internal address and have
- * Adericel fetch it with Adericel's network position. This client therefore
- * resolves the hostname and refuses private, loopback, link-local and
- * carrier-grade NAT destinations before connecting, and enforces an optional
- * allowlist on top.
+ * Adericel fetch it with Adericel's network position. This client refuses
+ * private, loopback, link-local and carrier-grade NAT destinations, and
+ * enforces an optional allowlist on top.
+ *
+ * The check happens in two places, and the second one is the one that matters.
+ * `assertEgressAllowed` runs first because it fails fast with a message naming
+ * the rule that was broken. But a check that resolves a hostname and then hands
+ * the *name* to fetch leaves a window: the resolver is consulted again when the
+ * socket opens, and a record with a one-second time to live can answer
+ * differently the second time. That is DNS rebinding, and it defeats
+ * resolve-then-fetch entirely.
+ *
+ * So the authoritative check is installed inside the connection, as the lookup
+ * the socket itself uses. There is one resolution, its result is checked, and
+ * the address handed to the socket is the address that was checked. There is no
+ * window because there is no second lookup.
  */
 
 export interface EgressPolicy {
@@ -158,9 +172,66 @@ export interface HttpClient {
 
 const DEFAULT_MAX_BYTES = 16 * 1024 * 1024;
 
+/**
+ * A DNS lookup that refuses to return a non-public address.
+ *
+ * This is the SSRF control. It runs at connect time, on the result the socket
+ * will actually use, so a record that changed between validation and connection
+ * is rejected rather than followed.
+ */
+export function createGuardedLookup(): LookupFunction {
+  return (hostname, lookupOptions, callback) => {
+    dnsLookupCallback(hostname, { ...lookupOptions, all: true }, (error, addresses) => {
+      if (error) {
+        callback(error, '');
+        return;
+      }
+
+      const resolved = addresses as { address: string; family: number }[];
+      const permitted = resolved.filter((entry) => !isPrivateAddress(entry.address));
+
+      // Every address is checked, not just the first. A host that resolves to
+      // one public and one private address is a rebinding attempt with extra
+      // steps: the socket may pick either, so neither is acceptable.
+      if (permitted.length !== resolved.length || permitted.length === 0) {
+        const blocked = Object.assign(
+          new Error(
+            `Refusing to connect to ${hostname}: resolves to a non-public address`,
+          ) as NodeJS.ErrnoException,
+          { code: 'EADERICELBLOCKED' },
+        );
+        callback(blocked, '');
+        return;
+      }
+
+      if (lookupOptions.all) {
+        callback(null, permitted);
+      } else {
+        const first = permitted[0]!;
+        callback(null, first.address, first.family);
+      }
+    });
+  };
+}
+
 export function createHttpClient(options: HttpClientOptions): HttpClient {
-  const doFetch = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? 30_000;
+
+  // When the policy permits private egress — development, and the test harness
+  // — there is nothing to pin and the platform's own fetch is used unchanged.
+  const agent = options.policy.blockPrivate
+    ? new Agent({ connect: { lookup: createGuardedLookup() } })
+    : null;
+
+  const doFetch: typeof fetch = options.fetchImpl
+    ? options.fetchImpl
+    : agent
+      ? (input, init) =>
+          undiciFetch(input as string, {
+            ...(init as Record<string, unknown>),
+            dispatcher: agent,
+          }) as unknown as Promise<Response>
+      : fetch;
 
   async function once<T>(request: HttpRequest): Promise<HttpResponse<T>> {
     const url = new URL(request.url);
@@ -191,6 +262,9 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
                   typeof request.body === 'string' ? request.body : JSON.stringify(request.body),
               }),
           signal,
+          // Redirects are refused outright rather than re-validated. A redirect
+          // is a second destination chosen by the upstream rather than by
+          // configuration, and no integration Adericel supports needs one.
           redirect: 'error',
         });
       },
