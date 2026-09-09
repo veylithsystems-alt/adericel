@@ -64,7 +64,7 @@ export interface AssessmentOutput {
   readonly events: readonly NewDomainEvent[];
 }
 
-type ControlDbRow = {
+interface ControlDbRow {
   id: string;
   node_id: string;
   key: string;
@@ -73,7 +73,7 @@ type ControlDbRow = {
   rule_key: string;
   parameters: Record<string, unknown>;
   enabled: boolean;
-};
+}
 
 export interface AssessmentService {
   assessControl(controlId: string, trigger: AssessmentTrigger, asOf?: string): Promise<AssessmentOutput>;

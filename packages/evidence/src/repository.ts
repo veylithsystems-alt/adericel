@@ -28,7 +28,7 @@ import {
  * cited is still readable exactly as it was.
  */
 
-type EvidenceRow = {
+interface EvidenceRow {
   id: string;
   organisation_id: string;
   node_id: string;
@@ -56,7 +56,7 @@ type EvidenceRow = {
   collected_by_actor: string;
   metadata: Record<string, unknown>;
   created_at: Date;
-};
+}
 
 const COLUMN_NAMES = [
   'id', 'organisation_id', 'node_id', 'source_type', 'collection_method', 'integration_id',

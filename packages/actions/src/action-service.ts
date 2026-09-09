@@ -32,7 +32,7 @@ import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/s
  *     reaches CONFIRMED only when re-observation supports it.
  */
 
-type ActionRow = {
+interface ActionRow {
   id: string;
   organisation_id: string;
   node_id: string;
@@ -65,7 +65,7 @@ type ActionRow = {
   expires_at: Date | null;
   created_at: Date;
   updated_at: Date;
-};
+}
 
 const ACTION_COLUMNS = `
   id, organisation_id, node_id, action_type, integration_id, target_node_id, target_external_id,

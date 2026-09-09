@@ -11,7 +11,7 @@ import { AdericelError, buildPage, decodeCursor, type Clock, type Page } from '@
  * survives and the Truth Engine always has exactly one current value to read.
  */
 
-type ClaimRow = {
+interface ClaimRow {
   id: string;
   organisation_id: string;
   node_id: string;
@@ -30,7 +30,7 @@ type ClaimRow = {
   metadata: Record<string, unknown>;
   created_at: Date;
   evidence_ids: string[] | null;
-};
+}
 
 const CLAIM_SELECT = `
   c.id, c.organisation_id, c.node_id, c.predicate, c.subject_node_id, c.subject_external_id,

@@ -59,7 +59,7 @@ export async function recordAudit(
   );
 }
 
-type AuditRow = {
+interface AuditRow {
   id: string;
   organisation_id: string | null;
   msp_id: string | null;
@@ -77,7 +77,7 @@ type AuditRow = {
   user_agent: string | null;
   metadata: Record<string, unknown>;
   occurred_at: Date;
-};
+}
 
 function toEntry(row: AuditRow): AuditEntry {
   return {

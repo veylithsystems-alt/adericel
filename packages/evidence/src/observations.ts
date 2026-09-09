@@ -11,7 +11,7 @@ import type { TenantContext } from '@adericel/graph';
  * not multiply storage by ninety-six for an environment that has not changed.
  */
 
-type ObservationRow = {
+interface ObservationRow {
   id: string;
   organisation_id: string;
   integration_id: string | null;
@@ -26,7 +26,7 @@ type ObservationRow = {
   evidence_id: string | null;
   correlation_id: string | null;
   created_at: Date;
-};
+}
 
 const COLUMNS = `
   id, organisation_id, integration_id, kind, source_system, subject_external_id, subject_node_id,

@@ -74,7 +74,7 @@ export interface ClaimedEvent extends DomainEvent {
   readonly state: OutboxState;
 }
 
-type OutboxRow = {
+interface OutboxRow {
   id: string;
   type: string;
   schema_version: number;
@@ -89,7 +89,7 @@ type OutboxRow = {
   attempts: number;
   state: string;
   occurred_at: Date;
-};
+}
 
 function toEvent(row: OutboxRow): ClaimedEvent {
   return {

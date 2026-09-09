@@ -41,7 +41,7 @@ export interface Neighbourhood {
   readonly truncated: boolean;
 }
 
-type WalkRow = {
+interface WalkRow {
   node_id: string;
   kind: string;
   label: string;
@@ -50,7 +50,7 @@ type WalkRow = {
   edge_kind: string | null;
   from_node_id: string | null;
   to_node_id: string | null;
-};
+}
 
 /**
  * Breadth-first neighbourhood around a node.
@@ -141,12 +141,12 @@ export async function neighbourhood(
   };
 }
 
-type PathRow = {
+interface PathRow {
   node_ids: string[];
   edge_ids: string[];
   edge_kinds: string[];
   depth: number;
-};
+}
 
 /**
  * Shortest path between two nodes, ignoring edge direction.

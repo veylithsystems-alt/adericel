@@ -20,12 +20,16 @@ import {
  * reach and every use is audited.
  */
 
-export interface QueryResultRow {
-  [column: string]: unknown;
-}
+/**
+ * A row as returned by the driver. Deliberately unconstrained: callers declare
+ * the row shape they expect with an interface, and requiring those interfaces
+ * to carry an index signature would add noise at every call site without adding
+ * safety — the values are `unknown` until the caller narrows them either way.
+ */
+export type QueryResultRow = Record<string, unknown>;
 
 export interface Queryable {
-  query<T extends QueryResultRow = QueryResultRow>(
+  query<T = QueryResultRow>(
     text: string,
     values?: readonly unknown[],
   ): Promise<{ rows: T[]; rowCount: number }>;
@@ -34,33 +38,33 @@ export interface Queryable {
 export interface TenantContext extends Queryable {
   readonly organisationId: string;
   /** One row or null. Throws if the query returns more than one row. */
-  one<T extends QueryResultRow = QueryResultRow>(
+  one<T = QueryResultRow>(
     text: string,
     values?: readonly unknown[],
   ): Promise<T | null>;
   /** One row, throwing NOT_FOUND when absent. */
-  oneOrFail<T extends QueryResultRow = QueryResultRow>(
+  oneOrFail<T = QueryResultRow>(
     text: string,
     values: readonly unknown[],
     resource: string,
   ): Promise<T>;
-  many<T extends QueryResultRow = QueryResultRow>(
+  many<T = QueryResultRow>(
     text: string,
     values?: readonly unknown[],
   ): Promise<T[]>;
 }
 
 export interface PlatformContext extends Queryable {
-  one<T extends QueryResultRow = QueryResultRow>(
+  one<T = QueryResultRow>(
     text: string,
     values?: readonly unknown[],
   ): Promise<T | null>;
-  oneOrFail<T extends QueryResultRow = QueryResultRow>(
+  oneOrFail<T = QueryResultRow>(
     text: string,
     values: readonly unknown[],
     resource: string,
   ): Promise<T>;
-  many<T extends QueryResultRow = QueryResultRow>(
+  many<T = QueryResultRow>(
     text: string,
     values?: readonly unknown[],
   ): Promise<T[]>;
@@ -117,7 +121,7 @@ function translateError(error: unknown): never {
 }
 
 function makeHelpers(client: pg.PoolClient): Omit<TenantContext, 'organisationId'> {
-  const query = async <T extends QueryResultRow>(text: string, values: readonly unknown[] = []) => {
+  const query = async <T>(text: string, values: readonly unknown[] = []) => {
     try {
       const result = await client.query(text, values as unknown[]);
       return { rows: result.rows as T[], rowCount: result.rowCount ?? 0 };
@@ -128,7 +132,7 @@ function makeHelpers(client: pg.PoolClient): Omit<TenantContext, 'organisationId
 
   return {
     query,
-    async one<T extends QueryResultRow>(text: string, values: readonly unknown[] = []) {
+    async one<T>(text: string, values: readonly unknown[] = []) {
       const { rows } = await query<T>(text, values);
       if (rows.length > 1) {
         throw new AdericelError('INTERNAL_ERROR', 'Expected at most one row', {
@@ -137,7 +141,7 @@ function makeHelpers(client: pg.PoolClient): Omit<TenantContext, 'organisationId
       }
       return rows[0] ?? null;
     },
-    async oneOrFail<T extends QueryResultRow>(
+    async oneOrFail<T>(
       text: string,
       values: readonly unknown[],
       resource: string,
@@ -151,7 +155,7 @@ function makeHelpers(client: pg.PoolClient): Omit<TenantContext, 'organisationId
       }
       return row;
     },
-    async many<T extends QueryResultRow>(text: string, values: readonly unknown[] = []) {
+    async many<T>(text: string, values: readonly unknown[] = []) {
       const { rows } = await query<T>(text, values);
       return rows;
     },
