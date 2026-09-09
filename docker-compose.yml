@@ -1,0 +1,384 @@
+# Adericel — production-ish single-host deployment.
+#
+# Sized for a 16 GB VPS running Adericel alongside n8n, Redis and Ollama.
+# Memory limits are set explicitly on every service, because the failure mode on
+# a single host is one process ballooning and the kernel killing something that
+# matters. With these limits the worst case is a service restarting, not
+# PostgreSQL being OOM-killed mid-transaction.
+#
+# Budget on 16 GB (see docs/operations/vps-sizing.md for the working):
+#
+#   PostgreSQL      2.0 GB    Adericel API      0.5 GB
+#   Adericel worker 0.4 GB    Web (static)      0.05 GB
+#   n8n             1.5 GB    Redis             0.5 GB
+#   Caddy           0.1 GB    OS + headroom     1.5 GB
+#   ------------------------------------------------ 6.55 GB
+#   Leaves ~9 GB for Ollama, which fits an 8B model at Q4 with room to spare.
+#
+# Start with:  docker compose --profile core up -d
+# Add n8n:     docker compose --profile core --profile workflow up -d
+# Add AI:      docker compose --profile core --profile workflow --profile ai up -d
+
+name: adericel
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # ---------------------------------------------------------------- database
+  postgres:
+    image: postgres:16-alpine
+    profiles: [core]
+    <<: [*restart, *logging]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-adericel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-adericel}
+      # Checksums catch silent corruption. On a VPS with storage you do not
+      # control, this is worth the few per cent of write overhead.
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    command:
+      - postgres
+      # Tuned for 2 GB. shared_buffers at 25% of the limit, effective_cache_size
+      # at 50% because the host page cache is shared with everything else.
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - max_connections=60
+      # A cheap VPS has slower random I/O than a local SSD but far faster than
+      # spinning disk; 1.5 keeps the planner from over-preferring sequential scans.
+      - -c
+      - random_page_cost=1.5
+      - -c
+      - wal_compression=on
+      - -c
+      - max_wal_size=1GB
+      # Slow query visibility without the overhead of logging everything.
+      - -c
+      - log_min_duration_statement=1000
+      - -c
+      - log_checkpoints=on
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infrastructure/docker/postgres-backup:/backup
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-adericel} -d ${POSTGRES_DB:-adericel}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    # Not published to the host. Only the compose network reaches PostgreSQL.
+    expose:
+      - '5432'
+
+  # ------------------------------------------------------------- object store
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    profiles: [core]
+    <<: [*restart, *logging]
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-adericel}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    expose:
+      - '9000'
+      - '9001'
+
+  # ----------------------------------------------------------------- Adericel
+  migrate:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      target: runtime
+    profiles: [core]
+    <<: *logging
+    restart: 'no'
+    command: ['node', '--experimental-strip-types', 'scripts/migrate.ts', 'up']
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-adericel}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-adericel}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      target: runtime
+    profiles: [core]
+    <<: [*restart, *logging]
+    command: ['node', 'apps/api/dist/main.js']
+    environment: &adericel-env
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ADERICEL_RELEASE_VERSION: ${ADERICEL_RELEASE_VERSION:-0.1.0}
+      DATABASE_URL: postgres://${POSTGRES_USER:-adericel}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-adericel}
+      DATABASE_POOL_MAX: '10'
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?AUTH_JWT_SECRET must be set}
+      AUTH_CREDENTIAL_ENCRYPTION_KEY: ${AUTH_CREDENTIAL_ENCRYPTION_KEY:?AUTH_CREDENTIAL_ENCRYPTION_KEY must be set}
+      AUTH_PASSWORD_PEPPER: ${AUTH_PASSWORD_PEPPER:-}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:?API_PUBLIC_URL must be set}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:?API_CORS_ORIGINS must be set}
+      API_TRUST_PROXY: 'true'
+      STORAGE_DRIVER: s3
+      STORAGE_S3_ENDPOINT: http://minio:9000
+      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-adericel-evidence}
+      STORAGE_S3_REGION: ${STORAGE_S3_REGION:-eu-west-2}
+      STORAGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-adericel}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      STORAGE_S3_FORCE_PATH_STYLE: 'true'
+      N8N_ENABLED: ${N8N_ENABLED:-false}
+      N8N_BASE_URL: ${N8N_BASE_URL:-http://n8n:5678}
+      N8N_WEBHOOK_SIGNING_SECRET: ${N8N_WEBHOOK_SIGNING_SECRET:-}
+      SECURITY_BLOCK_PRIVATE_EGRESS: 'true'
+      SECURITY_EGRESS_ALLOWLIST: ${SECURITY_EGRESS_ALLOWLIST:-}
+      # Node's heap cap is set below the container limit so V8 collects rather
+      # than the kernel killing the process.
+      NODE_OPTIONS: '--max-old-space-size=384'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    expose:
+      - '4000'
+
+  worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+      target: runtime
+    profiles: [core]
+    <<: [*restart, *logging]
+    command: ['node', 'apps/worker/dist/main.js']
+    environment:
+      <<: *adericel-env
+      DATABASE_POOL_MAX: '6'
+      WORKER_ENABLED: 'true'
+      NODE_OPTIONS: '--max-old-space-size=320'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: 448M
+
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.web
+    profiles: [core]
+    <<: [*restart, *logging]
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    expose:
+      - '8080'
+
+  # ------------------------------------------------------------------- proxy
+  caddy:
+    image: caddy:2-alpine
+    profiles: [core]
+    <<: [*restart, *logging]
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      ADERICEL_DOMAIN: ${ADERICEL_DOMAIN:?ADERICEL_DOMAIN must be set}
+      N8N_DOMAIN: ${N8N_DOMAIN:-}
+    volumes:
+      - ./infrastructure/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - api
+      - web
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ------------------------------------------------------------ orchestration
+  redis:
+    image: redis:7-alpine
+    profiles: [workflow]
+    <<: [*restart, *logging]
+    # maxmemory below the container limit, with an eviction policy, so Redis
+    # sheds load rather than being killed.
+    command:
+      - redis-server
+      - --maxmemory
+      - 384mb
+      - --maxmemory-policy
+      - noeviction
+      - --save
+      - '900 1'
+      - --appendonly
+      - 'no'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    expose:
+      - '6379'
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.121.0
+    profiles: [workflow]
+    <<: [*restart, *logging]
+    environment:
+      N8N_HOST: ${N8N_DOMAIN:-localhost}
+      N8N_PORT: '5678'
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_DOMAIN:-localhost}/
+      N8N_EDITOR_BASE_URL: https://${N8N_DOMAIN:-localhost}/
+      GENERIC_TIMEZONE: ${TZ:-Europe/London}
+      # n8n keeps its own state in the same PostgreSQL instance, in a separate
+      # database. One database server to back up rather than two.
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: ${N8N_DB_NAME:-n8n}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-adericel}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?N8N_ENCRYPTION_KEY must be set}
+      # Adericel configuration read by the workflows. Nothing is baked into the
+      # export itself.
+      ADERICEL_API_BASE_URL: http://api:4000
+      ADERICEL_WEBHOOK_SECRET: ${N8N_WEBHOOK_SIGNING_SECRET}
+      ADERICEL_MSP_ID: ${ADERICEL_MSP_ID:-}
+      ADERICEL_NOTIFY_EMAIL: ${ADERICEL_NOTIFY_EMAIL:-}
+      ADERICEL_NOTIFY_WEBHOOK_URL: ${ADERICEL_NOTIFY_WEBHOOK_URL:-}
+      ADERICEL_AI_EXTRACTION_ENABLED: ${ADERICEL_AI_EXTRACTION_ENABLED:-false}
+      # Workflows read $env, which n8n blocks by default.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: 'false'
+      # Execution history is the main growth driver in n8n's database.
+      EXECUTIONS_DATA_PRUNE: 'true'
+      EXECUTIONS_DATA_MAX_AGE: '336'
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: '20000'
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      N8N_VERSION_NOTIFICATIONS_ENABLED: 'false'
+      N8N_RUNNERS_ENABLED: 'true'
+      NODE_OPTIONS: '--max-old-space-size=1024'
+    volumes:
+      - n8n-data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:5678/healthz || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    expose:
+      - '5678'
+
+  # ---------------------------------------------------------------------- AI
+  #
+  # Entirely optional. Adericel is fully functional with this profile stopped:
+  # AI is disabled by default and can only ever produce candidate claims that a
+  # human must confirm (ADR-0004). Nothing in the assurance chain depends on it.
+  ollama:
+    image: ollama/ollama:0.12.3
+    profiles: [ai]
+    <<: [*restart, *logging]
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      # Unload the model after five minutes idle. On a shared VPS, holding
+      # several GB resident for an occasional extraction is the wrong trade.
+      OLLAMA_KEEP_ALIVE: '5m'
+      # One model in memory and one request at a time. Concurrency on CPU
+      # inference does not make it faster; it makes everything else slower.
+      OLLAMA_MAX_LOADED_MODELS: '1'
+      OLLAMA_NUM_PARALLEL: '1'
+      OLLAMA_MAX_QUEUE: '16'
+    volumes:
+      - ollama-models:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          # Fits an 8B model at Q4_K_M (~5.5 GB) plus context and the runtime.
+          memory: 8G
+          # Leave cores for PostgreSQL and the API. Without this, a single
+          # inference saturates the box and health checks start timing out.
+          cpus: '${OLLAMA_CPUS:-3}'
+    expose:
+      - '11434'
+
+volumes:
+  postgres-data:
+  minio-data:
+  n8n-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
+  ollama-models:
+
+networks:
+  default:
+    name: adericel
