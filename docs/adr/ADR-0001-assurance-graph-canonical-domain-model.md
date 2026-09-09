@@ -81,8 +81,8 @@ The graph represents:
 | **proves** | Evidence | Control | Control proof |
 | **triggers** | Finding | Control | Control failure |
 | **remediates** | Action | Finding | Remediation target |
-| **verified_by** | Action | Verification | Action produces verification evidence |
-| **confirms** | Verification | Evidence | Verification evidence |
+| **verified_by** | Action | Verification | Action undergoes verification |
+| **produced_by** | Evidence | Verification | Verification produces evidence of success |
 | **affected_by** | Entity | Supplier | Supplier dependency |
 
 ### Properties (Attributes)
@@ -156,13 +156,11 @@ AUTHORISATION_REQUIRED?
             ↓
          VERIFYING
             ↓
-    VERIFICATION_IN_PROGRESS
-            ↓
    VERIFIED_SUCCESS | VERIFIED_FAILURE
             ↓
    [creates Verification node]
             ↓
-   [produces Evidence via confirms edge]
+   [Verification produces Evidence via produced_by edge]
 ```
 
 ---
