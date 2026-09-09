@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  HUMAN_ONLY_PERMISSIONS,
+  PRINCIPAL_TYPES,
   ROLE_PERMISSIONS,
   accessibleOrganisationIds,
   authorise,
@@ -26,22 +28,34 @@ function principal(overrides: Partial<Principal> = {}): Principal {
 
 describe('authorise', () => {
   it('denies by default when the principal holds no grants', () => {
-    const answer = authorise(principal(), { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT });
+    const answer = authorise(
+      principal(),
+      { permission: 'org:read', organisationId: 'org-1' },
+      { atIso: AT },
+    );
     expect(answer.allowed).toBe(false);
   });
 
   it('allows via a direct organisation grant', () => {
     const p = principal({
-      grants: [{ scopeType: 'ORGANISATION', scopeId: 'org-1', roles: ['ORG_ANALYST'], expiresAt: null }],
+      grants: [
+        { scopeType: 'ORGANISATION', scopeId: 'org-1', roles: ['ORG_ANALYST'], expiresAt: null },
+      ],
     });
-    expect(authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed).toBe(true);
+    expect(
+      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+    ).toBe(true);
   });
 
   it('does not let an organisation grant reach a different organisation', () => {
     const p = principal({
-      grants: [{ scopeType: 'ORGANISATION', scopeId: 'org-1', roles: ['ORG_ADMIN'], expiresAt: null }],
+      grants: [
+        { scopeType: 'ORGANISATION', scopeId: 'org-1', roles: ['ORG_ADMIN'], expiresAt: null },
+      ],
     });
-    expect(authorise(p, { permission: 'org:read', organisationId: 'org-2' }, { atIso: AT }).allowed).toBe(false);
+    expect(
+      authorise(p, { permission: 'org:read', organisationId: 'org-2' }, { atIso: AT }).allowed,
+    ).toBe(false);
   });
 
   it('allows an MSP grant only over organisations proven to belong to that MSP', () => {
@@ -50,12 +64,18 @@ describe('authorise', () => {
       grants: [{ scopeType: 'MSP', scopeId: 'msp-1', roles: ['MSP_ADMIN'], expiresAt: null }],
     });
     expect(
-      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT, organisationMspId: 'msp-1' })
-        .allowed,
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: 'org-1' },
+        { atIso: AT, organisationMspId: 'msp-1' },
+      ).allowed,
     ).toBe(true);
     expect(
-      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT, organisationMspId: 'msp-2' })
-        .allowed,
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: 'org-1' },
+        { atIso: AT, organisationMspId: 'msp-2' },
+      ).allowed,
     ).toBe(false);
   });
 
@@ -63,7 +83,9 @@ describe('authorise', () => {
     const p = principal({
       grants: [{ scopeType: 'MSP', scopeId: 'msp-1', roles: ['MSP_ADMIN'], expiresAt: null }],
     });
-    expect(authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed).toBe(false);
+    expect(
+      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+    ).toBe(false);
   });
 
   it('ignores expired grants', () => {
@@ -77,7 +99,9 @@ describe('authorise', () => {
         },
       ],
     });
-    expect(authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed).toBe(false);
+    expect(
+      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+    ).toBe(false);
   });
 
   it('honours a live time-bounded delegation', () => {
@@ -91,16 +115,21 @@ describe('authorise', () => {
         },
       ],
     });
-    expect(authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed).toBe(true);
+    expect(
+      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+    ).toBe(true);
   });
 
   it('grants platform scope across every organisation', () => {
     const p = principal({
-      grants: [{ scopeType: 'PLATFORM', scopeId: null, roles: ['PLATFORM_ADMIN'], expiresAt: null }],
+      grants: [
+        { scopeType: 'PLATFORM', scopeId: null, roles: ['PLATFORM_ADMIN'], expiresAt: null },
+      ],
     });
-    expect(authorise(p, { permission: 'org:action:execute', organisationId: 'any' }, { atIso: AT }).allowed).toBe(
-      true,
-    );
+    expect(
+      authorise(p, { permission: 'org:action:execute', organisationId: 'any' }, { atIso: AT })
+        .allowed,
+    ).toBe(true);
   });
 });
 
@@ -144,12 +173,61 @@ describe('role definitions', () => {
   });
 });
 
+describe('permissions only a human may hold', () => {
+  // The strongest form of the four-eyes guarantee: not "we do not grant this to
+  // service accounts" but "a service account holding it is still refused".
+  const ORG = '22222222-2222-4222-8222-222222222222';
+
+  it('refuses approval to every non-human principal type, even with a platform grant', () => {
+    for (const principalType of PRINCIPAL_TYPES) {
+      if (principalType === 'USER') continue;
+      const p = principal({
+        principalType,
+        grants: [
+          { scopeType: 'PLATFORM', scopeId: null, roles: ['PLATFORM_ADMIN'], expiresAt: null },
+          { scopeType: 'ORGANISATION', scopeId: ORG, roles: ['ORG_APPROVER'], expiresAt: null },
+        ],
+      });
+      const answer = authorise(
+        p,
+        { permission: 'org:action:approve', organisationId: ORG },
+        { atIso: AT },
+      );
+      expect(answer.allowed, `${principalType} was allowed to approve`).toBe(false);
+      expect(answer.reason).toContain('requires a human principal');
+    }
+  });
+
+  it('still allows a human approver', () => {
+    const p = principal({
+      grants: [
+        { scopeType: 'ORGANISATION', scopeId: ORG, roles: ['ORG_APPROVER'], expiresAt: null },
+      ],
+    });
+    expect(
+      authorise(p, { permission: 'org:action:approve', organisationId: ORG }, { atIso: AT })
+        .allowed,
+    ).toBe(true);
+  });
+
+  it('does not accidentally gate permissions automation legitimately needs', () => {
+    expect(HUMAN_ONLY_PERMISSIONS.has('org:action:propose')).toBe(false);
+    expect(HUMAN_ONLY_PERMISSIONS.has('org:action:execute')).toBe(false);
+    expect(HUMAN_ONLY_PERMISSIONS.has('org:evidence:write')).toBe(false);
+  });
+});
+
 describe('accessibleOrganisationIds', () => {
   it('lists only live organisation-scoped grants', () => {
     const p = principal({
       grants: [
         { scopeType: 'ORGANISATION', scopeId: 'org-1', roles: ['ORG_READONLY'], expiresAt: null },
-        { scopeType: 'ORGANISATION', scopeId: 'org-2', roles: ['ORG_READONLY'], expiresAt: '2020-01-01T00:00:00.000Z' },
+        {
+          scopeType: 'ORGANISATION',
+          scopeId: 'org-2',
+          roles: ['ORG_READONLY'],
+          expiresAt: '2020-01-01T00:00:00.000Z',
+        },
         { scopeType: 'MSP', scopeId: 'msp-1', roles: ['MSP_ADMIN'], expiresAt: null },
       ],
     });

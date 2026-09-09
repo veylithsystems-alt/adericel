@@ -257,6 +257,23 @@ export interface AuthorisationAnswer {
   readonly viaScopeId: string | null;
 }
 
+/**
+ * Permissions that only a human being may hold.
+ *
+ * Four-eyes control is worthless if the second pair of eyes can be a workflow,
+ * an API key, or an agent acting on a model's output. Rather than relying on
+ * nobody ever granting an approver role to a service account, `authorise()`
+ * refuses these permissions to any principal that is not a USER — before it
+ * looks at a single grant, so there is no scope or role combination that
+ * reaches them.
+ *
+ * The consequence is deliberate and stated in ADR-0015: there is no
+ * configuration in which Adericel approves its own actions.
+ */
+export const HUMAN_ONLY_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
+  'org:action:approve',
+]);
+
 function grantIsLive(grant: Grant, atIso: string): boolean {
   return grant.expiresAt === null || Date.parse(grant.expiresAt) > Date.parse(atIso);
 }
@@ -278,6 +295,19 @@ export function authorise(
     readonly organisationMspId?: string | null;
   },
 ): AuthorisationAnswer {
+  // Checked before any grant is examined, so there is no scope — platform
+  // included — through which a non-human principal can acquire one of these.
+  if (HUMAN_ONLY_PERMISSIONS.has(question.permission) && principal.principalType !== 'USER') {
+    return {
+      allowed: false,
+      reason:
+        `${question.permission} requires a human principal; ` +
+        `this caller is a ${principal.principalType}`,
+      viaScope: null,
+      viaScopeId: null,
+    };
+  }
+
   const live = principal.grants.filter((grant) => grantIsLive(grant, context.atIso));
 
   for (const grant of live) {
@@ -362,5 +392,7 @@ export function accessibleMspIds(principal: Principal, atIso: string): readonly 
 }
 
 export function hasPlatformScope(principal: Principal, atIso: string): boolean {
-  return principal.grants.some((grant) => grant.scopeType === 'PLATFORM' && grantIsLive(grant, atIso));
+  return principal.grants.some(
+    (grant) => grant.scopeType === 'PLATFORM' && grantIsLive(grant, atIso),
+  );
 }
