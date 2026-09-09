@@ -9,6 +9,8 @@ import {
 import { compileRuleset, createRulesetRegistry } from './ruleset.js';
 import { adericelBaselineV1 } from './rulesets/adericel-baseline.js';
 import { cyberEssentialsV1 } from './rulesets/cyber-essentials.js';
+import { iso27001V1 } from './rulesets/iso-27001.js';
+import { BUILT_IN_RULESETS } from './rulesets/index.js';
 
 const AS_OF = '2026-09-09T12:00:00.000Z';
 const registry = createRulesetRegistry([adericelBaselineV1, cyberEssentialsV1]);
@@ -544,8 +546,13 @@ describe('assessControl — organisation-level rules', () => {
 
 describe('ruleset integrity', () => {
   it('compiles every built-in ruleset', () => {
-    expect(() => compileRuleset(adericelBaselineV1)).not.toThrow();
-    expect(() => compileRuleset(cyberEssentialsV1)).not.toThrow();
+    // Iterating the registry rather than naming them keeps this honest as
+    // rulesets are added: a new one that does not compile fails here rather
+    // than at an MSP's first assessment against it.
+    expect(BUILT_IN_RULESETS.length).toBeGreaterThanOrEqual(3);
+    for (const definition of BUILT_IN_RULESETS) {
+      expect(() => compileRuleset(definition)).not.toThrow();
+    }
   });
 
   it('hashes deterministically across recompiles', () => {
@@ -571,11 +578,53 @@ describe('ruleset integrity', () => {
   });
 
   it('gives every rule a failure title and description for explainability', () => {
-    for (const definition of [adericelBaselineV1, cyberEssentialsV1]) {
+    for (const definition of BUILT_IN_RULESETS) {
       for (const rule of compileRuleset(definition).rules) {
         expect(rule.failureTitle.length).toBeGreaterThan(0);
         expect(rule.failureDescription.length).toBeGreaterThan(0);
       }
+    }
+  });
+
+  it('gives every built-in ruleset a distinct key', () => {
+    const keys = BUILT_IN_RULESETS.map((definition) => compileRuleset(definition).key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe('the ISO 27001 ruleset', () => {
+  const iso = compileRuleset(iso27001V1);
+
+  it('reports UNKNOWN for an organisational control with no evidence, rather than omitting it', () => {
+    // The whole point. A control that cannot be determined from observed state
+    // is included and honest, not excluded so that coverage looks complete.
+    const rule = iso.rules.find((r) => r.key === 'iso.5.24.incident_management');
+    expect(rule).toBeDefined();
+
+    const result = assessControl(
+      iso,
+      input({
+        controlKey: 'iso.5.24.incident_management',
+        ruleKey: 'iso.5.24.incident_management',
+        organisationClaims: [],
+      }),
+    );
+    expect(result.state).toBe('UNKNOWN');
+    expect(result.unknownReason).toBe('NO_EVIDENCE');
+  });
+
+  it('covers all four Annex A themes rather than only the technological one', () => {
+    // A ruleset that only expresses what is easy to observe misrepresents the
+    // standard as a technical checklist.
+    const prefixes = new Set(iso.rules.map((rule) => rule.key.split('.')[1]));
+    expect(prefixes).toContain('5'); // organisational
+    expect(prefixes).toContain('6'); // people
+    expect(prefixes).toContain('8'); // technological
+  });
+
+  it('bounds evidence age on every rule, so nothing is proven by a stale document', () => {
+    for (const rule of iso.rules) {
+      expect(rule.maxEvidenceAgeDays, `${rule.key} has no freshness bound`).not.toBeNull();
     }
   });
 });

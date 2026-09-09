@@ -61,12 +61,11 @@ export const cyberEssentialsV1 = {
       severity: 'MEDIUM',
       failureTitle: 'Host-based firewalls are not enabled on all managed devices.',
       failureDescription: 'Enable the host firewall on the affected devices.',
-      remediation: {
-        actionType: 'device.firewall.enable',
-        riskClass: 'CONFIGURATION',
-        parameterTemplate: {},
-        rationale: 'Enable the host-based firewall on the affected device.',
-      },
+      // No remediation offered. Endpoint posture is changed through Intune
+      // configuration profiles, which are tenant-wide objects: a change Adericel
+      // made to one would affect devices far beyond the finding that prompted it.
+      // Offering a button that cannot safely run is worse than offering none.
+      remediation: null,
       maxEvidenceAgeDays: 14,
     },
     {

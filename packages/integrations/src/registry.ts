@@ -3,6 +3,7 @@ import { createConnectorRegistry } from './connector.js';
 import type { EgressPolicy } from './http.js';
 import { createMicrosoftEntraConnector } from './connectors/microsoft-entra.js';
 import { createMicrosoftIntuneConnector } from './connectors/microsoft-intune.js';
+import { createGoogleWorkspaceConnector } from './connectors/google-workspace.js';
 import { createGenericHttpConnector } from './connectors/generic-http.js';
 import {
   createAdericelSelfConnector,
@@ -41,6 +42,7 @@ export function buildConnectorRegistry(options: RegistryOptions): BuiltRegistry 
   const connectors: Connector[] = [
     createMicrosoftEntraConnector(deps) as unknown as Connector,
     createMicrosoftIntuneConnector(deps) as unknown as Connector,
+    createGoogleWorkspaceConnector(deps) as unknown as Connector,
     createGenericHttpConnector(deps) as unknown as Connector,
   ];
 

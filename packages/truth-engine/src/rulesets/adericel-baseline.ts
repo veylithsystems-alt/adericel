@@ -166,12 +166,11 @@ export const adericelBaselineV1 = {
       failureTitle: 'Managed devices are not encrypted at rest.',
       failureDescription:
         'Enable full-disk encryption on the affected devices so that a lost or stolen device does not disclose data.',
-      remediation: {
-        actionType: 'device.encryption.enable',
-        riskClass: 'CONFIGURATION',
-        parameterTemplate: {},
-        rationale: 'Enable full-disk encryption on the affected device.',
-      },
+      // No remediation offered. Endpoint posture is changed through Intune
+      // configuration profiles, which are tenant-wide objects: a change Adericel
+      // made to one would affect devices far beyond the finding that prompted it.
+      // Offering a button that cannot safely run is worse than offering none.
+      remediation: null,
       maxEvidenceAgeDays: 7,
     },
     {

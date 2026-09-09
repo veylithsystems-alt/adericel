@@ -3,6 +3,7 @@ export * from './http.js';
 export * from './normalise.js';
 export * from './connectors/microsoft-entra.js';
 export * from './connectors/microsoft-intune.js';
+export * from './connectors/google-workspace.js';
 export * from './connectors/generic-http.js';
 export * from './connectors/adericel-self.js';
 export * from './connectors/demo-fixture.js';

@@ -15,12 +15,20 @@ import { createHttpClient, type EgressPolicy } from '../http.js';
  * encryption, compliance and patch state per device, which maps directly onto
  * Adericel's device predicates.
  *
- * This connector is deliberately read-only. Intune remediations are performed
- * through configuration profiles, which are tenant-wide objects: a change
- * Adericel made to one would affect devices far beyond the finding that
- * prompted it. Endpoint remediation is therefore proposed and left to the MSP's
- * own change process, and the model records that honestly rather than
- * pretending to an autonomy the integration does not safely support.
+ * It offers no remediation for posture. Intune changes endpoint settings through
+ * configuration profiles, which are tenant-wide objects: a change Adericel made
+ * to one would affect devices far beyond the finding that prompted it. Endpoint
+ * remediation is therefore left to the MSP's own change process, and the model
+ * records that honestly rather than pretending to an autonomy the integration
+ * does not safely support. The rulesets agree — no rule proposes an action that
+ * nothing here can perform, and a test asserts it.
+ *
+ * It does offer one action, and it is worth explaining why it belongs.
+ * `device.management.sync` forces a single device to check in. It changes no
+ * setting; it refreshes what Intune knows about one device. That matters
+ * because the most common reason a device control reports UNKNOWN is not a
+ * missing control, it is a device that has not synced for a fortnight — and
+ * "we cannot see this device" is a finding with a remedy, not a dead end.
  */
 
 const configSchema = z.object({
@@ -129,7 +137,27 @@ export function createMicrosoftIntuneConnector(deps: {
       'DeviceManagementConfiguration.Read.All (application) — read configuration profile assignment',
     ],
     defaultSchedule: '0 */4 * * *',
-    capabilities: [],
+
+    capabilities: [
+      {
+        actionType: 'device.management.sync',
+        title: 'Ask the device to check in',
+        description:
+          'Requests an immediate Intune check-in for one device. Changes no setting on the device: ' +
+          'it refreshes what Intune knows, which is what resolves a device reporting UNKNOWN ' +
+          'because its posture data is stale.',
+        riskClass: 'READ_ONLY',
+        parameterSchema: z.object({}),
+        verification: {
+          method: 'intune.managedDevice.read',
+          description:
+            'Re-read the device and confirm it has synced since the request. A device that is ' +
+            'switched off will not, and the action reports UNVERIFIED rather than success.',
+          predicate: 'device.sync.recent',
+          expectedValue: true,
+        },
+      },
+    ],
 
     async checkConnection(config, credentials, context): Promise<ConnectionCheck> {
       try {
@@ -142,6 +170,56 @@ export function createMicrosoftIntuneConnector(deps: {
         return { connected: true, detail: 'Connected to Intune device management.' };
       } catch (error) {
         return { connected: false, detail: (error as Error).message };
+      }
+    },
+
+    async execute(config, credentials, request, context) {
+      if (request.actionType !== 'device.management.sync') {
+        return {
+          status: 'FAILED' as const,
+          externalOperationRef: null,
+          detail: `The Intune connector does not perform ${request.actionType}`,
+          errorCode: 'UNSUPPORTED_ACTION',
+          retryable: false,
+        };
+      }
+      if (!request.targetExternalId) {
+        return {
+          status: 'FAILED' as const,
+          externalOperationRef: null,
+          detail: 'No target device was supplied',
+          errorCode: 'MISSING_TARGET',
+          retryable: false,
+        };
+      }
+
+      try {
+        const accessToken = await token(config, credentials, context);
+        const response = await http(context).request({
+          method: 'POST',
+          url: `${config.graphBaseUrl}/deviceManagement/managedDevices/${request.targetExternalId}/syncDevice`,
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+            'client-request-id': request.idempotencyKey,
+          },
+        });
+        return {
+          // Graph accepting the request means the request was queued, not that
+          // the device has checked in. Verification re-reads the sync time; a
+          // device that is switched off never confirms, and that is the correct
+          // outcome rather than a failure.
+          status: 'SUCCEEDED' as const,
+          externalOperationRef: response.headers['request-id'] ?? request.idempotencyKey,
+          detail: 'Check-in requested. The device confirms it by syncing.',
+        };
+      } catch (error) {
+        return {
+          status: 'FAILED' as const,
+          externalOperationRef: null,
+          detail: (error as Error).message,
+          errorCode: 'GRAPH_ERROR',
+          retryable: true,
+        };
       }
     },
 
