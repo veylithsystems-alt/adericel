@@ -49,6 +49,7 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
           awaiting_approval: string;
           unverified_actions: string;
           failed_integrations: string;
+          degraded_integrations: string;
           last_assessed_at: Date | null;
         }>(
           `SELECT o.id AS organisation_id, o.name, o.slug, o.status,
@@ -79,7 +80,9 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
              (SELECT count(*)::text FROM actions ac
                WHERE ac.organisation_id = o.id AND ac.state = 'UNVERIFIED') AS unverified_actions,
              (SELECT count(*)::text FROM integrations i
-               WHERE i.organisation_id = o.id AND i.status IN ('FAILED','DEGRADED')) AS failed_integrations,
+               WHERE i.organisation_id = o.id AND i.status = 'FAILED') AS failed_integrations,
+             (SELECT count(*)::text FROM integrations i
+               WHERE i.organisation_id = o.id AND i.status = 'DEGRADED') AS degraded_integrations,
              max(a.last_assessed_at) AS last_assessed_at
            FROM organisations o
            LEFT JOIN assurance_states a
@@ -118,6 +121,9 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
           awaitingApproval: Number(row.awaiting_approval),
           unverifiedActions: Number(row.unverified_actions),
           failedIntegrations: Number(row.failed_integrations),
+          // Degraded means collecting, but with known gaps — a different
+          // operational problem from an integration that is not collecting.
+          degradedIntegrations: Number(row.degraded_integrations),
           lastAssessedAt: row.last_assessed_at?.toISOString() ?? null,
           // Attention is a triage ordering, not a score. It is explicitly not
           // presented as a measure of security.
@@ -147,6 +153,7 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
           unverifiedActions: organisations.reduce((n, o) => n + o.unverifiedActions, 0),
           staleEvidence: organisations.reduce((n, o) => n + o.staleEvidence, 0),
           failedIntegrations: organisations.reduce((n, o) => n + o.failedIntegrations, 0),
+          degradedIntegrations: organisations.reduce((n, o) => n + o.degradedIntegrations, 0),
         },
         organisations,
       });

@@ -64,10 +64,13 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
       if (!passwordValid) {
         const attempts = user.failed_attempts + 1;
         await ctx.query(
+          // Both parameters are cast explicitly: PostgreSQL cannot infer a type
+          // when two placeholders are compared to each other, and an inference
+          // failure here would turn a wrong password into a 500.
           `UPDATE user_credentials
-           SET failed_attempts = $2,
-               locked_until = CASE WHEN $2 >= $3
-                                   THEN now() + ($4 || ' minutes')::interval
+           SET failed_attempts = $2::integer,
+               locked_until = CASE WHEN $2::integer >= $3::integer
+                                   THEN now() + ($4::text || ' minutes')::interval
                                    ELSE locked_until END
            WHERE user_id = $1`,
           [user.id, attempts, MAX_FAILED_ATTEMPTS, String(LOCKOUT_MINUTES)],

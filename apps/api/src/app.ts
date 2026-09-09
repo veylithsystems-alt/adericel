@@ -20,7 +20,6 @@ import { registerPortfolioRoutes } from './routes/portfolio.js';
 import { registerObservabilityRoutes } from './routes/observability.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
 import { buildOpenApiDocument } from './openapi.js';
-import './fastify.js';
 
 /**
  * HTTP application assembly.
@@ -32,10 +31,11 @@ import './fastify.js';
  */
 export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   const server = Fastify({
+    // Fastify's own request logging is disabled; Adericel emits one structured
+    // line per request in the onResponse hook, with the correlation id attached.
     logger: false,
     trustProxy: app.config.api.trustProxy,
     bodyLimit: app.config.api.bodyLimitBytes,
-    disableRequestLogging: true,
     genReqId: () => crypto.randomUUID(),
     ajv: { customOptions: { removeAdditional: false, coerceTypes: false } },
   });

@@ -157,7 +157,7 @@ export async function listAudit(
   const rows = await ctx.many<AuditRow>(
     `SELECT ${AUDIT_COLUMNS} FROM audit_log
      WHERE ${conditions.join(' AND ')}
-     ORDER BY occurred_at DESC, id DESC
+     ORDER BY seq DESC
      LIMIT $${values.length}`,
     values,
   );
@@ -188,7 +188,7 @@ export async function listAuditPlatform(
   const rows = await ctx.many<AuditRow>(
     `SELECT ${AUDIT_COLUMNS} FROM audit_log
      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
-     ORDER BY occurred_at DESC, id DESC
+     ORDER BY seq DESC
      LIMIT $${values.length}`,
     values,
   );

@@ -80,6 +80,16 @@ export interface ControlAssessmentInput {
   readonly organisationClaims: readonly ClaimFacts[];
   readonly evidence: readonly EvidenceFacts[];
   readonly activeExceptions: readonly ExceptionFacts[];
+  /**
+   * Node kinds this organisation has ever actually observed.
+   *
+   * This is what separates "we know there are no devices" from "we have never
+   * looked at devices". Without it, a rule scoped to a node kind that has never
+   * been collected would report NOT_APPLICABLE — quietly excluding itself from
+   * the denominator and letting an organisation with no endpoint collection at
+   * all look better than one where collection works and found a problem.
+   */
+  readonly observedSubjectKinds: readonly string[];
 }
 
 export interface SubjectOutcome {
@@ -274,6 +284,7 @@ function computeInputDigest(input: ControlAssessmentInput, ruleset: Ruleset, rul
         validFrom: e.validFrom,
         validUntil: e.validUntil,
       })),
+    observedSubjectKinds: [...input.observedSubjectKinds].sort(),
     exceptions: [...input.activeExceptions]
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((e) => ({ id: e.id, subjectNodeId: e.subjectNodeId, expiresAt: e.expiresAt })),
@@ -487,6 +498,35 @@ export function assessControl(
   const passing = inScope.filter((o) => o.value === 'TRUE');
   const failing = inScope.filter((o) => o.value === 'FALSE');
   const unknown = inScope.filter((o) => o.value === 'UNKNOWN');
+
+  // Nothing in scope has two very different meanings, and conflating them is
+  // how a never-collected asset class turns into a clean bill of health.
+  const everObserved = rule.subjectKinds.some((kind) => input.observedSubjectKinds.includes(kind));
+  if (inScope.length === 0 && !everObserved) {
+    return {
+      state: 'UNKNOWN',
+      unknownReason: 'NO_EVIDENCE',
+      rationale:
+        `${rule.title}: cannot be determined. Adericel has never observed any ` +
+        `${rule.subjectKinds.join(' or ')} in this organisation, so it cannot say whether the ` +
+        'control applies, let alone whether it is satisfied. Connect a source that covers this ' +
+        'asset class.',
+      reasoning: [
+        {
+          step: `${rule.key}:scope`,
+          outcome: 'UNKNOWN',
+          detail: `No ${rule.subjectKinds.join(' or ')} has ever been observed in this organisation`,
+        },
+      ],
+      severity: rule.severity,
+      claimIds: [],
+      evidenceIds: [],
+      subjectOutcomes: [],
+      failingSubjects: [],
+      unknownSubjects: [],
+      provenance,
+    };
+  }
 
   const state = aggregateSubjects(rule, inScope.length, passing.length, failing.length, unknown.length);
 

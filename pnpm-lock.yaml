@@ -8,6 +8,36 @@ importers:
 
   .:
     devDependencies:
+      '@adericel/actions':
+        specifier: workspace:*
+        version: link:packages/actions
+      '@adericel/api':
+        specifier: workspace:*
+        version: link:apps/api
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:packages/domain
+      '@adericel/evidence':
+        specifier: workspace:*
+        version: link:packages/evidence
+      '@adericel/graph':
+        specifier: workspace:*
+        version: link:packages/graph
+      '@adericel/integrations':
+        specifier: workspace:*
+        version: link:packages/integrations
+      '@adericel/policy':
+        specifier: workspace:*
+        version: link:packages/policy
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:packages/shared
+      '@adericel/truth-engine':
+        specifier: workspace:*
+        version: link:packages/truth-engine
+      '@adericel/worker':
+        specifier: workspace:*
+        version: link:apps/worker
       '@eslint/js':
         specifier: ^9.37.0
         version: 9.39.5

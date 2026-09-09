@@ -114,6 +114,12 @@ const ORG_ANALYST_PERMISSIONS: readonly Permission[] = [
   'org:risk:manage',
   'org:exception:request',
   'org:action:propose',
+  // Dispatching an already-approved action carries no additional authority:
+  // the action can only leave AUTHORISED, which required an approval by someone
+  // other than the proposer. The meaningful control is approval, not who
+  // presses the button, and withholding execute would only mean an approver has
+  // to come back and do it themselves.
+  'org:action:execute',
   'org:export',
 ];
 
@@ -144,7 +150,6 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     'org:evidence:revoke',
     'org:exception:approve',
     'org:action:approve',
-    'org:action:execute',
   ],
   MSP_ADMIN: [
     'msp:read',
@@ -160,7 +165,6 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     'org:integration:manage',
     'org:exception:approve',
     'org:action:approve',
-    'org:action:execute',
   ],
   MSP_ANALYST: ['msp:read', 'msp:organisation:read', ...ORG_ANALYST_PERMISSIONS],
   MSP_READONLY: ['msp:read', 'msp:organisation:read', ...ORG_READ_PERMISSIONS],
@@ -173,7 +177,6 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     'org:evidence:revoke',
     'org:exception:approve',
     'org:action:approve',
-    'org:action:execute',
   ],
   ORG_SECURITY_LEAD: [
     ...ORG_ANALYST_PERMISSIONS,

@@ -43,6 +43,16 @@
     "verify": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
+    "@adericel/actions": "workspace:*",
+    "@adericel/api": "workspace:*",
+    "@adericel/domain": "workspace:*",
+    "@adericel/evidence": "workspace:*",
+    "@adericel/graph": "workspace:*",
+    "@adericel/integrations": "workspace:*",
+    "@adericel/policy": "workspace:*",
+    "@adericel/shared": "workspace:*",
+    "@adericel/truth-engine": "workspace:*",
+    "@adericel/worker": "workspace:*",
     "@eslint/js": "^9.37.0",
     "@types/node": "^22.18.0",
     "@types/pg": "^8.15.5",

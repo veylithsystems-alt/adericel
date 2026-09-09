@@ -54,8 +54,19 @@ export interface ConnectorCapability {
 
 export interface CollectionResult {
   readonly observations: readonly ObservationInput[];
-  /** Non-fatal problems; the run is PARTIAL rather than FAILED. */
+  /**
+   * Advisory notes about the run. A warning is informational — it does not by
+   * itself mean the collection was incomplete, and it must not be allowed to
+   * mark a healthy integration as degraded.
+   */
   readonly warnings: readonly string[];
+  /**
+   * Set when the connector knows it did not collect everything it should have:
+   * a page limit was hit, a permission was missing, a sub-resource failed. This
+   * is what marks the run PARTIAL and the integration DEGRADED, because it means
+   * the resulting assurance picture has holes the connector can see.
+   */
+  readonly partial?: boolean;
   /** Opaque cursor for incremental collection on the next run. */
   readonly cursor: string | null;
 }

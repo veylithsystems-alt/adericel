@@ -52,6 +52,7 @@ function input(overrides: Partial<ControlAssessmentInput> = {}): ControlAssessme
     organisationClaims: [],
     evidence: [evidence()],
     activeExceptions: [],
+    observedSubjectKinds: ['Identity', 'Device', 'CloudResource', 'DataAsset', 'Policy', 'Supplier'],
     ...overrides,
   };
 }
@@ -150,8 +151,20 @@ describe('assessControl — UNKNOWN is preserved', () => {
     expect(result.unknownSubjects).toHaveLength(1);
   });
 
-  it('reports NOT_APPLICABLE, never SATISFIED, when nothing is in scope', () => {
+  it('reports NOT_APPLICABLE when the asset class was observed and none are in scope', () => {
     expect(assessControl(baseline, input({ subjects: [] })).state).toBe('NOT_APPLICABLE');
+  });
+
+  it('reports UNKNOWN, not NOT_APPLICABLE, when the asset class has never been observed', () => {
+    // The dangerous case: an organisation with no endpoint collection at all
+    // must not look better than one where collection works and found a problem.
+    const result = assessControl(
+      baseline,
+      input({ subjects: [], observedSubjectKinds: ['Organisation'] }),
+    );
+    expect(result.state).toBe('UNKNOWN');
+    expect(result.unknownReason).toBe('NO_EVIDENCE');
+    expect(result.rationale).toMatch(/never observed/);
   });
 
   it('keeps a subject in scope and unknown when applicability cannot be resolved', () => {

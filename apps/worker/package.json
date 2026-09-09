@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./dist/main.js",
+  "main": "./dist/index.js",
   "scripts": {
     "build": "tsc -b",
     "dev": "tsx --conditions=development watch src/main.ts",
@@ -23,5 +23,16 @@
   },
   "devDependencies": {
     "@types/pg": "^8.15.5"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "adericel-worker": "./dist/main.js"
   }
 }

@@ -254,13 +254,20 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
     },
   );
 
-  /** Run a collection now. */
+  /**
+   * Run a collection now.
+   *
+   * Gated on evidence:write rather than integration:manage. Triggering a
+   * collection produces evidence; it does not change how the integration is
+   * configured or what credentials it holds. An analyst who can record evidence
+   * by hand should not need elevated rights to refresh it from the source.
+   */
   server.post(
     '/v1/organisations/:organisationId/integrations/:id/collect',
     { preHandler: server.authenticate },
     async (request, reply) => {
       const params = parseParams(request, orgChild);
-      await requireOrganisation(app, request, params.organisationId, 'org:integration:manage');
+      await requireOrganisation(app, request, params.organisationId, 'org:evidence:write');
 
       const outcome = await app.db.withTenant(params.organisationId, async (ctx) =>
         createCollectionService({

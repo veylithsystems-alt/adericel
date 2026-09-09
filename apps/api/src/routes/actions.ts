@@ -178,7 +178,7 @@ export function registerActionRoutes(server: FastifyInstance, app: AppContext): 
           occurred_at: Date;
         }>(
           `SELECT from_state, to_state, actor, reason, occurred_at
-           FROM action_transitions WHERE action_id = $1 ORDER BY occurred_at, id`,
+           FROM action_transitions WHERE action_id = $1 ORDER BY seq`,
           [params.id],
         );
         const executions = await ctx.many<{

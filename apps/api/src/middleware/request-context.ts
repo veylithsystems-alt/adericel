@@ -23,6 +23,13 @@ export interface RequestContext {
   auditAction: string | null;
   auditResourceType: string | null;
   auditResourceId: string | null;
+  /**
+   * Set once a denial has been written for this request, so the error-boundary
+   * auditor does not record a second entry for the same refusal.
+   */
+  deniedAudited: boolean;
+  /** The organisation the request named, even if access to it was refused. */
+  candidateOrganisationId: string | null;
 }
 
 declare module 'fastify' {
@@ -52,6 +59,8 @@ export function attachRequestContext(app: AppContext) {
       auditAction: null,
       auditResourceType: null,
       auditResourceId: null,
+      deniedAudited: false,
+      candidateOrganisationId: null,
     };
 
     reply.header('x-correlation-id', correlationId);
@@ -115,6 +124,7 @@ export async function requireOrganisation(
   permission: Permission,
 ): Promise<string> {
   const principal = requirePrincipal(request);
+  request.adericel.candidateOrganisationId = candidateOrganisationId;
 
   const owner = await organisationOwner(app, candidateOrganisationId);
   if (!owner) {
@@ -193,12 +203,16 @@ async function writeDenial(
   reason: string,
 ): Promise<void> {
   const principal = request.adericel.principal;
+  request.adericel.deniedAudited = true;
   try {
     await app.db.withPlatform(async (ctx) =>
       recordAudit(
         ctx,
         {
-          organisationId: null,
+          // Recorded against the organisation the caller named, so the refusal
+          // appears in that organisation's audit trail rather than vanishing
+          // into a platform-scoped log nobody reads.
+          organisationId: request.adericel.candidateOrganisationId,
           mspId: principal?.mspId ?? null,
           actorType: principal?.principalType ?? 'ANONYMOUS',
           actorId: principal?.principalId ?? 'anonymous',
@@ -226,6 +240,39 @@ async function writeDenial(
   }
 }
 
+/**
+ * Audit any refusal that reached the error boundary.
+ *
+ * Authorisation denials are recorded where they are decided; this catches the
+ * ones raised deeper in the domain — a four-eyes violation, a policy denial, a
+ * tenant mismatch — so that every refusal lands in the audit trail regardless of
+ * which layer said no.
+ */
+export async function auditDenialFromError(
+  app: AppContext,
+  request: FastifyRequest,
+  error: AdericelError,
+): Promise<void> {
+  if (request.adericel?.deniedAudited) return;
+  const denialCodes = new Set(['FORBIDDEN', 'TENANT_MISMATCH', 'POLICY_DENIED', 'APPROVAL_REQUIRED']);
+  if (!denialCodes.has(error.code)) return;
+  request.adericel.deniedAudited = true;
+
+  await audit(app, request, {
+    action: `denied:${request.method.toLowerCase()}`,
+    resourceType: 'Request',
+    resourceId: request.adericel.organisationId ?? request.adericel.candidateOrganisationId,
+    outcome: 'DENIED',
+    reason: error.message,
+    metadata: { code: error.code, path: request.routeOptions?.url ?? request.url },
+  }).catch((auditError: unknown) => {
+    request.adericel.logger.error(
+      { err: (auditError as Error).message },
+      'failed to audit a denial raised at the error boundary',
+    );
+  });
+}
+
 /** Record a successful, audit-worthy operation. */
 export async function audit(
   app: AppContext,
@@ -234,7 +281,7 @@ export async function audit(
     action: string;
     resourceType: string;
     resourceId?: string | null;
-    outcome?: 'SUCCESS' | 'FAILURE';
+    outcome?: 'SUCCESS' | 'DENIED' | 'FAILURE';
     reason?: string | null;
     metadata?: Record<string, unknown>;
     ctx?: TenantContext;

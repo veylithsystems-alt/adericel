@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AdericelError, toErrorBody, isAdericelError, errorFields } from '@adericel/shared';
 import { z, type ZodType } from 'zod';
 import type { AppContext } from '../context.js';
+import { auditDenialFromError } from './request-context.js';
 
 /**
  * Request validation and error translation.
@@ -61,6 +62,9 @@ export function errorHandler(app: AppContext) {
     const logger = request.adericel?.logger ?? app.logger;
 
     if (isAdericelError(error)) {
+      // Every refusal reaches the audit trail, whichever layer raised it.
+      void auditDenialFromError(app, request, error);
+
       // A tenant-isolation refusal is a security event, not a routine 403.
       const level = error.code === 'TENANT_MISMATCH' ? 'error' : error.status >= 500 ? 'error' : 'warn';
       logger[level](

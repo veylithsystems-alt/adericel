@@ -41,13 +41,33 @@ export interface ExportBundle {
 
 const MAX_ROWS_PER_TABLE = 50_000;
 
+/**
+ * Convert database rows to the vocabulary the API uses everywhere else.
+ *
+ * An export is a document a customer reads and a competitor imports, so it
+ * speaks the same language as the API rather than exposing column names, and
+ * timestamps are ISO strings rather than driver Date objects.
+ */
+function toApiShape<T extends Record<string, unknown>>(row: T): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    const camel = key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+    out[camel] = value instanceof Date ? value.toISOString() : value;
+  }
+  return out;
+}
+
+function toApiShapes(rows: readonly Record<string, unknown>[]): Record<string, unknown>[] {
+  return rows.map(toApiShape);
+}
+
 export async function exportOrganisation(
   app: AppContext,
   organisationId: string,
 ): Promise<ExportBundle> {
   const exportedAt = app.clock.nowIso();
 
-  const organisation = await app.db.withPlatform(async (ctx) =>
+  const organisationRow = await app.db.withPlatform(async (ctx) =>
     ctx.oneOrFail<Record<string, unknown>>(
       `SELECT id, msp_id, name, slug, status, country_code, industry, size_band, settings,
               onboarded_at, created_at
@@ -56,10 +76,13 @@ export async function exportOrganisation(
       'Organisation',
     ),
   );
+  const organisation = toApiShape(organisationRow);
 
   const data = await app.db.withTenant(organisationId, async (ctx) => {
     const q = async (sql: string) =>
-      ctx.many<Record<string, unknown>>(`${sql} LIMIT ${MAX_ROWS_PER_TABLE}`, [organisationId]);
+      toApiShapes(
+        await ctx.many<Record<string, unknown>>(`${sql} LIMIT ${MAX_ROWS_PER_TABLE}`, [organisationId]),
+      );
 
     return {
       nodes: await q(
@@ -76,19 +99,23 @@ export async function exportOrganisation(
                 parameters, source, enabled, created_at
          FROM controls WHERE organisation_id = $1 ORDER BY key`,
       ),
-      frameworks: await ctx.many<Record<string, unknown>>(
-        `SELECT f.id, f.key, f.name, f.version, f.publisher, f.description, orgf.adopted_at
-         FROM organisation_frameworks orgf
-         JOIN frameworks f ON f.id = orgf.framework_id
-         WHERE orgf.organisation_id = $1`,
-        [organisationId],
+      frameworks: toApiShapes(
+        await ctx.many<Record<string, unknown>>(
+          `SELECT f.id, f.key, f.name, f.version, f.publisher, f.description, orgf.adopted_at
+           FROM organisation_frameworks orgf
+           JOIN frameworks f ON f.id = orgf.framework_id
+           WHERE orgf.organisation_id = $1`,
+          [organisationId],
+        ),
       ),
-      requirements: await ctx.many<Record<string, unknown>>(
-        `SELECT DISTINCT r.id, r.framework_id, r.key, r.title, r.description, r.weight
-         FROM requirements r
-         JOIN organisation_frameworks orgf ON orgf.framework_id = r.framework_id
-         WHERE orgf.organisation_id = $1`,
-        [organisationId],
+      requirements: toApiShapes(
+        await ctx.many<Record<string, unknown>>(
+          `SELECT DISTINCT r.id, r.framework_id, r.key, r.title, r.description, r.weight
+           FROM requirements r
+           JOIN organisation_frameworks orgf ON orgf.framework_id = r.framework_id
+           WHERE orgf.organisation_id = $1`,
+          [organisationId],
+        ),
       ),
       assuranceStates: await q(
         `SELECT subject_kind, subject_id, state, unknown_reason, assessment_id, previous_state,

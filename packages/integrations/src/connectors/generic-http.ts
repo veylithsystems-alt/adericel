@@ -264,7 +264,7 @@ export function createGenericHttpConnector(deps: {
         pages += 1;
       } while (cursor && pages < maxPages);
 
-      return { observations, warnings, cursor };
+      return { observations, warnings, partial: warnings.length > 0, cursor };
     },
   };
 }

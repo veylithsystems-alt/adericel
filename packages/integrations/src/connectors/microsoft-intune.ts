@@ -193,12 +193,13 @@ export function createMicrosoftIntuneConnector(deps: {
         pages += 1;
       }
 
-      if (pages >= 50) warnings.push('Device collection stopped at the page limit.');
+      const truncated = pages >= 50;
+      if (truncated) warnings.push('Device collection stopped at the page limit.');
       if (observations.length === 0) {
         warnings.push('No managed devices were returned. Endpoint controls will report UNKNOWN.');
       }
 
-      return { observations, warnings, cursor: null };
+      return { observations, warnings, partial: truncated, cursor: null };
     },
   };
 }

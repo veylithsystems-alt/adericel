@@ -41,12 +41,19 @@ function tsExtensionResolver(): Plugin {
 export default defineConfig({
   plugins: [tsExtensionResolver()],
   resolve: {
-    alias: Object.fromEntries(
-      workspacePackages.map((name) => [
-        `@adericel/${name}`,
-        path.resolve(root, `packages/${name}/src/index.ts`),
-      ]),
-    ),
+    alias: {
+      ...Object.fromEntries(
+        workspacePackages.map((name) => [
+          `@adericel/${name}`,
+          path.resolve(root, `packages/${name}/src/index.ts`),
+        ]),
+      ),
+      // Apps expose an importable surface separate from their runnable
+      // entrypoint, so a test can build the server without main.ts installing
+      // process-level signal and exit handlers.
+      '@adericel/api': path.resolve(root, 'apps/api/src/index.ts'),
+      '@adericel/worker': path.resolve(root, 'apps/worker/src/index.ts'),
+    },
   },
   test: {
     globals: false,

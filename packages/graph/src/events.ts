@@ -234,7 +234,7 @@ export async function listEvents(
        AND ($2::text[] IS NULL OR type = ANY($2::text[]))
        AND ($3::uuid IS NULL OR correlation_id = $3::uuid)
        AND ($4::timestamptz IS NULL OR occurred_at >= $4::timestamptz)
-     ORDER BY occurred_at DESC, id DESC
+     ORDER BY seq DESC
      LIMIT $5`,
     [
       ctx.organisationId,

@@ -319,7 +319,9 @@ export function createMicrosoftEntraConnector(
         payload: { adminCount: privilegedIds.size },
       });
 
-      return { observations, warnings, cursor: null };
+      // Truncated pages or an unavailable permission mean the picture has holes
+      // the connector can see, so the run is explicitly partial.
+      return { observations, warnings, partial: truncated || !mfaAvailable, cursor: null };
     },
 
     async execute(config, credentials, request, context): Promise<ExecutionResult> {

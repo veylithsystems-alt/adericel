@@ -124,7 +124,7 @@ export function registerObservabilityRoutes(server: FastifyInstance, app: AppCon
         }>(
           `SELECT id, type, subject_type, subject_id, payload, actor, occurred_at
            FROM event_log WHERE organisation_id = $1 AND correlation_id = $2
-           ORDER BY occurred_at, id`,
+           ORDER BY seq`,
           [params.organisationId, params.correlationId],
         );
         const audits = await ctx.many<{
@@ -137,7 +137,7 @@ export function registerObservabilityRoutes(server: FastifyInstance, app: AppCon
         }>(
           `SELECT action, resource_type, resource_id, outcome, actor_display, occurred_at
            FROM audit_log WHERE organisation_id = $1 AND correlation_id = $2
-           ORDER BY occurred_at`,
+           ORDER BY seq`,
           [params.organisationId, params.correlationId],
         );
         const assessments = await ctx.many<{
@@ -149,12 +149,23 @@ export function registerObservabilityRoutes(server: FastifyInstance, app: AppCon
         }>(
           `SELECT id, subject_kind, subject_id, state, assessed_at
            FROM assessments WHERE organisation_id = $1 AND correlation_id = $2
-           ORDER BY assessed_at`,
+           ORDER BY seq`,
           [params.organisationId, params.correlationId],
         );
+        // Correlation ids are per-request, so a multi-step operation — propose,
+        // approve, execute, verify — spans several. An action is therefore
+        // included when it was proposed under this correlation OR when any event
+        // in this correlation is about it, which is what makes the trace follow
+        // the whole operation rather than one request of it.
         const actions = await ctx.many<{ id: string; action_type: string; state: string }>(
-          `SELECT id, action_type, state FROM actions
-           WHERE organisation_id = $1 AND correlation_id = $2`,
+          `SELECT DISTINCT a.id, a.action_type, a.state
+           FROM actions a
+           WHERE a.organisation_id = $1
+             AND (a.correlation_id = $2
+                  OR a.id::text IN (
+                    SELECT subject_id FROM event_log
+                    WHERE organisation_id = $1 AND correlation_id = $2 AND subject_type = 'Action'
+                  ))`,
           [params.organisationId, params.correlationId],
         );
         return { events, audits, assessments, actions };

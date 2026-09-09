@@ -180,6 +180,9 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
           'This is demonstration data produced by the Adericel fixture connector. It does not ' +
             'describe a real environment.',
         ],
+        // Advisory only. The fixture returns its whole dataset every time, so
+        // the collection is complete even though the data is not real.
+        partial: false,
         cursor: null,
       };
     },

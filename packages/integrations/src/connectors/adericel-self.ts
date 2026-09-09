@@ -169,7 +169,13 @@ export function createAdericelSelfConnector(probe: SelfAssuranceProbe): Connecto
         warnings.push('Secrets are not managed by an external secret manager.');
       }
 
-      return { observations, warnings, cursor: null };
+      // Unreachable dependencies mean the self-assurance picture is incomplete.
+      return {
+        observations,
+        warnings,
+        partial: !snapshot.databaseReachable || !snapshot.objectStorageReachable,
+        cursor: null,
+      };
     },
   };
 }

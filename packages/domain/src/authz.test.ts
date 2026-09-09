@@ -115,6 +115,19 @@ describe('role definitions', () => {
     expect(analyst.has('org:action:approve')).toBe(false);
   });
 
+  it('lets an analyst dispatch an action someone else approved', () => {
+    // Execution adds no authority: an action can only leave AUTHORISED, which
+    // already required an approval from someone other than the proposer.
+    const analyst = permissionsForRoles(['ORG_ANALYST']);
+    expect(analyst.has('org:action:execute')).toBe(true);
+  });
+
+  it('does not let a pure approver execute or propose', () => {
+    const approver = permissionsForRoles(['ORG_APPROVER']);
+    expect(approver.has('org:action:execute')).toBe(false);
+    expect(approver.has('org:action:propose')).toBe(false);
+  });
+
   it('never lets a read-only role write', () => {
     for (const role of ['ORG_READONLY', 'MSP_READONLY'] as const) {
       const permissions = ROLE_PERMISSIONS[role];

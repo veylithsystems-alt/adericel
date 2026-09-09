@@ -311,7 +311,9 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
           integration.connector.key,
         );
 
-        const status = result.warnings.length > 0 ? 'PARTIAL' : 'SUCCEEDED';
+        // Only an explicit partial signal degrades the integration. Advisory
+        // warnings are recorded but do not imply the collection was incomplete.
+        const status = result.partial === true ? 'PARTIAL' : 'SUCCEEDED';
 
         await ctx.query(
           `UPDATE integration_runs

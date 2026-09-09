@@ -191,6 +191,13 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       [ctx.organisationId, control.id, asOfIso],
     );
 
+    // Which node kinds this organisation has ever actually observed, so the
+    // engine can tell "no devices exist" from "we have never seen a device".
+    const observedRows = await ctx.many<{ kind: string }>(
+      `SELECT DISTINCT kind FROM graph_nodes WHERE organisation_id = $1`,
+      [ctx.organisationId],
+    );
+
     const subjects: SubjectFacts[] = subjectRows.map((row) => ({
       nodeId: row.id,
       kind: row.kind,
@@ -209,6 +216,7 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       subjects,
       organisationClaims: organisationClaims.map(toClaimFacts),
       evidence,
+      observedSubjectKinds: observedRows.map((row) => row.kind),
       activeExceptions: exceptionRows.map((row) => ({
         id: row.id,
         subjectNodeId: row.subject_node_id,
