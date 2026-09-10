@@ -10,5 +10,14 @@ export * from './connectors/demo-fixture.js';
 export * from './registry.js';
 export * from './manifest.js';
 export * from './planning.js';
-export * from './conflict.js';
 export * from './drift.js';
+// Conflict resolution reasons about claims, not about vendors, so it lives in
+// the domain. Re-exported here because the fabric is where callers look for it.
+export {
+  resolveConflict,
+  conflictBlocksClaim,
+  type AuthorityPolicy,
+  type ConflictOutcome,
+  type ConflictResolution,
+  type SourcedValue,
+} from '@adericel/domain';

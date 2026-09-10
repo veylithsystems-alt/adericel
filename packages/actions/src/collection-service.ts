@@ -5,7 +5,16 @@ import {
   createObservationRepository,
 } from '@adericel/evidence';
 import { createNodeRepository, publish, type TenantContext } from '@adericel/graph';
-import { normalise, type Connector, type ConnectorRegistry } from '@adericel/integrations';
+import {
+  capabilityInformative,
+  healthFromReports,
+  normalise,
+  unavailablePredicates,
+  type CapabilityReport,
+  type Connector,
+  type ConnectorRegistry,
+  type IntegrationHealth,
+} from '@adericel/integrations';
 import { AdericelError, contentHash, errorFields, type Clock, type Logger } from '@adericel/shared';
 import type { CredentialUnsealer } from './action-service.js';
 
@@ -39,7 +48,16 @@ export interface CollectionOutcome {
   readonly evidenceCreated: number;
   readonly claimsChanged: number;
   readonly nodesUpserted: number;
+  /**
+   * Predicates where two sources disagreed and nothing resolved it. Each one is
+   * a claim Adericel withheld, so this is a count of things it now knows it
+   * does NOT know — which is a better run than one that quietly picked a side.
+   */
+  readonly conflictsUnresolved: number;
   readonly warnings: readonly string[];
+  /** Deterministic health for the integration, derived from capability reports. */
+  readonly health: IntegrationHealth;
+  readonly capabilityReports: readonly CapabilityReport[];
   readonly error: string | null;
   readonly events: readonly NewDomainEvent[];
 }
@@ -49,6 +67,7 @@ export interface IngestOutcome {
   readonly evidenceCreated: number;
   readonly claimsChanged: number;
   readonly nodesUpserted: number;
+  readonly conflictsUnresolved: number;
   readonly events: readonly NewDomainEvent[];
 }
 
@@ -129,6 +148,7 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
     let evidenceCreated = 0;
     let claimsChanged = 0;
     let nodesUpserted = 0;
+    let conflictsUnresolved = 0;
 
     // Group by subject so one evidence artefact per observation still yields a
     // single upserted node per subject.
@@ -238,11 +258,38 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
             observedAt: claimInput.observedAt,
             validUntil: claimInput.validUntil,
             supersedesClaimId: null,
+            // Which source said so. Without it two integrations speaking to one
+            // predicate cannot be told apart, and the second silently
+            // supersedes the first.
+            sourceIntegrationId: integrationId,
             metadata: {},
           },
           actor,
           subjectNodeId ?? organisationNode.id,
         );
+
+        if (result.conflict !== null && result.conflict.resolution === 'UNRESOLVED') {
+          conflictsUnresolved += 1;
+          events.push({
+            type: 'ClaimDisputed',
+            organisationId: ctx.organisationId,
+            subjectType: 'Claim',
+            subjectId: result.claim.id,
+            payload: {
+              predicate: result.conflict.predicate,
+              subjectNodeId,
+              distinctValues: result.conflict.distinctValues,
+              sources: result.conflict.sources.map((source) => ({
+                integrationId: source.integrationId,
+                displayName: source.displayName,
+                value: source.value,
+              })),
+              detail: result.conflict.detail,
+            },
+            correlationId,
+            actor,
+          });
+        }
 
         if (result.changed) {
           claimsChanged += 1;
@@ -272,8 +319,57 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
       evidenceCreated,
       claimsChanged,
       nodesUpserted,
+      conflictsUnresolved,
       events,
     };
+  }
+
+  /**
+   * Persist how each declared capability fared.
+   *
+   * `unavailable_predicates` is denormalised deliberately: it is read on the
+   * assurance explanation path, which must keep working months later even if
+   * the connector has since been rewritten to declare different capabilities.
+   */
+  async function recordCapabilityReports(
+    integrationId: string,
+    runId: string,
+    manifest: Connector['manifest'],
+    reports: readonly CapabilityReport[],
+  ): Promise<void> {
+    if (reports.length === 0) return;
+    const byKey = new Map(manifest.collect.map((capability) => [capability.key, capability]));
+    for (const report of reports) {
+      const capability = byKey.get(report.capability);
+      const lost = capabilityInformative(report.outcome) ? [] : (capability?.predicates ?? []);
+      await ctx.query(
+        `INSERT INTO integration_capability_reports
+           (organisation_id, integration_id, integration_run_id, capability, outcome, detail,
+            records_collected, observations_produced, required_permission,
+            unavailable_predicates, missing_fields)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11::text[])
+         ON CONFLICT (integration_run_id, capability) DO UPDATE SET
+           outcome = EXCLUDED.outcome,
+           detail = EXCLUDED.detail,
+           records_collected = EXCLUDED.records_collected,
+           observations_produced = EXCLUDED.observations_produced,
+           unavailable_predicates = EXCLUDED.unavailable_predicates,
+           missing_fields = EXCLUDED.missing_fields`,
+        [
+          ctx.organisationId,
+          integrationId,
+          runId,
+          report.capability,
+          report.outcome,
+          report.detail.slice(0, 2000),
+          report.recordsCollected,
+          report.observationsProduced,
+          report.requiredPermission ?? capability?.requiredPermission ?? '',
+          [...lost],
+          [...(report.missingFields ?? [])],
+        ],
+      );
+    }
   }
 
   const service: CollectionService = {
@@ -315,9 +411,26 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
           integration.connector.key,
         );
 
+        const capabilityReports = result.capabilityReports ?? [];
+        await recordCapabilityReports(
+          integration.id,
+          run.id,
+          integration.connector.manifest,
+          capabilityReports,
+        );
+
         // Only an explicit partial signal degrades the integration. Advisory
         // warnings are recorded but do not imply the collection was incomplete.
-        const status = result.partial === true ? 'PARTIAL' : 'SUCCEEDED';
+        // A capability that failed does, because the connector saw it fail.
+        const status =
+          result.partial === true || capabilityReports.some((r) => !capabilityInformative(r.outcome))
+            ? 'PARTIAL'
+            : 'SUCCEEDED';
+        const health = capabilityReports.length > 0
+          ? healthFromReports(capabilityReports)
+          : result.partial === true
+            ? 'PARTIAL'
+            : 'HEALTHY';
 
         await ctx.query(
           `UPDATE integration_runs
@@ -327,12 +440,50 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
         );
         await ctx.query(
           `UPDATE integrations
-           SET status = $2, last_run_at = $3::timestamptz, last_success_at = $3::timestamptz,
+           SET status = $2, health = $5, fidelity = $6,
+               last_run_at = $3::timestamptz, last_success_at = $3::timestamptz,
                consecutive_failures = 0, last_error = NULL,
                configuration = configuration || jsonb_build_object('cursor', $4::text)
            WHERE id = $1`,
-          [integration.id, status === 'PARTIAL' ? 'DEGRADED' : 'CONNECTED', now, result.cursor],
+          [
+            integration.id,
+            status === 'PARTIAL' ? 'DEGRADED' : 'CONNECTED',
+            now,
+            result.cursor,
+            health,
+            integration.connector.manifest.fidelity,
+          ],
         );
+
+        const extraEvents: NewDomainEvent[] = [];
+        const degraded = capabilityReports.filter((r) => !capabilityInformative(r.outcome));
+        if (degraded.length > 0) {
+          // Named, not lumped into "degraded": an operator needs to know which
+          // capability failed and which permission would fix it.
+          const event: NewDomainEvent = {
+            type: 'IntegrationCapabilityDegraded',
+            organisationId: ctx.organisationId,
+            subjectType: 'Integration',
+            subjectId: integration.id,
+            payload: {
+              health,
+              capabilities: degraded.map((report) => ({
+                capability: report.capability,
+                outcome: report.outcome,
+                detail: report.detail,
+                requiredPermission: report.requiredPermission ?? null,
+              })),
+              unavailablePredicates: unavailablePredicates(
+                integration.connector.manifest,
+                capabilityReports,
+              ),
+            },
+            correlationId,
+            actor,
+          };
+          await publish(ctx, event, now);
+          extraEvents.push(event);
+        }
 
         return {
           integrationId: integration.id,
@@ -343,9 +494,12 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
           evidenceCreated: processed.evidenceCreated,
           claimsChanged: processed.claimsChanged,
           nodesUpserted: processed.nodesUpserted,
+          conflictsUnresolved: processed.conflictsUnresolved,
+          health,
+          capabilityReports,
           warnings: result.warnings,
           error: null,
-          events: processed.events,
+          events: [...processed.events, ...extraEvents],
         };
       } catch (error) {
         const message = (error as Error).message;
@@ -387,6 +541,9 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
           evidenceCreated: 0,
           claimsChanged: 0,
           nodesUpserted: 0,
+          conflictsUnresolved: 0,
+          health: 'UPSTREAM_UNAVAILABLE',
+          capabilityReports: [],
           warnings: [],
           error: message,
           events: [event],

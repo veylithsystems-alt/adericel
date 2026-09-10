@@ -8,7 +8,7 @@ import {
   type ConnectorManifest,
 } from './manifest.js';
 import { discoverCoverage, indexPredicateSources, planCollection } from './planning.js';
-import { conflictBlocksClaim, resolveConflict, type SourcedValue } from './conflict.js';
+import { conflictBlocksClaim, resolveConflict, type SourcedValue } from '@adericel/domain';
 import { detectDrift } from './drift.js';
 import { normalise, predicatesForPayloadKeys, PREDICATE_MAP } from './normalise.js';
 

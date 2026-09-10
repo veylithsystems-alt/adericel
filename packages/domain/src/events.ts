@@ -26,6 +26,13 @@ export const EVENT_TYPES = [
   'ClaimCreated',
   'ClaimChanged',
   'ClaimConfirmed',
+  /**
+   * Two sources disagreed and nothing resolved it, so the claim was withheld.
+   * A first-class event because it is a change in what Adericel is prepared to
+   * assert, and the controls resting on it have just become UNKNOWN.
+   */
+  'ClaimDisputed',
+  'IntegrationCapabilityDegraded',
   'AssessmentRequested',
   'AssessmentCompleted',
   'AssuranceStateChanged',

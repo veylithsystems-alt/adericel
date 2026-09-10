@@ -30,6 +30,15 @@ export const CLAIM_STATUSES = [
   'REJECTED',
   'SUPERSEDED',
   'WITHDRAWN',
+  /**
+   * Two sources disagree and nothing configured resolves it.
+   *
+   * A disputed claim is one Adericel refuses to read, not one it reads
+   * cautiously: it is excluded from every rule query, so the controls resting
+   * on it report UNKNOWN with the disagreement as their reason. Choosing a
+   * value here would mean deciding a contested fact by scheduling accident.
+   */
+  'DISPUTED',
 ] as const;
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 export const claimStatusSchema = z.enum(CLAIM_STATUSES);
@@ -57,6 +66,8 @@ export interface ClaimRecord {
   readonly createdAt: string;
   readonly createdByActor: string;
   readonly metadata: Record<string, unknown>;
+  /** The integration that produced this claim, or null if a person or a verification did. */
+  readonly sourceIntegrationId: string | null;
 }
 
 export const claimInputSchema = z.object({
@@ -75,6 +86,15 @@ export const claimInputSchema = z.object({
   observedAt: z.string().datetime().nullable().optional(),
   validUntil: z.string().datetime().nullable().optional(),
   supersedesClaimId: z.string().uuid().nullable().optional(),
+  /**
+   * The integration that produced this claim, where one did.
+   *
+   * Null for human assertions and verification-derived claims, which have no
+   * source integration and must not be given a borrowed one. Recorded so that
+   * two sources speaking to the same predicate can be compared rather than
+   * silently superseding one another.
+   */
+  sourceIntegrationId: z.string().uuid().nullable().optional(),
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -93,6 +113,9 @@ export function isRuleEligible(claim: Pick<ClaimRecord, 'origin' | 'status'>): {
   if (claim.status === 'REJECTED') return { eligible: false, reason: 'Claim was rejected' };
   if (claim.status === 'WITHDRAWN') return { eligible: false, reason: 'Claim was withdrawn' };
   if (claim.status === 'SUPERSEDED') return { eligible: false, reason: 'Claim was superseded' };
+  if (claim.status === 'DISPUTED') {
+    return { eligible: false, reason: 'Sources disagree and the disagreement is unresolved' };
+  }
   if (claim.origin === 'AI_SUGGESTED' && claim.status !== 'CONFIRMED') {
     return {
       eligible: false,
