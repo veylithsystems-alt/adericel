@@ -1,0 +1,102 @@
+{
+  "name": "Money Engine — 03 Idle Cash & Capital",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [6],
+              "triggerAtHour": 7
+            }
+          ]
+        }
+      },
+      "id": "trigger-weekly",
+      "name": "Weekly Saturday 7am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    account_id,\n    COALESCE(account_label, account_id) AS account_label,\n    balance_gbp,\n    interest_rate_pct,\n    is_current_account\nFROM money.balances\nWHERE updated_at >= now() - INTERVAL '7 days'\nORDER BY balance_gbp DESC;",
+        "options": {}
+      },
+      "id": "load-balances",
+      "name": "Load Balances",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [-440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Did the monthly investment transfer actually happen?\n-- We look for any outgoing payment in the last 40 days whose description\n-- looks like an investment platform. Adjust the keyword list to match\n-- whichever provider you actually use.\nSELECT\n    COUNT(*)                     AS transfer_count,\n    COALESCE(MAX(booked_at), '1970-01-01'::date) AS last_transfer_date,\n    COALESCE(SUM(ABS(amount_gbp)), 0)            AS total_invested_gbp\nFROM money.transactions\nWHERE amount_gbp < 0\n  AND booked_at >= CURRENT_DATE - INTERVAL '40 days'\n  AND (\n        raw_description ILIKE '%vanguard%'\n     OR raw_description ILIKE '%invest%'\n     OR raw_description ILIKE '%isa%'\n     OR raw_description ILIKE '%hargreaves%'\n     OR raw_description ILIKE '%fidelity%'\n     OR raw_description ILIKE '%aj bell%'\n     OR raw_description ILIKE '%interactive investor%'\n  );",
+        "options": {}
+      },
+      "id": "check-capital",
+      "name": "Check Investment Transfer",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [-220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================================\n// IDLE CASH + CAPITAL CHECK\n//\n// Mirrors config/levers.yml -> leak_detection.idle_cash and capital\n// =====================================================================\nconst CONFIG = {\n  bufferGbp:                 2000,   // keep this liquid, don't flag it\n  minAnnualGainGbp:          50,     // below this, stay silent\n  assumedBestEasyAccessPct:  4.50,   // fallback if the live check fails\n  monthlyInvestmentGbp:      0,      // 0 = not set up yet\n  missedTransferGraceDays:   3,\n};\n\nconst balances = $('Load Balances').all().map(i => i.json);\nconst capital  = $('Check Investment Transfer').first().json;\n\nconst findings = [];\nconst bestRate = CONFIG.assumedBestEasyAccessPct;\n\n// ---------------- idle cash sitting at a poor rate ----------------\nlet totalIdle = 0;\nfor (const acct of balances) {\n  const balance = parseFloat(acct.balance_gbp || 0);\n  const rate    = parseFloat(acct.interest_rate_pct || 0);\n\n  // Only the money above your liquidity buffer is genuinely \"idle\".\n  const idle = balance - CONFIG.bufferGbp;\n  if (idle <= 0) continue;\n\n  const rateGap = bestRate - rate;\n  if (rateGap <= 0) continue;\n\n  const annualGain = +(idle * (rateGap / 100)).toFixed(2);\n  if (annualGain < CONFIG.minAnnualGainGbp) continue;\n\n  totalIdle += idle;\n\n  findings.push({\n    // Bucket the value so small balance wobbles don't re-raise the same\n    // finding every week. Only a material change creates a new key.\n    dedupe_key: `idle_cash:${acct.account_id}:${Math.floor(annualGain / 50) * 50}`,\n    source: 'idle_cash',\n    title: `£${idle.toFixed(0)} is sitting at ${rate.toFixed(2)}% — worth £${annualGain.toFixed(0)}/yr to move`,\n    detail: `Account \"${acct.account_label}\" holds £${balance.toFixed(2)}. `\n          + `After keeping £${CONFIG.bufferGbp} liquid, £${idle.toFixed(2)} could earn `\n          + `roughly ${bestRate}% instead of ${rate.toFixed(2)}%. `\n          + `That is about £${annualGain.toFixed(2)} a year for one transfer and no risk. `\n          + `Check current best-buy easy-access rates before moving.`,\n    annual_value_gbp: annualGain,\n    minutes_required: 20,\n  });\n}\n\n// ---------------- did the investment standing order fire? ----------------\nif (CONFIG.monthlyInvestmentGbp > 0) {\n  const count = parseInt(capital.transfer_count || 0, 10);\n  if (count === 0) {\n    findings.push({\n      dedupe_key: `missed_investment:${new Date().toISOString().slice(0, 7)}`,\n      source: 'capital',\n      title: `This month's £${CONFIG.monthlyInvestmentGbp} investment transfer has not appeared`,\n      detail: `No payment to an investment platform found in the last 40 days. `\n            + `Either the standing order failed, or it was cancelled. `\n            + `This is the one part of the system that compounds — worth 5 minutes to fix.`,\n      annual_value_gbp: CONFIG.monthlyInvestmentGbp * 12,\n      minutes_required: 5,\n    });\n  }\n}\n\n// ---------------- ISA deadline: use it or lose it ----------------\n// UK tax year ends 5 April. Unused allowance does not roll over.\nconst now = new Date();\nconst year = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();\nconst isaDeadline = new Date(`${year}-04-05T00:00:00Z`);\nconst daysToDeadline = Math.ceil((isaDeadline - now) / 86400000);\n\nif (daysToDeadline <= 60 && daysToDeadline > 0) {\n  const urgency = daysToDeadline <= 14 ? 'FINAL WARNING' : 'Heads up';\n  findings.push({\n    dedupe_key: `isa_deadline:${year}:${daysToDeadline <= 14 ? 'final' : 'early'}`,\n    source: 'claims',\n    title: `${urgency}: ${daysToDeadline} days until the ISA allowance resets`,\n    detail: `The tax year ends 5 April ${year}. Any unused ISA allowance disappears — `\n          + `it does not carry over. If you have cash you won't need for a few years, `\n          + `sheltering it now costs nothing and saves tax on the growth forever.`,\n    annual_value_gbp: 100,\n    minutes_required: 30,\n    due_date: isaDeadline.toISOString().slice(0, 10),\n  });\n}\n\nfindings.sort((a, b) => b.annual_value_gbp - a.annual_value_gbp);\nreturn [{ json: { findings, total_idle_gbp: +totalIdle.toFixed(2) } }];"
+      },
+      "id": "analyse",
+      "name": "Analyse Cash Position",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nfunction esc(v) {\n  if (v === null || v === undefined) return 'NULL';\n  return \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\n}\n\nconst statements = (data.findings || []).map(f =>\n  `INSERT INTO money.actions\n  (dedupe_key, source, title, detail, annual_value_gbp, minutes_required, due_date, status)\nVALUES (${esc(f.dedupe_key)}, ${esc(f.source)}, ${esc(f.title)}, ${esc(f.detail)},\n        ${f.annual_value_gbp}, ${f.minutes_required}, ${esc(f.due_date || null)}, 'open')\nON CONFLICT (dedupe_key) DO NOTHING;`\n);\n\nstatements.push(`INSERT INTO money.sync_log (workflow, ok, rows_ingested, message)\nVALUES ('03-idle-cash', true, ${(data.findings || []).length}, ${esc(`£${data.total_idle_gbp || 0} idle`)});`);\n\nreturn [{ json: { sql: statements.join('\\n') } }];"
+      },
+      "id": "build-sql",
+      "name": "Build SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "persist",
+      "name": "Persist Findings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [440, 300]
+    }
+  ],
+  "connections": {
+    "Weekly Saturday 7am": {
+      "main": [[{ "node": "Load Balances", "type": "main", "index": 0 }]]
+    },
+    "Load Balances": {
+      "main": [[{ "node": "Check Investment Transfer", "type": "main", "index": 0 }]]
+    },
+    "Check Investment Transfer": {
+      "main": [[{ "node": "Analyse Cash Position", "type": "main", "index": 0 }]]
+    },
+    "Analyse Cash Position": {
+      "main": [[{ "node": "Build SQL", "type": "main", "index": 0 }]]
+    },
+    "Build SQL": {
+      "main": [[{ "node": "Persist Findings", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": ["money-engine"]
+}
