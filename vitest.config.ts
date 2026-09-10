@@ -63,12 +63,33 @@ export default defineConfig({
     include: ['tests/**/*.test.ts', 'packages/**/*.test.ts', 'apps/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'apps/web/**'],
     setupFiles: ['tests/setup.ts'],
+    // Runs once in the parent process, before any worker. The schema rebuild
+    // has to happen exactly once per run, and a lazy rebuild inside a worker
+    // races every other worker.
+    globalSetup: ['tests/global-setup.ts'],
     testTimeout: 30_000,
     hookTimeout: 60_000,
     pool: 'forks',
     poolOptions: {
       forks: { singleFork: true },
     },
+    /**
+     * Test files run one at a time.
+     *
+     * Every database suite shares one database and truncates it in `beforeAll`.
+     * Run two in parallel and one wipes the other's fixtures mid-test, which
+     * surfaces as transaction conflicts and missing rows — failures that point
+     * at the code rather than at the harness.
+     *
+     * This was previously implicit in `singleFork`. Making it explicit means the
+     * guarantee survives a runner upgrade changing what that option implies,
+     * which is exactly how it was lost.
+     *
+     * The cost is wall-clock time on a suite that takes under a minute. The
+     * alternative — a database per worker — is worth doing if that stops being
+     * true, and is not worth doing yet.
+     */
+    fileParallelism: false,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

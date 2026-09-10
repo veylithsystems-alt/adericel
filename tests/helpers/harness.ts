@@ -34,7 +34,6 @@ import { createFilesystemStore } from '@adericel/evidence';
 import { createRecordingNotifier, type RecordingNotifier } from '@adericel/notifications';
 import { buildServer, createAppContext, type AppContext } from '@adericel/api';
 import { buildHandlers, type JobType } from '@adericel/worker';
-import { up as migrateUp } from '../../scripts/migrate.js';
 
 export const TEST_INSTANT = '2026-09-09T12:00:00.000Z';
 
@@ -75,30 +74,23 @@ export async function databaseAvailable(): Promise<boolean> {
  * never make a suite pass or fail for the wrong reason.
  */
 export async function ensureMigrated(): Promise<void> {
+  // The schema is built once per run by the global setup, before any worker
+  // starts. Nothing to do here beyond confirming it happened: rebuilding from a
+  // worker is what caused several of them to drop the schema underneath each
+  // other.
   if (migrated) return;
-  const url = testDatabaseUrl();
-  if (!/test/i.test(url)) {
-    throw new Error(
-      `Refusing to rebuild the schema of a database whose name does not contain "test": ${url}`,
-    );
-  }
-  const client = new pg.Client({ connectionString: url });
+  const client = new pg.Client({ connectionString: testDatabaseUrl() });
   await client.connect();
   try {
-    // Every non-system schema, enumerated from the catalogue rather than
-    // listed here. A hard-coded list silently stops being complete the moment a
-    // migration introduces a schema, and the symptom is a migration replaying
-    // against objects that survived the reset — which is exactly what happened
-    // when `veylith` was added.
-    const schemas = await client.query<{ nspname: string }>(
-      `SELECT nspname FROM pg_namespace
-       WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'`,
+    const applied = await client.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM public.schema_migrations',
     );
-    for (const { nspname } of schemas.rows) {
-      await client.query(`DROP SCHEMA IF EXISTS "${nspname}" CASCADE`);
+    if (Number(applied.rows[0]?.count ?? 0) === 0) {
+      throw new Error(
+        'The test database has no migrations applied. The global setup did not run, or it ' +
+          'could not reach the database.',
+      );
     }
-    await client.query('CREATE SCHEMA public');
-    await migrateUp(client, () => undefined);
     migrated = true;
   } finally {
     await client.end();
@@ -250,14 +242,22 @@ export async function createHarness(
           RESTART IDENTITY CASCADE`);
 
         // Company operating state. Separate statement because these tables are
-        // outside the tenant cascade by design, and company_processes is
-        // deliberately NOT truncated: it is seeded reference data describing
-        // what the company does, not test fixture state.
+        // outside the tenant cascade by design.
         await ctx.query(`
           TRUNCATE TABLE
             veylith.exception_transitions, veylith.operational_exceptions,
-            veylith.business_events, veylith.policy_decisions, veylith.autonomy_policies
+            veylith.business_events, veylith.policy_decisions, veylith.autonomy_policies,
+            veylith.outreach, veylith.opportunities, veylith.prospects
           RESTART IDENTITY CASCADE`);
+
+        // company_processes survives — it is the registry of what the company
+        // does, not fixture data — but its maturity does NOT. Maturity is
+        // measured state, and a suite that raises it to exercise an autonomous
+        // path was leaving it raised for whatever ran next. That made a test
+        // asserting "nothing is automated yet" pass alone and fail in a full
+        // run, which is the worst kind of failure to debug.
+        await ctx.query(`UPDATE veylith.company_processes
+                         SET current_maturity = 0, enabled = true`);
       });
     },
   };
