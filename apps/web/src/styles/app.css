@@ -135,7 +135,15 @@ code,
 }
 .nav__link--active {
   opacity: 1;
-  border-bottom-color: var(--state-proven);
+  /*
+   * Deliberately NOT --state-proven.
+   *
+   * Green means PROVEN in this product. Using it to underline the page you are
+   * on says nothing about assurance and teaches the reader that the colour is
+   * decorative — which then weakens it everywhere it does carry meaning. The
+   * active tab is marked with the header's own foreground instead.
+   */
+  border-bottom-color: var(--text-on-brand);
 }
 
 .main {

@@ -338,3 +338,60 @@ describe('v1.2 §28 — the builder is deterministic', () => {
     expect(after).toBe(before);
   }, 60_000);
 });
+
+describe('state colour is never decoration', () => {
+  /**
+   * Green means PROVEN. Amber means EXCEPTION. Red means NOT SATISFIED.
+   *
+   * A product whose colours carry meaning has to spend them carefully: the
+   * moment green also underlines the active tab, or brightens a heading, the
+   * reader learns it is decorative and stops reading it as a determination.
+   *
+   * This finds every use of a state token and requires it to sit in a selector
+   * that is actually about state.
+   */
+  const STATE_CONTEXT =
+    /(state|proven|failing|exception|unknown|satisfied|tone|notice|count-bar|severity|meter|outcome|--PASS|--FAIL)/i;
+
+  /**
+   * Uses that carry meaning on a different axis, each with its reason.
+   *
+   * A destructive-action button is red because the action is dangerous, not
+   * because a control failed. Reusing the same red keeps the palette coherent
+   * and is a deliberate decision — recorded here rather than silently allowed
+   * by a loose pattern.
+   */
+  const ALLOWED_NON_STATE: Record<string, string> = {
+    '.button--danger': 'A destructive action. Red for danger, not for a determination.',
+  };
+
+  it('uses state tokens only in selectors that are about state', () => {
+    const css = appCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    const offenders: string[] = [];
+
+    // Walk rule by rule, so a declaration is judged by the selector it is in.
+    for (const block of css.split('}')) {
+      const [selectorPart, declarations] = block.split('{');
+      if (!selectorPart || !declarations) continue;
+      if (!/var\(--state-(proven|failing|exception)/.test(declarations)) continue;
+
+      const selector = selectorPart.split('\n').filter((line) => !line.trim().startsWith('*')).join(' ').trim();
+      if (STATE_CONTEXT.test(selector)) continue;
+      if (ALLOWED_NON_STATE[selector] !== undefined) continue;
+      offenders.push(selector);
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('does not tint the active navigation with a determination colour', () => {
+    // The specific case this test was written for: the active tab was
+    // underlined in the green that means PROVEN.
+    // Comments stripped first: this rule explains in prose why it does NOT use
+    // the proven green, and matching that sentence would fail the test for
+    // saying the right thing.
+    const withoutComments = appCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = /\.nav__link--active\s*\{[\s\S]*?\}/.exec(withoutComments)?.[0] ?? '';
+    expect(rule).not.toMatch(/--state-(proven|failing|exception)/);
+  });
+});
