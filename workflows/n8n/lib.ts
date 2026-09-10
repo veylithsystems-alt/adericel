@@ -105,6 +105,7 @@ export const WORKFLOW_IDS = {
   sourceConflict: stableId('adericel.source-conflict'),
   coverageWatch: stableId('adericel.coverage-watch'),
   retentionWatch: stableId('adericel.retention-watch'),
+  proofOfValue: stableId('adericel.proof-of-value'),
 } as const;
 
 let nodeCounter = 0;

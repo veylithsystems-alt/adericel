@@ -29,7 +29,8 @@
     "pg": "^8.16.3",
     "zod": "^4.1.11",
     "@adericel/autonomy": "workspace:*",
-    "@adericel/vaol": "workspace:*"
+    "@adericel/vaol": "workspace:*",
+    "@adericel/value": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "^8.15.5"

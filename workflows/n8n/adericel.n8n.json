@@ -8243,46 +8243,47 @@
     ]
   },
   {
-    "id": "a8220e0b5d86f379",
-    "name": "Adericel — 01 Event intake",
-    "active": true,
+    "id": "f46d6d3425f9ead6",
+    "name": "Adericel — 25 Proof of value",
+    "active": false,
     "nodes": [
       {
         "parameters": {
-          "content": "## Adericel — Event intake\n\nEvery Adericel domain event arrives here.\n\n**Security:** the payload is authenticated by an HMAC over `{timestamp}.{rawBody}` using `ADERICEL_WEBHOOK_SECRET`. Deliveries older than five minutes are rejected, so a captured request cannot be replayed.\n\n**Delivery is at-least-once.** Handlers must tolerate duplicates; the event id makes that straightforward.",
-          "height": 320,
+          "content": "## Proof of value\n\nAdericel counts what it did. The MSP supplies what that work is worth. This produces the monthly report and keeps it, hashed, so a figure quoted in a renewal can still be reproduced a year later.\n\n**It will report nothing if the MSP has not supplied any durations.** That is correct: Adericel can say how many operations it performed, and only the MSP can say what they are worth. A number invented here would be manufactured certainty pointed at the person paying.",
+          "height": 340,
           "width": 560,
           "color": 4
         },
-        "id": "492dc082f18015a0",
-        "name": "Note 36a46f",
+        "id": "f61aef61571aaea7",
+        "name": "Note 960c94",
         "type": "n8n-nodes-base.stickyNote",
         "typeVersion": 1,
         "position": [
           -620,
-          -200
+          -240
         ]
       },
       {
         "parameters": {
-          "httpMethod": "POST",
-          "path": "adericel-events",
-          "responseMode": "responseNode",
-          "options": {
-            "rawBody": true
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 6 1 * *"
+              }
+            ]
           }
         },
-        "id": "0876924e1da5d0bc",
-        "name": "Adericel event",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
+        "id": "0c3dd6a21920730c",
+        "name": "Monthly",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
         "position": [
           0,
           0
         ],
-        "notes": "Point the Adericel worker at this instance with N8N_BASE_URL and N8N_ENABLED=true. It posts to /webhook/adericel-events.",
-        "notesInFlow": false,
-        "webhookId": "adericel-events"
+        "notes": "The first of the month, for the month just finished.",
+        "notesInFlow": false
       },
       {
         "parameters": {
@@ -8330,10 +8331,387 @@
       },
       {
         "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "592a3cd5bd55e6ef",
+                "leftValue": "={{ $json.mspId }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "id": "2832a1f053685d2e",
+        "name": "MSP configured?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          440,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.apiBaseUrl }}/v1/msps/{{ $json.mspId }}/value/reports",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ windowDays: 30 }) }}"
+        },
+        "id": "2955051743885dad",
+        "name": "Produce and keep the report",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          660,
+          -100
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body || {};\nconst report = body.report || {};\n\n// A report with nothing priced is not a failure and not a result. It is a\n// prompt: the MSP has to tell Adericel what its own work costs.\nconst priced = (report.modelCompleteness || 0) > 0;\n\nconst lines = (report.lines || [])\n  .filter((line) => line.performedByAdericel > 0)\n  .map((line) => {\n    const minutes = line.minutesEach === null ? 'unpriced' : line.minutesEach + 'm each';\n    const hours = line.hoursDisplaced === null ? '-' : line.hoursDisplaced + 'h';\n    return `- ${line.task.title}: ${line.performedByAdericel} x ${minutes} = ${hours}`;\n  });\n\nreturn [{\n  json: {\n    priced,\n    contentHash: body.contentHash,\n    organisationCount: report.organisationCount,\n    hoursDisplaced: report.hoursDisplaced,\n    hoursStillSpent: report.hoursStillSpent,\n    hoursIfEntirelyManual: report.hoursIfEntirelyManual,\n    completeness: Math.round((report.modelCompleteness || 0) * 100),\n    determinationsInformative: report.determinationsInformative,\n    determinationsAttempted: report.determinationsAttempted,\n    workLines: lines.join('\\n'),\n    caveats: (report.caveats || []).map((c) => '- ' + c).join('\\n'),\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "4b5def1962ebc9ab",
+        "name": "Is it worth sending?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          -100
+        ],
+        "notes": "Splits the priced case from the \"tell us what your time costs\" case.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "7b46157a90373740",
+                "leftValue": "={{ $json.priced }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "id": "59520c504c49c7e6",
+        "name": "Priced?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1100,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const state = $input.first().json;\nreturn [{\n  json: {\n    subject: `Assurance operations, ${state.organisationCount} organisation(s)`,\n    body: [\n      `Adericel performed the following work across ${state.organisationCount} organisation(s):`,\n      '',\n      state.workLines,\n      '',\n      `At your own durations, that is ${state.hoursDisplaced} hour(s) your team did not spend.`,\n      `Your team spent ${state.hoursStillSpent} hour(s) on assurance work in the same period.`,\n      '',\n      `Task catalogue priced: ${state.completeness}%.`,\n      `Determinations reaching a conclusion: ${state.determinationsInformative} of ${state.determinationsAttempted}.`,\n      '',\n      'Read these alongside the following, which are part of the report:',\n      state.caveats || '- None.',\n      '',\n      `Report hash: ${state.contentHash}`,\n    ].join('\\n'),\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "234f05eda4bf4393",
+        "name": "The report",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1320,
+          -200
+        ],
+        "notes": "The caveats travel with the figures. They are not a footnote.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{\n  json: {\n    subject: 'Adericel needs your numbers before it can report a saving',\n    body: [\n      'Adericel has recorded everything it did for your customers this month, and it can show ' +\n        'you every operation.',\n      '',\n      'It cannot tell you what that was worth, because it does not know what your engineers\\' ' +\n        'time costs or how long each of these jobs takes your team. It will not guess: a ' +\n        'number invented by a vendor about your business is worth nothing to you.',\n      '',\n      'Enter your own durations under Value > Effort model, and the next report will show the ' +\n        'arithmetic in full.',\n    ].join('\\n'),\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "d158bc8f99470031",
+        "name": "Ask for the durations",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1320,
+          0
+        ],
+        "notes": "The honest empty state, and the only useful thing to say in it.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "jsCode": "return [{ json: { skipped: 'ADERICEL_MSP_ID is not set for this instance.' } }];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "87d5883f9fcfa23d",
+        "name": "No MSP configured",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          120
+        ],
+        "notes": "Nothing to report against.",
+        "notesInFlow": false
+      }
+    ],
+    "connections": {
+      "Monthly": {
+        "main": [
+          [
+            {
+              "node": "Configuration",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Configuration": {
+        "main": [
+          [
+            {
+              "node": "MSP configured?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "MSP configured?": {
+        "main": [
+          [
+            {
+              "node": "Produce and keep the report",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No MSP configured",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Produce and keep the report": {
+        "main": [
+          [
+            {
+              "node": "Is it worth sending?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is it worth sending?": {
+        "main": [
+          [
+            {
+              "node": "Priced?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Priced?": {
+        "main": [
+          [
+            {
+              "node": "The report",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Ask for the durations",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": true,
+      "executionTimeout": 3600,
+      "timezone": "Europe/London",
+      "errorWorkflow": "12d18cb304b9c025"
+    },
+    "staticData": null,
+    "meta": {
+      "description": "Produces and retains the monthly proof-of-value report, with its caveats attached. Reports no saving at all until the MSP has supplied its own durations.",
+      "templateCredsSetupCompleted": false
+    },
+    "pinData": {},
+    "versionId": "2fe1f0b9e6b6267f",
+    "tags": [
+      {
+        "id": "6e39d1a55b08d44f",
+        "name": "adericel"
+      },
+      {
+        "id": "3e26a2a1c850549f",
+        "name": "scheduled"
+      }
+    ]
+  },
+  {
+    "id": "a8220e0b5d86f379",
+    "name": "Adericel — 01 Event intake",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Adericel — Event intake\n\nEvery Adericel domain event arrives here.\n\n**Security:** the payload is authenticated by an HMAC over `{timestamp}.{rawBody}` using `ADERICEL_WEBHOOK_SECRET`. Deliveries older than five minutes are rejected, so a captured request cannot be replayed.\n\n**Delivery is at-least-once.** Handlers must tolerate duplicates; the event id makes that straightforward.",
+          "height": 320,
+          "width": 560,
+          "color": 4
+        },
+        "id": "d926546df0e4186f",
+        "name": "Note 36a46f",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -620,
+          -200
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "adericel-events",
+          "responseMode": "responseNode",
+          "options": {
+            "rawBody": true
+          }
+        },
+        "id": "8a738d5d6922eae7",
+        "name": "Adericel event",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "Point the Adericel worker at this instance with N8N_BASE_URL and N8N_ENABLED=true. It posts to /webhook/adericel-events.",
+        "notesInFlow": false,
+        "webhookId": "adericel-events"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "api-base-url",
+                "name": "apiBaseUrl",
+                "value": "={{ $env.ADERICEL_API_BASE_URL || 'http://adericel-api:4000' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-email",
+                "name": "notifyEmail",
+                "value": "={{ $env.ADERICEL_NOTIFY_EMAIL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-webhook",
+                "name": "notifyWebhookUrl",
+                "value": "={{ $env.ADERICEL_NOTIFY_WEBHOOK_URL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "msp-id",
+                "name": "mspId",
+                "value": "={{ $env.ADERICEL_MSP_ID || '' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "cd812705ba6e213b",
+        "name": "Configuration",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          220,
+          0
+        ],
+        "notes": "Resolves configuration from the n8n environment. Nothing in this export contains a URL, a secret or a tenant identifier. Set ADERICEL_API_BASE_URL, ADERICEL_MSP_ID and the notification variables on the n8n container.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
           "jsCode": "/**\n * Verify the delivery is genuinely from this Adericel deployment.\n *\n * The signature covers \"{timestamp}.{rawBody}\". The digest is compared in\n * constant time so response timing reveals nothing, and the timestamp window\n * makes a captured delivery useless after five minutes.\n */\nconst crypto = require('crypto');\n\nconst secret = $env.ADERICEL_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error(\n    'ADERICEL_WEBHOOK_SECRET is not set on this n8n instance. Refusing to accept unauthenticated events.',\n  );\n}\n\nconst item = $input.first();\nconst headers = item.json.headers ?? {};\nconst signature = headers['x-adericel-signature'];\nconst timestamp = headers['x-adericel-timestamp'];\nconst rawBody = item.binary && item.binary.data\n  ? Buffer.from(item.binary.data.data, 'base64').toString('utf8')\n  : JSON.stringify(item.json.body ?? {});\n\nif (!signature || !timestamp) {\n  throw new Error('Delivery is missing its signature or timestamp headers.');\n}\n\nconst ageMs = Math.abs(Date.now() - Number(timestamp));\nif (!Number.isFinite(ageMs) || ageMs > 300000) {\n  throw new Error('Delivery timestamp is outside the five minute window; treating it as a replay.');\n}\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(timestamp + '.' + rawBody)\n  .digest('hex');\n\nconst provided = Buffer.from(String(signature), 'utf8');\nconst computed = Buffer.from(expected, 'utf8');\nconst valid = provided.length === computed.length && crypto.timingSafeEqual(provided, computed);\n\nif (!valid) {\n  throw new Error('Signature verification failed. This delivery is not from the configured Adericel deployment.');\n}\n\nconst event = item.json.body ?? {};\nconst config = $('Configuration').first().json;\n\nreturn [\n  {\n    json: {\n      ...event,\n      apiBaseUrl: config.apiBaseUrl,\n      notifyEmail: config.notifyEmail,\n      notifyWebhookUrl: config.notifyWebhookUrl,\n      mspId: config.mspId,\n      verifiedAt: new Date().toISOString(),\n    },\n  },\n];",
           "mode": "runOnceForAllItems"
         },
-        "id": "e0df111c145db7d2",
+        "id": "72dc255b5fdad1fd",
         "name": "Verify signature",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -8509,7 +8887,7 @@
             "renameFallbackOutput": "other"
           }
         },
-        "id": "3e1f1ae02cc92bd2",
+        "id": "4e2172a7ed23a67d",
         "name": "Route by event type",
         "type": "n8n-nodes-base.switch",
         "typeVersion": 3.2,
@@ -8529,7 +8907,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "017fc6f26505db18",
+        "id": "fb7d7ee9b082f543",
         "name": "Handle assurance change",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8547,7 +8925,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "8c7dfc832c1f9bb9",
+        "id": "0c8581c8f44fb0ca",
         "name": "Triage finding",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8565,7 +8943,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "14e239e99025ef83",
+        "id": "0edff1e05a12ceea",
         "name": "Notify approvers",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8583,7 +8961,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "164b73939d614c55",
+        "id": "9a4e81f6c79cd818",
         "name": "Execute approved action",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8601,7 +8979,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "21715aef44224e21",
+        "id": "9f6e4fb2007ace5c",
         "name": "Verify action",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8619,7 +8997,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "61f4a7ed039ccf03",
+        "id": "61f6e6843b6cb9f2",
         "name": "Complete onboarding",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8637,7 +9015,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "0a904594c7d93262",
+        "id": "10928d9d8c074d03",
         "name": "Reassess after expiry",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8648,7 +9026,7 @@
       },
       {
         "parameters": {},
-        "id": "6efb33cb6cc63e91",
+        "id": "72fd78aec6601dac",
         "name": "Acknowledge",
         "type": "n8n-nodes-base.noOp",
         "typeVersion": 1,
@@ -8665,7 +9043,7 @@
           "responseCode": 202,
           "responseBody": "={{ JSON.stringify({ accepted: true, eventId: $('Verify signature').first().json.id, correlationId: $('Verify signature').first().json.correlationId }) }}"
         },
-        "id": "b765fb6b5e4a5895",
+        "id": "b563b9aeeb448578",
         "name": "Respond 202",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,

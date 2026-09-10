@@ -20,7 +20,7 @@ import { registerFindingRoutes } from './routes/findings.js';
 import { registerGraphRoutes } from './routes/graph.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
 import { registerVeylithRoutes } from './routes/veylith.js';
-import { registerPortfolioRoutes } from './routes/portfolio.js';
+import { registerPortfolioRoutes, registerValueRoutes } from './routes/portfolio.js';
 import { registerObservabilityRoutes } from './routes/observability.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
 import { buildOpenApiDocument } from './openapi.js';
@@ -149,6 +149,7 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   registerIntegrationRoutes(server, app);
   registerVeylithRoutes(server, app);
   registerPortfolioRoutes(server, app);
+  registerValueRoutes(server, app);
   registerObservabilityRoutes(server, app);
   registerWebhookRoutes(server, app);
 

@@ -1,9 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { assuranceSeverityRank, summarise, type AssuranceState } from '@adericel/domain';
+import { ASSURANCE_TASKS, effortFor, modelCompleteness } from '@adericel/value';
 import type { AppContext } from '../context.js';
-import { requireMsp } from '../middleware/request-context.js';
-import { parseParams, parseQuery } from '../middleware/validation.js';
+import { audit, requireMsp, requirePrincipal } from '../middleware/request-context.js';
+import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
+import {
+  buildValueReport,
+  loadEffortModel,
+  recordTaskEffort,
+  retainValueReport,
+} from '../services/value.js';
 
 /**
  * Portfolio intelligence.
@@ -469,4 +476,192 @@ function remedyForUnknown(reason: string | null): string {
     default:
       return 'Review the control explanation to see which inputs are missing.';
   }
+}
+
+/**
+ * Proof of value.
+ *
+ * Registered on the MSP surface because an MSP's own cost model is
+ * MSP_PORTFOLIO information: a client organisation must never see what its MSP
+ * believes the work costs, and Veylith has no standing access to it either.
+ */
+export function registerValueRoutes(server: FastifyInstance, app: AppContext): void {
+  /** The task catalogue, and what this MSP has said each one costs. */
+  server.get(
+    '/v1/msps/:mspId/value/effort-model',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:read');
+
+      const model = await loadEffortModel(app, mspId);
+      return reply.status(200).send({
+        tasks: ASSURANCE_TASKS.map((task) => {
+          const effort = effortFor(model, task.key);
+          return {
+            ...task,
+            minutes: effort.minutes,
+            source: effort.source,
+            basis: effort.basis,
+            recordedAt: effort.recordedAt,
+          };
+        }),
+        completeness: modelCompleteness(model),
+        // Said plainly at the top of the response rather than in a footnote:
+        // these numbers are the MSP's, and Adericel will not supply them.
+        note:
+          'Adericel measures what it did. Only you can say what that work is worth in your ' +
+          'business. Tasks you have not priced contribute nothing to any saving, and are ' +
+          'reported as unpriced rather than estimated.',
+      });
+    },
+  );
+
+  /** Record what one task actually costs this MSP. */
+  server.put(
+    '/v1/msps/:mspId/value/effort-model/:taskKey',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:manage');
+      const { taskKey } = parseParams(request, z.object({ taskKey: z.string().max(64) }));
+      const body = parseBody(
+        request,
+        z.object({
+          minutes: z.number().min(0).max(600).nullable(),
+          source: z.enum(['MSP_MEASURED', 'MSP_ESTIMATED', 'INDUSTRY_REFERENCE', 'UNKNOWN']),
+          basis: z.string().min(3).max(500).nullable(),
+        }),
+      );
+      const principal = requirePrincipal(request);
+
+      const effort = await recordTaskEffort(
+        app,
+        mspId,
+        { ...body, taskKey, recordedAt: null },
+        principal.principalType === 'USER' ? principal.principalId : null,
+      );
+
+      await audit(app, request, {
+        action: 'value:effort:record',
+        resourceType: 'Msp',
+        resourceId: mspId,
+        metadata: { taskKey, source: body.source, minutes: body.minutes },
+      });
+
+      return reply.status(200).send(effort);
+    },
+  );
+
+  /**
+   * The report.
+   *
+   * `target` asks for the portfolio projection — the hundred-customer question
+   * — which is refused rather than fudged when the sample cannot support it.
+   */
+  server.get(
+    '/v1/msps/:mspId/value/report',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:billing:read');
+      const query = parseQuery(
+        request,
+        z.object({
+          windowDays: z.coerce.number().int().min(1).max(365).default(30),
+          target: z.coerce.number().int().min(1).max(10_000).optional(),
+          ftePerMonthHours: z.coerce.number().min(1).max(400).optional(),
+        }),
+      );
+
+      const result = await buildValueReport(app, mspId, {
+        windowDays: query.windowDays,
+        targetOrganisations: query.target ?? null,
+        ftePerMonthHours: query.ftePerMonthHours ?? null,
+      });
+
+      return reply.status(200).send(result);
+    },
+  );
+
+  /** Keep a report, hashed, so a figure quoted in a proposal can be reproduced. */
+  server.post(
+    '/v1/msps/:mspId/value/reports',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:billing:read');
+      const body = parseBody(
+        request,
+        z.object({ windowDays: z.coerce.number().int().min(1).max(365).default(30) }),
+      );
+      const principal = requirePrincipal(request);
+
+      const { report } = await buildValueReport(app, mspId, {
+        windowDays: body.windowDays,
+        targetOrganisations: null,
+        ftePerMonthHours: null,
+      });
+      const retained = await retainValueReport(
+        app,
+        report,
+        principal.principalType === 'USER' ? principal.principalId : null,
+      );
+
+      await audit(app, request, {
+        action: 'value:report:retain',
+        resourceType: 'Msp',
+        resourceId: mspId,
+        metadata: { contentHash: retained.contentHash, caveats: report.caveats.length },
+      });
+
+      return reply.status(201).send({ ...retained, report });
+    },
+  );
+
+  /** Reports kept, newest first, so a trend is visible rather than a snapshot. */
+  server.get(
+    '/v1/msps/:mspId/value/reports',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:billing:read');
+
+      const rows = await app.db.withPlatform(async (ctx) =>
+        ctx.many<{
+          id: string;
+          period_from: string;
+          period_to: string;
+          organisation_count: number;
+          content_hash: string;
+          hours_displaced: string;
+          hours_still_spent: string;
+          model_completeness: string;
+          caveat_count: number;
+          generated_at: string;
+        }>(
+          `SELECT id, period_from, period_to, organisation_count, content_hash,
+                  hours_displaced, hours_still_spent, model_completeness, caveat_count,
+                  generated_at
+             FROM value_reports WHERE msp_id = $1 ORDER BY period_to DESC LIMIT 50`,
+          [mspId],
+        ),
+      );
+
+      return reply.status(200).send({
+        reports: rows.map((row) => ({
+          id: row.id,
+          from: row.period_from,
+          to: row.period_to,
+          organisationCount: row.organisation_count,
+          contentHash: row.content_hash,
+          hoursDisplaced: Number(row.hours_displaced),
+          hoursStillSpent: Number(row.hours_still_spent),
+          modelCompleteness: Number(row.model_completeness),
+          caveats: row.caveat_count,
+          generatedAt: row.generated_at,
+        })),
+      });
+    },
+  );
 }

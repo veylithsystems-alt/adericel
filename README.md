@@ -72,6 +72,9 @@ packages/
   autonomy/       A five-valued authority engine. Pure. UNKNOWN never permits.
   vaol/           Veylith's own operating layer: the gate, the exception
                   queue, the business ledger, the commercial pipeline.
+  value/          The proof-of-value engine. Counts what Adericel did, prices
+                  it only with durations the MSP supplied, and refuses to
+                  produce a figure it cannot substantiate.
 
 apps/
   api/            Fastify HTTP API. Authentication, tenancy, every resource.

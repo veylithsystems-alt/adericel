@@ -29,6 +29,7 @@ COPY packages/truth-engine/package.json  packages/truth-engine/
 COPY packages/policy/package.json        packages/policy/
 COPY packages/autonomy/package.json      packages/autonomy/
 COPY packages/vaol/package.json          packages/vaol/
+COPY packages/value/package.json         packages/value/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
 COPY packages/billing/package.json       packages/billing/
@@ -78,6 +79,7 @@ COPY --from=build /app/packages/truth-engine/dist  packages/truth-engine/dist/
 COPY --from=build /app/packages/policy/dist        packages/policy/dist/
 COPY --from=build /app/packages/autonomy/dist      packages/autonomy/dist/
 COPY --from=build /app/packages/vaol/dist          packages/vaol/dist/
+COPY --from=build /app/packages/value/dist         packages/value/dist/
 COPY --from=build /app/packages/actions/dist       packages/actions/dist/
 COPY --from=build /app/packages/integrations/dist  packages/integrations/dist/
 COPY --from=build /app/packages/billing/dist       packages/billing/dist/

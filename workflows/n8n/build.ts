@@ -44,6 +44,7 @@ import {
 import {
   coverageWatchWorkflow,
   offboardingWorkflow,
+  proofOfValueWorkflow,
   retentionWatchWorkflow,
   sourceConflictWorkflow,
 } from './workflows/lifecycle.js';
@@ -95,6 +96,7 @@ export function buildAllWorkflows(): N8nWorkflow[] {
     sourceConflictWorkflow(),
     coverageWatchWorkflow(),
     retentionWatchWorkflow(),
+    proofOfValueWorkflow(),
 
     // Intake last: it references every handler above.
     eventIntakeWorkflow(),

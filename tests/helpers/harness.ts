@@ -295,6 +295,15 @@ export async function seedTenant(
     }[];
     autonomyLevel?: number;
     frameworks?: readonly string[];
+    /**
+     * Put this organisation under an existing MSP rather than a new one.
+     *
+     * Without it, every seeded tenant gets its own MSP, and a portfolio of
+     * five customers is five businesses of one. That made a genuine
+     * multi-organisation MSP — the shape every real customer has — impossible
+     * to test, which is how the proof-of-value work found it.
+     */
+    mspSlug?: string;
   },
 ): Promise<SeededTenant> {
   const { app, db, clock } = harness;
@@ -305,7 +314,11 @@ export async function seedTenant(
     const row = await ctx.oneOrFail<{ id: string }>(
       `INSERT INTO msps (name, slug, contact_email) VALUES ($1, $2, $3)
        ON CONFLICT (lower(slug)) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [`MSP for ${options.slug}`, `msp-${options.slug}`, `ops-${options.slug}@test.invalid`],
+      [
+        `MSP for ${options.mspSlug ?? options.slug}`,
+        `msp-${options.mspSlug ?? options.slug}`,
+        `ops-${options.mspSlug ?? options.slug}@test.invalid`,
+      ],
       'MSP',
     );
     await ctx.query(

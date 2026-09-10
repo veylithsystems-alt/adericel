@@ -43,6 +43,7 @@ implications.
 | [0030](./ADR-0030-offboarding.md)                                   | A customer leaves with their record                   | Accepted |
 | [0031](./ADR-0031-three-surfaces.md)                                | Three surfaces, and no standing route between them    | Accepted |
 | [0032](./ADR-0032-erasure-and-retention.md)                         | Erasure means erasure                                 | Accepted |
+| [0033](./ADR-0033-proof-of-value.md)                                | Adericel counts what it did; the MSP prices it        | Accepted |
 
 ## Writing a new ADR
 

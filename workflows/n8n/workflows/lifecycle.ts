@@ -504,3 +504,156 @@ return [{
     errorWorkflowId: WORKFLOW_IDS.errorHandler,
   });
 }
+
+/**
+ * The monthly proof-of-value report.
+ *
+ * An MSP renewing a subscription asks one question: what did this buy me. The
+ * answer degrades fast if nobody produces it until the renewal conversation,
+ * because by then it is a document assembled to win an argument rather than a
+ * measurement.
+ *
+ * So it is produced monthly, retained with its hash, and — this is the part
+ * that matters — it is NOT sent as a headline. It is sent with its own caveats
+ * attached, including the ones that argue against the product.
+ */
+export function proofOfValueWorkflow(): N8nWorkflow {
+  const nodes = [
+    stickyNote(
+      '## Proof of value\n\n' +
+        'Adericel counts what it did. The MSP supplies what that work is worth. This produces ' +
+        'the monthly report and keeps it, hashed, so a figure quoted in a renewal can still be ' +
+        'reproduced a year later.\n\n' +
+        '**It will report nothing if the MSP has not supplied any durations.** That is correct: ' +
+        'Adericel can say how many operations it performed, and only the MSP can say what they ' +
+        'are worth. A number invented here would be manufactured certainty pointed at the ' +
+        'person paying.',
+      [-620, -240],
+      [560, 340],
+      4,
+    ),
+    scheduleTrigger(
+      'Monthly',
+      [0, 0],
+      { field: 'cronExpression', expression: '0 6 1 * *' },
+      'The first of the month, for the month just finished.',
+    ),
+    configurationNode([220, 0]),
+    ifNode('MSP configured?', [440, 0], { left: '={{ $json.mspId }}', operator: 'notEmpty' }),
+    adericelRequest('Produce and keep the report', [660, -100], {
+      method: 'POST',
+      url: '={{ $json.apiBaseUrl }}/v1/msps/{{ $json.mspId }}/value/reports',
+      body: '={{ JSON.stringify({ windowDays: 30 }) }}',
+    }),
+    codeNode(
+      'Is it worth sending?',
+      [880, -100],
+      `const body = $input.first().json.body || {};
+const report = body.report || {};
+
+// A report with nothing priced is not a failure and not a result. It is a
+// prompt: the MSP has to tell Adericel what its own work costs.
+const priced = (report.modelCompleteness || 0) > 0;
+
+const lines = (report.lines || [])
+  .filter((line) => line.performedByAdericel > 0)
+  .map((line) => {
+    const minutes = line.minutesEach === null ? 'unpriced' : line.minutesEach + 'm each';
+    const hours = line.hoursDisplaced === null ? '-' : line.hoursDisplaced + 'h';
+    return \`- \${line.task.title}: \${line.performedByAdericel} x \${minutes} = \${hours}\`;
+  });
+
+return [{
+  json: {
+    priced,
+    contentHash: body.contentHash,
+    organisationCount: report.organisationCount,
+    hoursDisplaced: report.hoursDisplaced,
+    hoursStillSpent: report.hoursStillSpent,
+    hoursIfEntirelyManual: report.hoursIfEntirelyManual,
+    completeness: Math.round((report.modelCompleteness || 0) * 100),
+    determinationsInformative: report.determinationsInformative,
+    determinationsAttempted: report.determinationsAttempted,
+    workLines: lines.join('\\n'),
+    caveats: (report.caveats || []).map((c) => '- ' + c).join('\\n'),
+  },
+}];`,
+      'Splits the priced case from the "tell us what your time costs" case.',
+    ),
+    ifNode('Priced?', [1100, -100], { left: '={{ $json.priced }}', operator: 'true' }),
+    codeNode(
+      'The report',
+      [1320, -200],
+      `const state = $input.first().json;
+return [{
+  json: {
+    subject: \`Assurance operations, \${state.organisationCount} organisation(s)\`,
+    body: [
+      \`Adericel performed the following work across \${state.organisationCount} organisation(s):\`,
+      '',
+      state.workLines,
+      '',
+      \`At your own durations, that is \${state.hoursDisplaced} hour(s) your team did not spend.\`,
+      \`Your team spent \${state.hoursStillSpent} hour(s) on assurance work in the same period.\`,
+      '',
+      \`Task catalogue priced: \${state.completeness}%.\`,
+      \`Determinations reaching a conclusion: \${state.determinationsInformative} of \${state.determinationsAttempted}.\`,
+      '',
+      'Read these alongside the following, which are part of the report:',
+      state.caveats || '- None.',
+      '',
+      \`Report hash: \${state.contentHash}\`,
+    ].join('\\n'),
+  },
+}];`,
+      'The caveats travel with the figures. They are not a footnote.',
+    ),
+    codeNode(
+      'Ask for the durations',
+      [1320, 0],
+      `return [{
+  json: {
+    subject: 'Adericel needs your numbers before it can report a saving',
+    body: [
+      'Adericel has recorded everything it did for your customers this month, and it can show ' +
+        'you every operation.',
+      '',
+      'It cannot tell you what that was worth, because it does not know what your engineers\\' ' +
+        'time costs or how long each of these jobs takes your team. It will not guess: a ' +
+        'number invented by a vendor about your business is worth nothing to you.',
+      '',
+      'Enter your own durations under Value > Effort model, and the next report will show the ' +
+        'arithmetic in full.',
+    ].join('\\n'),
+  },
+}];`,
+      'The honest empty state, and the only useful thing to say in it.',
+    ),
+    codeNode(
+      'No MSP configured',
+      [660, 120],
+      `return [{ json: { skipped: 'ADERICEL_MSP_ID is not set for this instance.' } }];`,
+      'Nothing to report against.',
+    ),
+  ];
+
+  let connections = chain('Monthly', 'Configuration', 'MSP configured?');
+  connections = connect(connections, 'MSP configured?', 'Produce and keep the report');
+  connections = connect(connections, 'MSP configured?', 'No MSP configured', 1);
+  connections = connect(connections, 'Produce and keep the report', 'Is it worth sending?');
+  connections = connect(connections, 'Is it worth sending?', 'Priced?');
+  connections = connect(connections, 'Priced?', 'The report');
+  connections = connect(connections, 'Priced?', 'Ask for the durations', 1);
+
+  return workflow({
+    id: WORKFLOW_IDS.proofOfValue,
+    name: 'Adericel — 25 Proof of value',
+    description:
+      'Produces and retains the monthly proof-of-value report, with its caveats attached. ' +
+      'Reports no saving at all until the MSP has supplied its own durations.',
+    nodes,
+    connections,
+    tags: ['adericel', 'scheduled'],
+    errorWorkflowId: WORKFLOW_IDS.errorHandler,
+  });
+}

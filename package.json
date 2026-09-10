@@ -38,6 +38,7 @@
     "start:api": "node apps/api/dist/main.js",
     "start:worker": "node apps/worker/dist/main.js",
     "openapi:emit": "tsx --conditions=development scripts/emit-openapi.ts",
+    "proof-of-value": "tsx --conditions=development scripts/proof-of-value-demo.ts",
     "n8n:build": "tsx --conditions=development workflows/n8n/build.ts",
     "n8n:validate": "tsx --conditions=development workflows/n8n/validate.ts",
     "brand:build": "tsx --conditions=development scripts/build-brand-assets.ts",

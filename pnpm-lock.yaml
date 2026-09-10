@@ -129,6 +129,9 @@ importers:
       '@adericel/truth-engine':
         specifier: workspace:*
         version: link:../../packages/truth-engine
+      '@adericel/value':
+        specifier: workspace:*
+        version: link:../../packages/value
       '@adericel/vaol':
         specifier: workspace:*
         version: link:../../packages/vaol
@@ -376,6 +379,21 @@ importers:
       '@adericel/domain':
         specifier: workspace:*
         version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
+  packages/value:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/graph':
+        specifier: workspace:*
+        version: link:../graph
       '@adericel/shared':
         specifier: workspace:*
         version: link:../shared
