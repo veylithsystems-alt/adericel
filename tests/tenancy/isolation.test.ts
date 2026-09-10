@@ -314,6 +314,97 @@ describe.skipIf(!available)('tenant isolation', () => {
         'these tables hold tenant data with no forced row level security policy',
       ).toEqual([]);
     });
+
+    /**
+     * Tables that hold nothing but credential material.
+     *
+     * These have no organisation_id, so the check above never saw them, and
+     * they had no policy at all. Nothing under a tenant transaction queried
+     * them — but that made the isolation of password hashes, session tokens and
+     * API secrets a convention rather than a control, and conventions are what
+     * this codebase uses row level security instead of.
+     */
+    const CREDENTIAL_TABLES = [
+      'api_keys',
+      'mfa_challenges',
+      'sessions',
+      'user_credentials',
+      'user_recovery_codes',
+    ];
+
+    it('forces row level security on every table holding credential material', async () => {
+      const rows = await harness.db.withPlatform(async (ctx) =>
+        ctx.many<{ table_name: string; rowsecurity: boolean; forcerowsecurity: boolean; policies: string }>(
+          `SELECT c.relname AS table_name, c.relrowsecurity AS rowsecurity,
+                  c.relforcerowsecurity AS forcerowsecurity,
+                  (SELECT count(*)::text FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+             FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'adericel' AND c.relkind = 'r'
+              AND c.relname = ANY($1::text[])`,
+          [CREDENTIAL_TABLES],
+        ),
+      );
+      expect(rows.length).toBe(CREDENTIAL_TABLES.length);
+      const unprotected = rows.filter(
+        (r) => !r.rowsecurity || !r.forcerowsecurity || Number(r.policies) === 0,
+      );
+      expect(unprotected.map((r) => r.table_name)).toEqual([]);
+    });
+
+    it('shows a tenant transaction nothing at all in them', async () => {
+      // The behavioural half. A policy that exists and does not bite is not a
+      // control, and this is the query an attacker would actually run.
+      for (const table of CREDENTIAL_TABLES) {
+        const rows = await harness.db.withTenant(alpha.organisationId, async (ctx) =>
+          ctx.many(`SELECT 1 FROM ${table}`, []),
+        );
+        expect(rows, `${table} is readable from a tenant transaction`).toHaveLength(0);
+      }
+    });
+
+    it('has rows to hide, so the previous test is not vacuous', async () => {
+      // Without this, dropping the tables entirely would make the isolation
+      // test pass.
+      const counts = await harness.db.withPlatform(async (ctx) =>
+        ctx.oneOrFail<{ sessions: string; credentials: string }>(
+          `SELECT (SELECT count(*)::text FROM sessions) AS sessions,
+                  (SELECT count(*)::text FROM user_credentials) AS credentials`,
+          [],
+          'Credential counts',
+        ),
+      );
+      expect(Number(counts.credentials)).toBeGreaterThan(0);
+    });
+
+    /**
+     * Identity tables that are legitimately read under tenant scope.
+     *
+     * "Who can approve an action here" and "who approved this one" are tenant
+     * questions with tenant answers, so a platform-only policy would break real
+     * functionality. They hold identity rather than secrets. Recorded here so
+     * the gap is deliberate and visible rather than an oversight nobody noticed.
+     */
+    it('records which identity tables remain readable under tenant scope, and why', async () => {
+      // Asserted structurally rather than by reading rows: a table that
+      // happens to be empty in a fixture would otherwise look protected, and
+      // this test would go green for the wrong reason.
+      const rows = await harness.db.withPlatform(async (ctx) =>
+        ctx.many<{ table_name: string; rowsecurity: boolean }>(
+          `SELECT c.relname AS table_name, c.relrowsecurity AS rowsecurity
+             FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'adericel' AND c.relkind = 'r'
+              AND c.relname = ANY($1::text[]) ORDER BY c.relname`,
+          [['users', 'grants', 'user_mfa_factors']],
+        ),
+      );
+
+      // A known, accepted position rather than a target. These answer tenant
+      // questions — who may approve here, who approved that — so a
+      // platform-only policy would break the product. They hold identity, not
+      // secrets. If this ever fails because one became protected, check that
+      // approvals still work before celebrating.
+      expect(rows.filter((r) => r.rowsecurity).map((r) => r.table_name)).toEqual([]);
+    });
   });
 });
 
