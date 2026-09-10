@@ -101,6 +101,9 @@ export const WORKFLOW_IDS = {
   healthMonitor: stableId('adericel.health-monitor'),
   errorHandler: stableId('adericel.error-handler'),
   deadLetterRecovery: stableId('adericel.dead-letter-recovery'),
+  offboarding: stableId('adericel.offboarding'),
+  sourceConflict: stableId('adericel.source-conflict'),
+  coverageWatch: stableId('adericel.coverage-watch'),
 } as const;
 
 let nodeCounter = 0;

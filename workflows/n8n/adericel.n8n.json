@@ -6621,46 +6621,40 @@
     ]
   },
   {
-    "id": "a8220e0b5d86f379",
-    "name": "Adericel — 01 Event intake",
-    "active": true,
+    "id": "a5bb52a9671fb413",
+    "name": "Adericel — 21 Offboarding",
+    "active": false,
     "nodes": [
       {
         "parameters": {
-          "content": "## Adericel — Event intake\n\nEvery Adericel domain event arrives here.\n\n**Security:** the payload is authenticated by an HMAC over `{timestamp}.{rawBody}` using `ADERICEL_WEBHOOK_SECRET`. Deliveries older than five minutes are rejected, so a captured request cannot be replayed.\n\n**Delivery is at-least-once.** Handlers must tolerate duplicates; the event id makes that straightforward.",
-          "height": 320,
+          "content": "## Offboarding\n\nDrives a customer’s departure to completion.\n\nThe order is deliberate and is the opposite of the convenient one: **export first**, then revoke, then close. The moment a customer is least able to argue about their record is exactly when it is most likely to be destroyed, so the export is taken before anything is revoked and closure is refused without one.\n\nThis workflow never closes an organisation on its own initiative. It carries out the steps and reports what remains; a person decides that the relationship has ended.",
+          "height": 380,
           "width": 560,
           "color": 4
         },
-        "id": "6b95c4ca14579388",
-        "name": "Note 36a46f",
+        "id": "4d0315c3c6dcd4e5",
+        "name": "Note 199ef5",
         "type": "n8n-nodes-base.stickyNote",
         "typeVersion": 1,
         "position": [
           -620,
-          -200
+          -260
         ]
       },
       {
         "parameters": {
-          "httpMethod": "POST",
-          "path": "adericel-events",
-          "responseMode": "responseNode",
-          "options": {
-            "rawBody": true
-          }
+          "inputSource": "passthrough"
         },
-        "id": "f0041068e47f3e8a",
-        "name": "Adericel event",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
+        "id": "73e1b3e79562ddf5",
+        "name": "When called by another workflow",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
         "position": [
           0,
           0
         ],
-        "notes": "Point the Adericel worker at this instance with N8N_BASE_URL and N8N_ENABLED=true. It posts to /webhook/adericel-events.",
-        "notesInFlow": false,
-        "webhookId": "adericel-events"
+        "notes": "Called with { organisationId, reason }. Reason is required — an organisation closed without a recorded reason is one nobody can explain later.",
+        "notesInFlow": false
       },
       {
         "parameters": {
@@ -6708,10 +6702,1327 @@
       },
       {
         "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "914491eca1cff676",
+                "leftValue": "={{ $json.reason }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "id": "17c88979cce1c653",
+        "name": "Reason given?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          440,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/offboarding",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": {
+            "reason": "={{ $json.reason }}"
+          }
+        },
+        "id": "ded78446993158c0",
+        "name": "Begin offboarding",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          660,
+          -120
+        ],
+        "notes": "Stops collection and assessment immediately. Nothing further is asserted about an estate Adericel no longer observes.",
+        "notesInFlow": false,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $(\"Configuration\").first().json.apiBaseUrl }}/v1/organisations/{{ $(\"When called by another workflow\").first().json.organisationId }}/offboarding/export",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "137c2533d5c6cf45",
+        "name": "Take the final export",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          880,
+          -120
+        ],
+        "notes": "The record the customer leaves with. Refused by the API if it would be truncated, because a bundle that says it is complete and is not is worse than no bundle.",
+        "notesInFlow": false,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $(\"Configuration\").first().json.apiBaseUrl }}/v1/organisations/{{ $(\"When called by another workflow\").first().json.organisationId }}/offboarding/revoke",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": {
+            "reason": "={{ $(\"When called by another workflow\").first().json.reason }}"
+          }
+        },
+        "id": "e879446bdd7c95cd",
+        "name": "Revoke everything",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1100,
+          -120
+        ],
+        "notes": "Passport shares stop answering, stored credentials are destroyed rather than disabled, and sessions end. Idempotent, so a partial run is simply repeated.",
+        "notesInFlow": false,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $(\"Configuration\").first().json.apiBaseUrl }}/v1/organisations/{{ $(\"When called by another workflow\").first().json.organisationId }}/offboarding",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "7ed4f2cb9f7444b1",
+        "name": "What remains?",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1320,
+          -120
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const status = $input.first().json.body || {};\nconst blockers = status.blockers || [];\nreturn [{\n  json: {\n    organisationId: status.organisationId,\n    readyToClose: status.readyToClose === true,\n    blockers,\n    finalExportHash: status.finalExportHash,\n    subject: status.readyToClose\n      ? 'Offboarding complete and ready to close'\n      : 'Offboarding is under way and cannot be closed yet',\n    message: status.readyToClose\n      ? 'Everything required has been done. The customer has their record (' +\n        String(status.finalExportHash || 'no hash recorded') +\n        '), assurance has stopped, shared passports no longer answer, and credentials are ' +\n        'destroyed. Closing is a person\\'s decision.'\n      : 'Still outstanding: ' + blockers.join('; '),\n    // Never CRITICAL. A customer leaving in an orderly way is not an incident,\n    // and treating it as one trains people to ignore the channel.\n    severity: status.readyToClose ? 'INFO' : 'MEDIUM',\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "09e0ea1f85c0fb19",
+        "name": "Summarise",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1540,
+          -120
+        ]
+      },
+      {
+        "parameters": {
+          "source": "database",
+          "workflowId": "284930f05ad7d86e",
+          "mode": "once",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "bee85689d6706637",
+        "name": "Tell somebody",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          1760,
+          -120
+        ]
+      },
+      {
+        "parameters": {
+          "errorMessage": "Offboarding needs a recorded reason. An organisation closed without one is one nobody can explain to an auditor, a customer or a court."
+        },
+        "id": "307379a91c4cd8ef",
+        "name": "No reason given",
+        "type": "n8n-nodes-base.stopAndError",
+        "typeVersion": 1,
+        "position": [
+          660,
+          140
+        ]
+      }
+    ],
+    "connections": {
+      "When called by another workflow": {
+        "main": [
+          [
+            {
+              "node": "Configuration",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Configuration": {
+        "main": [
+          [
+            {
+              "node": "Reason given?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Reason given?": {
+        "main": [
+          [
+            {
+              "node": "Begin offboarding",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No reason given",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Begin offboarding": {
+        "main": [
+          [
+            {
+              "node": "Take the final export",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Take the final export": {
+        "main": [
+          [
+            {
+              "node": "Revoke everything",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Revoke everything": {
+        "main": [
+          [
+            {
+              "node": "What remains?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "What remains?": {
+        "main": [
+          [
+            {
+              "node": "Summarise",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Summarise": {
+        "main": [
+          [
+            {
+              "node": "Tell somebody",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": true,
+      "executionTimeout": 3600,
+      "timezone": "Europe/London",
+      "errorWorkflow": "12d18cb304b9c025"
+    },
+    "staticData": null,
+    "meta": {
+      "description": "Carries a departing customer through export, revocation and readiness to close, in that order. Never closes an organisation by itself.",
+      "templateCredsSetupCompleted": false
+    },
+    "pinData": {},
+    "versionId": "cdfcf4895975f40b",
+    "tags": [
+      {
+        "id": "6e39d1a55b08d44f",
+        "name": "adericel"
+      },
+      {
+        "id": "d66e5bce47632618",
+        "name": "lifecycle"
+      }
+    ]
+  },
+  {
+    "id": "e03068766e2aad7c",
+    "name": "Adericel — 22 Source conflicts",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Sources that disagree\n\nTwo integrations contradicting each other is the one failure that looks like success: both are connected, both are healthy, and neither is wrong in a way any error would catch.\n\nAdericel refuses to choose between them, so the affected controls read **Unknown** until somebody settles it. That is the honest answer and it is also invisible unless something goes looking — which is what this does.",
+          "height": 320,
+          "width": 540,
+          "color": 4
+        },
+        "id": "a54957ebbb1a9fc9",
+        "name": "Note c08acb",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -620,
+          -220
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 4
+              }
+            ]
+          }
+        },
+        "id": "0ad47513a4ce6405",
+        "name": "Every four hours",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "Often enough that a disagreement is noticed the same working day.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "api-base-url",
+                "name": "apiBaseUrl",
+                "value": "={{ $env.ADERICEL_API_BASE_URL || 'http://adericel-api:4000' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-email",
+                "name": "notifyEmail",
+                "value": "={{ $env.ADERICEL_NOTIFY_EMAIL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-webhook",
+                "name": "notifyWebhookUrl",
+                "value": "={{ $env.ADERICEL_NOTIFY_WEBHOOK_URL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "msp-id",
+                "name": "mspId",
+                "value": "={{ $env.ADERICEL_MSP_ID || '' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "246c4d4e0b73ddc4",
+        "name": "Configuration",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          220,
+          0
+        ],
+        "notes": "Resolves configuration from the n8n environment. Nothing in this export contains a URL, a secret or a tenant identifier. Set ADERICEL_API_BASE_URL, ADERICEL_MSP_ID and the notification variables on the n8n container.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "592a3cd5bd55e6ef",
+                "leftValue": "={{ $json.mspId }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "id": "261dc94410696876",
+        "name": "MSP configured?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          440,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.apiBaseUrl }}/v1/msps/{{ $json.mspId }}/organisations?limit=200&status=ACTIVE",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "1703ce93dc8c8375",
+        "name": "List organisations",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          660,
+          -100
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const response = $input.first().json.body || {};\nconst config = $('Configuration').first().json;\nreturn (response.organisations || []).map((organisation) => ({\n  json: {\n    organisationId: organisation.id,\n    organisationName: organisation.name,\n    apiBaseUrl: config.apiBaseUrl,\n  },\n}));",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "bb32625e4399b218",
+        "name": "Fan out",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "batchSize": 1,
+          "options": {}
+        },
+        "id": "834a0cab5b6344c1",
+        "name": "One organisation at a time",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          1100,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/source-conflicts",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "1aec19fb316890f5",
+        "name": "Open conflicts",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1340,
+          -100
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const conflicts = ($input.first().json.body || {}).conflicts || [];\nconst blocking = conflicts.filter((conflict) => conflict.blocksAssurance);\nif (blocking.length === 0) return [];\n\nconst context = $('One organisation at a time').first().json;\nconst lines = blocking.map((conflict) => {\n  const positions = (conflict.sources || [])\n    .map((source) => source.name + ' says ' + JSON.stringify(source.value))\n    .join(', ');\n  return '- ' + conflict.predicate +\n    (conflict.subjectExternalId ? ' for ' + conflict.subjectExternalId : '') +\n    ': ' + positions;\n});\n\nreturn [{\n  json: {\n    organisationId: context.organisationId,\n    subject: blocking.length + ' fact(s) Adericel will not assert for ' + context.organisationName,\n    message:\n      'Two systems disagree and nothing tells Adericel which to believe, so it will not ' +\n      'choose. Every control resting on these reads Unknown until the disagreement is ' +\n      'settled.\\n\\n' + lines.join('\\n') +\n      '\\n\\nEither correct whichever system is wrong, or name an authoritative source for ' +\n      'these facts.',\n    // A contested fact is a real gap in assurance, not a technical warning.\n    severity: 'HIGH',\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "08c2492df1e3241b",
+        "name": "Anything contested?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1560,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "source": "database",
+          "workflowId": "284930f05ad7d86e",
+          "mode": "once",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "c5eaa025383974ef",
+        "name": "Tell somebody",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          1780,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "errorMessage": "ADERICEL_MSP_ID is not set on this n8n instance."
+        },
+        "id": "eb38e886c1db344c",
+        "name": "No MSP configured",
+        "type": "n8n-nodes-base.stopAndError",
+        "typeVersion": 1,
+        "position": [
+          660,
+          140
+        ]
+      }
+    ],
+    "connections": {
+      "Every four hours": {
+        "main": [
+          [
+            {
+              "node": "Configuration",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Configuration": {
+        "main": [
+          [
+            {
+              "node": "MSP configured?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "MSP configured?": {
+        "main": [
+          [
+            {
+              "node": "List organisations",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No MSP configured",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "List organisations": {
+        "main": [
+          [
+            {
+              "node": "Fan out",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fan out": {
+        "main": [
+          [
+            {
+              "node": "One organisation at a time",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "One organisation at a time": {
+        "main": [
+          null,
+          [
+            {
+              "node": "Open conflicts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Open conflicts": {
+        "main": [
+          [
+            {
+              "node": "Anything contested?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Anything contested?": {
+        "main": [
+          [
+            {
+              "node": "Tell somebody",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Tell somebody": {
+        "main": [
+          [
+            {
+              "node": "One organisation at a time",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": true,
+      "executionTimeout": 3600,
+      "timezone": "Europe/London",
+      "errorWorkflow": "12d18cb304b9c025"
+    },
+    "staticData": null,
+    "meta": {
+      "description": "Finds facts Adericel is withholding because two systems disagree, and names both positions so somebody can settle it.",
+      "templateCredsSetupCompleted": false
+    },
+    "pinData": {},
+    "versionId": "bdbd1646796f5490",
+    "tags": [
+      {
+        "id": "6e39d1a55b08d44f",
+        "name": "adericel"
+      },
+      {
+        "id": "3e26a2a1c850549f",
+        "name": "scheduled"
+      }
+    ]
+  },
+  {
+    "id": "af615be4b3e483b6",
+    "name": "Adericel — 23 Coverage watch",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Coverage watch\n\nAn integration that loses a permission does not fail. It keeps connecting, keeps returning what it still can, and the controls behind the missing permission quietly become **Unknown** — indistinguishable from a customer who genuinely has no such evidence.\n\nThis asks each organisation what its integrations can currently see, and reports any capability that is failing **with the exact permission to grant**. That is the difference between an integration fixed before lunch and one broken for a fortnight.",
+          "height": 340,
+          "width": 560,
+          "color": 4
+        },
+        "id": "a0ead451042206e3",
+        "name": "Note e78e80",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -620,
+          -240
+        ]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression"
+              }
+            ]
+          }
+        },
+        "id": "4a47b27e13b938c8",
+        "name": "Every morning",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "Early enough that somebody can act on it during the working day.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "api-base-url",
+                "name": "apiBaseUrl",
+                "value": "={{ $env.ADERICEL_API_BASE_URL || 'http://adericel-api:4000' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-email",
+                "name": "notifyEmail",
+                "value": "={{ $env.ADERICEL_NOTIFY_EMAIL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-webhook",
+                "name": "notifyWebhookUrl",
+                "value": "={{ $env.ADERICEL_NOTIFY_WEBHOOK_URL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "msp-id",
+                "name": "mspId",
+                "value": "={{ $env.ADERICEL_MSP_ID || '' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "a169407e20169f68",
+        "name": "Configuration",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          220,
+          0
+        ],
+        "notes": "Resolves configuration from the n8n environment. Nothing in this export contains a URL, a secret or a tenant identifier. Set ADERICEL_API_BASE_URL, ADERICEL_MSP_ID and the notification variables on the n8n container.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "592a3cd5bd55e6ef",
+                "leftValue": "={{ $json.mspId }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "id": "2720096e665ae258",
+        "name": "MSP configured?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          440,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.apiBaseUrl }}/v1/msps/{{ $json.mspId }}/organisations?limit=200&status=ACTIVE",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "9a06db638e70a3f9",
+        "name": "List organisations",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          660,
+          -100
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const response = $input.first().json.body || {};\nconst config = $('Configuration').first().json;\nreturn (response.organisations || []).map((organisation) => ({\n  json: {\n    organisationId: organisation.id,\n    organisationName: organisation.name,\n    apiBaseUrl: config.apiBaseUrl,\n  },\n}));",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "c034a8d44862e476",
+        "name": "Fan out",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "batchSize": 1,
+          "options": {}
+        },
+        "id": "c71282c96e9ab993",
+        "name": "One organisation at a time",
+        "type": "n8n-nodes-base.splitInBatches",
+        "typeVersion": 3,
+        "position": [
+          1100,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/observation-coverage",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "69a0a70358adaa51",
+        "name": "What can we see?",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1340,
+          -100
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const coverage = $input.first().json.body || {};\nconst broken = coverage.brokenCapabilities || [];\nconst context = $('One organisation at a time').first().json;\n\n// Demonstration data in a live tenant is worth saying out loud on its own,\n// because anything resting on it must not be shared or relied upon.\nconst notes = [];\nif (coverage.containsDemonstrationData) {\n  notes.push(\n    'This organisation contains demonstration data. Nothing resting on it describes a real ' +\n    'estate.',\n  );\n}\nif (broken.length === 0 && notes.length === 0) return [];\n\nconst lines = broken.map((capability) => {\n  const remedy = capability.requiredPermission\n    ? ' Grant ' + capability.requiredPermission + '.'\n    : '';\n  const cost = (capability.unavailablePredicates || []).length;\n  return '- ' + capability.integrationName + ': ' + capability.detail + remedy +\n    (cost > 0 ? ' (' + cost + ' fact(s) unavailable)' : '');\n});\n\nreturn [{\n  json: {\n    organisationId: context.organisationId,\n    subject: broken.length > 0\n      ? broken.length + ' capability(ies) failing for ' + context.organisationName\n      : 'Coverage note for ' + context.organisationName,\n    message: [...notes, ...lines].join('\\n') +\n      '\\n\\nAdericel can currently supply ' + (coverage.satisfiedPredicates || 0) + ' of the ' +\n      (coverage.requiredPredicates || 0) + ' facts your frameworks need.',\n    severity: broken.length > 0 ? 'MEDIUM' : 'INFO',\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "7f30617e5247d6cc",
+        "name": "Anything broken?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1560,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "source": "database",
+          "workflowId": "284930f05ad7d86e",
+          "mode": "once",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "4f275cc62db8875c",
+        "name": "Tell somebody",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          1780,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "errorMessage": "ADERICEL_MSP_ID is not set on this n8n instance."
+        },
+        "id": "91da152b24583789",
+        "name": "No MSP configured",
+        "type": "n8n-nodes-base.stopAndError",
+        "typeVersion": 1,
+        "position": [
+          660,
+          140
+        ]
+      }
+    ],
+    "connections": {
+      "Every morning": {
+        "main": [
+          [
+            {
+              "node": "Configuration",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Configuration": {
+        "main": [
+          [
+            {
+              "node": "MSP configured?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "MSP configured?": {
+        "main": [
+          [
+            {
+              "node": "List organisations",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "No MSP configured",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "List organisations": {
+        "main": [
+          [
+            {
+              "node": "Fan out",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fan out": {
+        "main": [
+          [
+            {
+              "node": "One organisation at a time",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "One organisation at a time": {
+        "main": [
+          null,
+          [
+            {
+              "node": "What can we see?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "What can we see?": {
+        "main": [
+          [
+            {
+              "node": "Anything broken?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Anything broken?": {
+        "main": [
+          [
+            {
+              "node": "Tell somebody",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Tell somebody": {
+        "main": [
+          [
+            {
+              "node": "One organisation at a time",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": true,
+      "executionTimeout": 3600,
+      "timezone": "Europe/London",
+      "errorWorkflow": "12d18cb304b9c025"
+    },
+    "staticData": null,
+    "meta": {
+      "description": "Reports integration capabilities that are failing, with the exact permission that would restore each one, and flags demonstration data in a live tenant.",
+      "templateCredsSetupCompleted": false
+    },
+    "pinData": {},
+    "versionId": "d7b79d47485ae081",
+    "tags": [
+      {
+        "id": "6e39d1a55b08d44f",
+        "name": "adericel"
+      },
+      {
+        "id": "3e26a2a1c850549f",
+        "name": "scheduled"
+      }
+    ]
+  },
+  {
+    "id": "a8220e0b5d86f379",
+    "name": "Adericel — 01 Event intake",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Adericel — Event intake\n\nEvery Adericel domain event arrives here.\n\n**Security:** the payload is authenticated by an HMAC over `{timestamp}.{rawBody}` using `ADERICEL_WEBHOOK_SECRET`. Deliveries older than five minutes are rejected, so a captured request cannot be replayed.\n\n**Delivery is at-least-once.** Handlers must tolerate duplicates; the event id makes that straightforward.",
+          "height": 320,
+          "width": 560,
+          "color": 4
+        },
+        "id": "c72ab545f4e612df",
+        "name": "Note 36a46f",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -620,
+          -200
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "adericel-events",
+          "responseMode": "responseNode",
+          "options": {
+            "rawBody": true
+          }
+        },
+        "id": "f878b7b5055aa9df",
+        "name": "Adericel event",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "Point the Adericel worker at this instance with N8N_BASE_URL and N8N_ENABLED=true. It posts to /webhook/adericel-events.",
+        "notesInFlow": false,
+        "webhookId": "adericel-events"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "api-base-url",
+                "name": "apiBaseUrl",
+                "value": "={{ $env.ADERICEL_API_BASE_URL || 'http://adericel-api:4000' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-email",
+                "name": "notifyEmail",
+                "value": "={{ $env.ADERICEL_NOTIFY_EMAIL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-webhook",
+                "name": "notifyWebhookUrl",
+                "value": "={{ $env.ADERICEL_NOTIFY_WEBHOOK_URL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "msp-id",
+                "name": "mspId",
+                "value": "={{ $env.ADERICEL_MSP_ID || '' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "db7cbfe1fd79a3cf",
+        "name": "Configuration",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          220,
+          0
+        ],
+        "notes": "Resolves configuration from the n8n environment. Nothing in this export contains a URL, a secret or a tenant identifier. Set ADERICEL_API_BASE_URL, ADERICEL_MSP_ID and the notification variables on the n8n container.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
           "jsCode": "/**\n * Verify the delivery is genuinely from this Adericel deployment.\n *\n * The signature covers \"{timestamp}.{rawBody}\". The digest is compared in\n * constant time so response timing reveals nothing, and the timestamp window\n * makes a captured delivery useless after five minutes.\n */\nconst crypto = require('crypto');\n\nconst secret = $env.ADERICEL_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error(\n    'ADERICEL_WEBHOOK_SECRET is not set on this n8n instance. Refusing to accept unauthenticated events.',\n  );\n}\n\nconst item = $input.first();\nconst headers = item.json.headers ?? {};\nconst signature = headers['x-adericel-signature'];\nconst timestamp = headers['x-adericel-timestamp'];\nconst rawBody = item.binary && item.binary.data\n  ? Buffer.from(item.binary.data.data, 'base64').toString('utf8')\n  : JSON.stringify(item.json.body ?? {});\n\nif (!signature || !timestamp) {\n  throw new Error('Delivery is missing its signature or timestamp headers.');\n}\n\nconst ageMs = Math.abs(Date.now() - Number(timestamp));\nif (!Number.isFinite(ageMs) || ageMs > 300000) {\n  throw new Error('Delivery timestamp is outside the five minute window; treating it as a replay.');\n}\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(timestamp + '.' + rawBody)\n  .digest('hex');\n\nconst provided = Buffer.from(String(signature), 'utf8');\nconst computed = Buffer.from(expected, 'utf8');\nconst valid = provided.length === computed.length && crypto.timingSafeEqual(provided, computed);\n\nif (!valid) {\n  throw new Error('Signature verification failed. This delivery is not from the configured Adericel deployment.');\n}\n\nconst event = item.json.body ?? {};\nconst config = $('Configuration').first().json;\n\nreturn [\n  {\n    json: {\n      ...event,\n      apiBaseUrl: config.apiBaseUrl,\n      notifyEmail: config.notifyEmail,\n      notifyWebhookUrl: config.notifyWebhookUrl,\n      mspId: config.mspId,\n      verifiedAt: new Date().toISOString(),\n    },\n  },\n];",
           "mode": "runOnceForAllItems"
         },
-        "id": "d0802386abd8d248",
+        "id": "ece16297b50513f1",
         "name": "Verify signature",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -6887,7 +8198,7 @@
             "renameFallbackOutput": "other"
           }
         },
-        "id": "83c97f1066190922",
+        "id": "481cec07187fff65",
         "name": "Route by event type",
         "type": "n8n-nodes-base.switch",
         "typeVersion": 3.2,
@@ -6907,7 +8218,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "f24a8624f2662b0e",
+        "id": "097fd38a35a787c0",
         "name": "Handle assurance change",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -6925,7 +8236,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "4e8e80677b5a4e25",
+        "id": "947e091bfcc14861",
         "name": "Triage finding",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -6943,7 +8254,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "0872097e7f241374",
+        "id": "18e47ecc50806a2e",
         "name": "Notify approvers",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -6961,7 +8272,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "b2f4df3f66e808a9",
+        "id": "a853152e9c407f30",
         "name": "Execute approved action",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -6979,7 +8290,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "1ed1dc0df74e8cb3",
+        "id": "2d73ac6a047cc8cc",
         "name": "Verify action",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -6997,7 +8308,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "5e760849cd238b57",
+        "id": "cbfc0a90b5da84be",
         "name": "Complete onboarding",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -7015,7 +8326,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "23d4a0aadad72104",
+        "id": "7e97b7f560aaf41b",
         "name": "Reassess after expiry",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -7026,7 +8337,7 @@
       },
       {
         "parameters": {},
-        "id": "723f6c3f152ff1ad",
+        "id": "e102a306587d1224",
         "name": "Acknowledge",
         "type": "n8n-nodes-base.noOp",
         "typeVersion": 1,
@@ -7043,7 +8354,7 @@
           "responseCode": 202,
           "responseBody": "={{ JSON.stringify({ accepted: true, eventId: $('Verify signature').first().json.id, correlationId: $('Verify signature').first().json.correlationId }) }}"
         },
-        "id": "94eeec99ae9370d7",
+        "id": "2b68f09ebfe82c90",
         "name": "Respond 202",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,

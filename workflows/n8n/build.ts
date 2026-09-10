@@ -41,6 +41,11 @@ import {
   scheduledCollectionWorkflow,
   scheduledReassessmentWorkflow,
 } from './workflows/operations.js';
+import {
+  coverageWatchWorkflow,
+  offboardingWorkflow,
+  sourceConflictWorkflow,
+} from './workflows/lifecycle.js';
 
 export const OUTPUT_PATH = fileURLToPath(new URL('./adericel.n8n.json', import.meta.url));
 
@@ -85,6 +90,9 @@ export function buildAllWorkflows(): N8nWorkflow[] {
     // Platform operations.
     healthMonitorWorkflow(),
     deadLetterRecoveryWorkflow(),
+    offboardingWorkflow(),
+    sourceConflictWorkflow(),
+    coverageWatchWorkflow(),
 
     // Intake last: it references every handler above.
     eventIntakeWorkflow(),
