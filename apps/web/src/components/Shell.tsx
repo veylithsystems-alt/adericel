@@ -33,7 +33,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactE
           <button
             type="button"
             className="button button--small button--secondary"
-            style={{ color: 'var(--text-inverse)', borderColor: 'currentColor' }}
+            style={{ color: 'var(--text-on-brand)', borderColor: 'currentColor' }}
             onClick={() => void signOut()}
           >
             Sign out

@@ -10,19 +10,22 @@
     />
     <meta name="color-scheme" content="light dark" />
     <!--
-      Brand typefaces are loaded as a progressive enhancement. Every font token
-      carries a real fallback stack, so an air-gapped or restricted deployment
-      renders correctly without reaching an external host. The interface must
-      never depend on a third-party origin to be legible.
+      Brand typefaces are bundled, not fetched. Three reasons, in order:
+
+      The production Content-Security-Policy sets `font-src 'self'`, so a
+      Google Fonts link renders the whole interface in a system fallback and
+      says nothing about it. The brand was silently not being applied.
+
+      A request to fonts.gstatic.com from a customer's browser tells a third
+      party who is using their security tooling and when. That is a telemetry
+      leak a security-conscious MSP will find, and they will be right to ask.
+
+      And a self-hosted deployment behind a restrictive proxy — which is where
+      several of these will run — has no route to an external font host at all.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-      media="print"
-      onload="this.media = 'all'"
-    />
+    <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/brand/app-icon.svg" />
+    <meta name="theme-color" content="#14181F" />
   </head>
   <body>
     <div id="root"></div>

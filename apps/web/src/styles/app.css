@@ -83,8 +83,8 @@ code,
 }
 
 .masthead {
-  background: var(--surface-inverse);
-  color: var(--text-inverse);
+  background: var(--surface-brand);
+  color: var(--text-on-brand);
   padding: var(--space-3) var(--space-5);
   display: flex;
   align-items: center;
@@ -107,7 +107,7 @@ code,
   align-items: center;
   gap: var(--space-4);
   font-size: var(--text-small);
-  color: var(--text-inverse);
+  color: var(--text-on-brand);
   opacity: 0.85;
 }
 
@@ -115,12 +115,12 @@ code,
   display: flex;
   gap: var(--space-5);
   padding: 0 var(--space-5);
-  background: var(--surface-inverse);
+  background: var(--surface-brand);
   border-bottom: var(--border-width) solid rgb(255 255 255 / 12%);
 }
 
 .nav__link {
-  color: var(--text-inverse);
+  color: var(--text-on-brand);
   opacity: 0.7;
   text-decoration: none;
   padding: var(--space-2) 0 var(--space-3);
@@ -233,75 +233,88 @@ code,
 
 /* ------------------------------------------------------------ state marks */
 
+/*
+ * State tags — Brand Pack v1.1.
+ *
+ * A filled pill in the state colour with paper text, uppercase and letter
+ * spaced. Filled rather than tinted because these are the one place the state
+ * palette is spent, and a tint reads as a background rather than as an
+ * assertion.
+ *
+ * Compact by design: the pack lists oversized badges as a DON'T, and a badge
+ * that dominates the row it sits in starts competing with the thing it
+ * describes.
+ */
 .state {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  font-family: var(--font-sans);
   font-size: var(--text-meta);
-  font-weight: var(--weight-medium);
-  padding: 2px var(--space-2);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px var(--space-3);
   border-radius: var(--radius-pill);
+  border: var(--border-width) solid transparent;
   white-space: nowrap;
-}
-
-.state__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
+  line-height: 1.35;
 }
 
 .state--proven {
-  background: var(--state-proven-tint);
-  color: var(--state-proven);
-}
-.state--proven .state__dot {
   background: var(--state-proven);
+  color: var(--text-on-state);
 }
 
 .state--failing {
-  background: var(--state-failing-tint);
-  color: var(--state-failing);
-}
-.state--failing .state__dot {
   background: var(--state-failing);
+  color: var(--text-on-state);
 }
 
 .state--exception {
-  background: var(--state-exception-tint);
-  color: var(--state-exception);
-}
-.state--exception .state__dot {
   background: var(--state-exception);
-}
-
-.state--muted {
-  color: var(--text-secondary);
-  border: var(--border);
-}
-.state--muted .state__dot {
-  background: var(--text-secondary);
+  color: var(--text-on-state);
 }
 
 /*
- * Unknown carries no colour. The hatch says "no reading here" rather than
- * "a poor reading", which is the whole distinction the product rests on.
+ * Not applicable. Outlined rather than filled: it is not an assurance reading
+ * at all, so it gets none of the state palette.
+ */
+.state--muted {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--rule);
+}
+
+/*
+ * Unknown carries no colour, on the pack's explicit instruction and for the
+ * reason the whole product exists. The hatch says "no reading here" rather than
+ * "a poor reading", and turning it into warning yellow — which is the thing
+ * every other tool in this category does — would place it on the good-to-bad
+ * axis it is specifically not on.
  */
 .state--unknown {
   color: var(--text-primary);
-  border: var(--border-width) solid var(--text-primary);
-  background: transparent;
-}
-.state--unknown .state__dot {
-  border-radius: 0;
-  border: var(--border-width) solid var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: transparent;
   background-image: repeating-linear-gradient(
-    45deg,
-    var(--text-primary) 0,
-    var(--text-primary) 1px,
-    transparent 1px,
-    transparent 4px
+    var(--hatch-angle),
+    currentColor 0,
+    currentColor var(--hatch-line),
+    transparent var(--hatch-line),
+    transparent var(--hatch-pitch)
   );
+}
+
+/*
+ * The hatch would run straight through the label and make it unreadable, so the
+ * text sits on its own small pad of the page ground. The pad is the surface
+ * behind the tag, which is why it is a token rather than a literal.
+ */
+.state--unknown > * {
+  background: var(--surface);
+  padding: 0 0.35em;
+  border-radius: var(--radius-sm);
 }
 
 /* --------------------------------------------------------------- tables */

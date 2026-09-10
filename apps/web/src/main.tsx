@@ -1,6 +1,12 @@
 import { StrictMode, useEffect, useState, type ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+// Bundled brand faces. Only the weights the brand pack specifies — Inter at
+// 400/500/600 and Plex Mono at 400/500 — because every extra weight is a file
+// a customer's browser downloads to render text that never uses it.
+import '@fontsource-variable/inter';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import './styles/app.css';
 import { Shell } from './components/Shell.js';
 import { ErrorNotice, Loading } from './components/Shell.js';

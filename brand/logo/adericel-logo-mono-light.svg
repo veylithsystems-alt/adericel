@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 48" width="260" height="48" role="img" aria-label="Adericel">
+  <g transform="translate(0 4)">
+    <path d="M0 40 L16 0 H26 L10 40 Z" fill="#5A6270"/>
+    <path d="M18 40 L34 0 H44 L28 40 Z" fill="#5A6270"/>
+    <path d="M36 40 L48 10 H58 L46 40 Z" fill="#5A6270"/>
+  </g>
+  <text x="76" y="34" fill="#5A6270" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif" font-size="34" font-weight="600" letter-spacing="-0.8">Adericel</text>
+</svg>

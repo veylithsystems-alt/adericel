@@ -1,43 +1,91 @@
 /*
- * Adericel design tokens — Brand Pack v1.0.
+ * Adericel design tokens — Brand Pack v1.1.
  *
- * The palette is small on purpose. Ink, Slate, Paper and Rule carry the
- * interface; the three state colours are spent only on assurance state, which
- * is what makes a red on this page mean something.
+ * The `--c-*` block below is the brand pack's published token block, copied
+ * value for value so it can be checked against the brand sheet line by line.
+ * Everything after it is derived. Nothing in the interface reads a raw hex.
+ *
+ * Two rules from the pack shape the whole system and are worth restating where
+ * someone editing this file will see them:
+ *
+ *   80–90% of any screen is the brand system — ink, paper, slate.
+ *   10–20% is state colour, and state colour is used for nothing but state.
+ *
+ * That ratio is what makes a red on an Adericel screen mean something. Spend
+ * the state palette on a button, a chart series or a decorative accent and the
+ * one place it carries meaning stops carrying it.
  */
 
 :root {
-  /* Core palette */
-  --ink: #14181f;
-  --slate: #5a6270;
-  --paper: #fbfbf9;
-  --rule: #dcddd8;
+  /* ---------------------------------------------- brand pack v1.1, verbatim */
+  --c-ink: #14181f;
+  --c-paper: #fbfbf9;
+  --c-slate: #5a6270;
 
-  /* Assurance states */
-  --state-proven: #1e5540;
-  --state-failing: #a33326;
-  --state-exception: #d08b2f;
+  --c-proven: #1e5540;
+  --c-failing: #a33326;
+  --c-exception: #96601a;
 
-  /* Tints, used only for chip and row backgrounds at 10% */
+  --c-rule: #dcdbd8;
+
+  --font-ui: 'Inter', sans-serif;
+  --font-data: 'IBM Plex Mono', monospace;
+
+  /* ------------------------------------------------------------- derived */
+  /*
+   * The pack's faces are bundled (see main.tsx), so the fallback stacks below
+   * are a genuine safety net rather than the thing that usually renders.
+   */
+  --font-sans:
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --ink: var(--c-ink);
+  --slate: var(--c-slate);
+  --paper: var(--c-paper);
+  --rule: var(--c-rule);
+
+  --state-proven: var(--c-proven);
+  --state-failing: var(--c-failing);
+  --state-exception: var(--c-exception);
+
+  /*
+   * Tints exist for one purpose: the background of a state chip or a state row.
+   * They are not a second palette. At 10% the hue is a hint that something is
+   * stated here, and the text on top still meets contrast against the ground.
+   */
   --state-proven-tint: rgb(30 85 64 / 10%);
   --state-failing-tint: rgb(163 51 38 / 10%);
-  --state-exception-tint: rgb(208 139 47 / 10%);
+  --state-exception-tint: rgb(150 96 26 / 10%);
 
   /* Surfaces */
   --surface: var(--paper);
   --surface-raised: #ffffff;
   --surface-sunken: #f4f4f0;
-  --surface-inverse: var(--ink);
+
+  /*
+   * The brand surface: the masthead and anything else that is deliberately the
+   * ink bar. It is ink in BOTH themes, because it is the brand's own ground
+   * rather than an inversion of the page — the pack's dark lockup is the asset
+   * that belongs on it, and that does not stop being true when the rest of the
+   * page goes dark.
+   *
+   * This used to be `--surface-inverse`, which flipped to paper in dark mode
+   * while the text on it stayed paper, and the masthead rendered invisible.
+   * Naming it for what it is rather than for its relationship to the page is
+   * what stops that recurring.
+   */
+  --surface-brand: var(--c-ink);
+  --text-on-brand: var(--c-paper);
 
   /* Text */
   --text-primary: var(--ink);
   --text-secondary: var(--slate);
-  --text-inverse: var(--paper);
+  /* Text placed on a filled state chip. Every state fill is dark enough to
+     carry paper at AA, which is why the chips are filled rather than outlined. */
+  --text-on-state: var(--c-paper);
 
-  /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-
+  /* Type scale */
   --text-h1: 1.5rem; /* 24px / 1.3 */
   --text-h2: 1.125rem; /* 18px / 1.4 */
   --text-h3: 1rem; /* 16px / 1.5 */
@@ -66,7 +114,12 @@
   --space-7: 3rem;
   --space-8: 4rem;
 
-  /* Borders. No shadows anywhere: the brand uses rules to separate, not depth. */
+  /*
+   * Borders. No shadows anywhere: the pack separates with rules, not depth, and
+   * "thin and subtle borders" is an explicit DO. A shadow implies a card
+   * floating above the page, which is the generic SaaS card system the pack
+   * lists as a DON'T.
+   */
   --border-width: 1px;
   --border: var(--border-width) solid var(--rule);
   --border-strong: var(--border-width) solid var(--ink);
@@ -78,49 +131,70 @@
   --focus-offset: 2px;
 
   --max-content-width: 88rem;
+
+  /*
+   * The hatch. One definition, used by the Unknown chip, the Unknown row
+   * treatment, the mark and the favicon, so the angle and pitch cannot drift
+   * apart between them.
+   */
+  --hatch-angle: 45deg;
+  --hatch-line: 1px;
+  --hatch-pitch: 5px;
 }
 
 /*
- * Dark mode inverts the ground while keeping the state colours recognisable.
- * The state hues are lifted slightly so they retain contrast against Ink
- * without becoming different colours.
+ * Dark mode.
+ *
+ * The pack specifies one ground. This inverts it while keeping each state hue
+ * recognisably the same colour: the hues are lifted in lightness only, enough
+ * to hold contrast against ink, and not shifted around the wheel. Exception in
+ * particular is a dark ochre on paper and would disappear against ink at its
+ * published value, so it is raised — the alternative is turning it yellow,
+ * which the pack lists as a DON'T for a different state and is no better here.
  */
 :root[data-theme='dark'] {
   --surface: #14181f;
   --surface-raised: #1b2029;
   --surface-sunken: #0f131a;
-  --surface-inverse: var(--paper);
+  /*
+   * `--surface-brand` and `--text-on-brand` are deliberately NOT redefined: the
+   * ink bar stays the ink bar. Redefining them is what produced paper text on a
+   * paper masthead.
+   */
   --text-primary: #f3f3ef;
   --text-secondary: #9aa2b0;
+  --text-on-state: #f3f3ef;
   --rule: #2a3039;
   --state-proven: #2f7d5f;
   --state-failing: #cf4a38;
-  --state-exception: #e0a04f;
+  --state-exception: #c08432;
   --state-proven-tint: rgb(47 125 95 / 18%);
   --state-failing-tint: rgb(207 74 56 / 18%);
-  --state-exception-tint: rgb(224 160 79 / 18%);
+  --state-exception-tint: rgb(192 132 50 / 18%);
   --focus-ring: 2px solid #f3f3ef;
 }
 
 /*
  * The Unknown treatment.
  *
- * Unknown is the one assurance state with no colour. It is rendered as a
- * diagonal hatch in Ink, because any hue would place it somewhere on the
- * good-to-bad axis and Unknown is not on that axis at all — it means Adericel
- * does not hold enough trustworthy evidence to say. See
- * docs/product/brand/README.md.
+ * Unknown is the one assurance state with no colour, and the pack is explicit
+ * that it must not become warning yellow. Any hue would place it somewhere on
+ * the good-to-bad axis, and Unknown is not on that axis: it means Adericel does
+ * not hold enough trustworthy evidence to say.
+ *
+ * The hatch is drawn in the current text colour rather than in Ink directly, so
+ * it stays visible on both grounds. See docs/product/brand/BRAND.md.
  */
 .state-unknown-fill {
   background-color: transparent;
   background-image: repeating-linear-gradient(
-    45deg,
-    var(--text-primary) 0,
-    var(--text-primary) 1px,
-    transparent 1px,
-    transparent 5px
+    var(--hatch-angle),
+    currentColor 0,
+    currentColor var(--hatch-line),
+    transparent var(--hatch-line),
+    transparent var(--hatch-pitch)
   );
-  border: var(--border-width) solid var(--text-primary);
+  border: var(--border-width) solid currentColor;
 }
 
 @media (prefers-reduced-motion: no-preference) {

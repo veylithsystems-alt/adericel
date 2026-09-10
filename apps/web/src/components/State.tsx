@@ -7,11 +7,15 @@ import {
 } from '../lib/assurance-presentation.js';
 
 /**
- * The assurance state chip.
+ * The assurance state tag — Brand Pack v1.1.
  *
- * Unknown is rendered with a hatched marker and no fill colour. Its title
- * attribute carries the full meaning, because "Unknown" on its own invites the
- * reader to assume it means "probably fine".
+ * A filled pill in the state colour, except Unknown, which is hatched and has
+ * no colour at all. The title attribute carries the full meaning, because
+ * "Unknown" on its own invites the reader to assume it means "probably fine",
+ * and that assumption is the single thing this product exists to prevent.
+ *
+ * The label is wrapped in its own element so the Unknown hatch can be laid
+ * behind the pill without running through the text.
  */
 export function StateChip({
   state,
@@ -26,8 +30,7 @@ export function StateChip({
       className={`state state--${presentation.tone}`}
       title={reason ? `${presentation.meaning} Reason: ${reason}` : presentation.meaning}
     >
-      <span className="state__dot" aria-hidden="true" />
-      {presentation.label}
+      <span>{presentation.label}</span>
     </span>
   );
 }
@@ -35,8 +38,7 @@ export function StateChip({
 export function SeverityChip({ severity }: { severity: Severity }): ReactElement {
   return (
     <span className={`state state--${SEVERITY_TONE[severity]}`}>
-      <span className="state__dot" aria-hidden="true" />
-      {severity.charAt(0) + severity.slice(1).toLowerCase()}
+      <span>{severity.charAt(0) + severity.slice(1).toLowerCase()}</span>
     </span>
   );
 }
