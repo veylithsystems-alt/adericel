@@ -200,13 +200,91 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Compose file is valid
         run: |
-          docker compose --profile core --profile workflow --profile ai config >/dev/null
-        env:
-          POSTGRES_PASSWORD: ci
-          MINIO_ROOT_PASSWORD: ci
-          AUTH_JWT_SECRET: ci
-          AUTH_CREDENTIAL_ENCRYPTION_KEY: ci
+          docker compose --profile core --profile workflow --profile ai --profile backup \
+            config >/dev/null
+        env: &compose-env
+          POSTGRES_PASSWORD: ci-postgres-password
+          MINIO_ROOT_PASSWORD: ci-minio-password
+          AUTH_JWT_SECRET: ci-jwt-secret-value-that-is-long-enough-here
+          AUTH_CREDENTIAL_ENCRYPTION_KEY: ci-credential-encryption-key-32bytes!
           API_PUBLIC_URL: https://ci.invalid
           API_CORS_ORIGINS: https://ci.invalid
-          ADERICEL_DOMAIN: ci.invalid
-          N8N_ENCRYPTION_KEY: ci
+          ADERICEL_DOMAIN: localhost
+          N8N_ENCRYPTION_KEY: ci-n8n-encryption-key-value-long-enough
+          NOTIFY_FROM_ADDRESS: no-reply@ci.invalid
+          NOTIFY_DRIVER: http-email
+          # An endpoint that does not resolve. The smoke test does not sign
+          # anyone up, and an undelivered notification is logged rather than
+          # fatal — so this proves the stack starts with a real driver
+          # configured without needing a mail provider in CI.
+          NOTIFY_HTTP_ENDPOINT: http://mail.invalid/email
+          NOTIFY_HTTP_AUTH_TOKEN: ci-not-a-real-token
+
+      # `docker compose config` proves the YAML expands. It does not prove the
+      # expanded values are usable by the programs that receive them, and that
+      # gap shipped a reverse proxy that refused its own configuration and left
+      # the product unreachable. Caddy is asked directly, with the values compose
+      # actually produces.
+      - name: Reverse proxy configuration is valid as the proxy receives it
+        run: |
+          docker run --rm \
+            -v "$PWD/infrastructure/docker/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e ADERICEL_DOMAIN=localhost \
+            -e N8N_DOMAIN="$(docker compose config 2>/dev/null \
+              | sed -n 's/^ *N8N_DOMAIN: *//p' | head -1)" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+        env: *compose-env
+
+      # The one check that would have caught every deployment defect found so
+      # far: bring the stack up and ask it for a response. A build that succeeds
+      # and a deployment that serves traffic are different claims.
+      - name: Smoke deployment
+        run: |
+          set -euo pipefail
+          mkdir -p var/backup
+          docker tag adericel/app:ci adericel-api:latest
+          docker tag adericel/app:ci adericel-worker:latest
+          docker tag adericel/app:ci adericel-migrate:latest
+          docker tag adericel/web:ci adericel-web:latest
+          docker compose --profile core up -d --no-build
+
+          for attempt in $(seq 1 40); do
+            if curl -fsk https://localhost/health/ready >/dev/null 2>&1; then
+              echo "stack ready after ~$((attempt * 5))s"
+              break
+            fi
+            if [ "$attempt" -eq 40 ]; then
+              docker compose --profile core ps
+              docker compose --profile core logs --tail 80
+              echo "stack did not become ready" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+          # Through the proxy, as a browser reaches it: the interface at the
+          # root and the API under /api, on one origin.
+          curl -fsk https://localhost/ -o /dev/null
+          curl -sk https://localhost/api/v1/rulesets | grep -q UNAUTHENTICATED
+
+          # Migrations are idempotent: a second run applies nothing. Every
+          # upgrade does this, and it failed for months without anyone noticing.
+          docker compose --profile core run --rm migrate | grep -q 'up to date'
+
+          # A backup, and a restore proven against it.
+          docker compose --profile core --profile backup run --rm backup
+          dump="$(ls var/backup/*.dump | head -1)"
+          docker compose --profile core --profile backup run --rm \
+            --entrypoint /scripts/restore.sh backup \
+            "/backup/$(basename "$dump")" adericel_restore_check
+        env: *compose-env
+
+      - name: Deployment logs on failure
+        if: failure()
+        run: docker compose --profile core logs --tail 200
+        env: *compose-env
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile core --profile backup down -v
+        env: *compose-env

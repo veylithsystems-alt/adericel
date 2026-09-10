@@ -73,7 +73,6 @@ services:
       - log_checkpoints=on
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./infrastructure/docker/postgres-backup:/backup
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-adericel} -d ${POSTGRES_DB:-adericel}']
       interval: 10s
@@ -166,6 +165,16 @@ services:
       N8N_WEBHOOK_SIGNING_SECRET: ${N8N_WEBHOOK_SIGNING_SECRET:-}
       SECURITY_BLOCK_PRIVATE_EGRESS: 'true'
       SECURITY_EGRESS_ALLOWLIST: ${SECURITY_EGRESS_ALLOWLIST:-}
+      # Outbound notification. Signup verification and invitations go through
+      # this, and production start-up refuses a driver that cannot reach a
+      # person — so a deployment that omits these does not start, rather than
+      # accepting signups and losing them silently.
+      NOTIFY_DRIVER: ${NOTIFY_DRIVER:-http-email}
+      NOTIFY_FROM_ADDRESS: ${NOTIFY_FROM_ADDRESS:?NOTIFY_FROM_ADDRESS must be set}
+      NOTIFY_FROM_NAME: ${NOTIFY_FROM_NAME:-Adericel}
+      NOTIFY_HTTP_ENDPOINT: ${NOTIFY_HTTP_ENDPOINT:-}
+      NOTIFY_HTTP_AUTH_HEADER: ${NOTIFY_HTTP_AUTH_HEADER:-X-Postmark-Server-Token}
+      NOTIFY_HTTP_AUTH_TOKEN: ${NOTIFY_HTTP_AUTH_TOKEN:-}
       # Node's heap cap is set below the container limit so V8 collects rather
       # than the kernel killing the process.
       NODE_OPTIONS: '--max-old-space-size=384'
@@ -227,6 +236,49 @@ services:
     expose:
       - '8080'
 
+  # ------------------------------------------------------------------ backup
+  #
+  # Runs in the PostgreSQL image, the only container carrying pg_dump at exactly
+  # the server's version. A dump taken by a different major version is a dump
+  # that may not restore, and finding that out during an incident is the failure
+  # this placement prevents.
+  #
+  # One-shot by design. Schedule it from the host, where a cron entry is visible
+  # in the host's own crontab and cannot silently stop running because a
+  # container is unhealthy:
+  #
+  #   0 2 * * *  cd /srv/adericel && \
+  #     docker compose --profile core --profile backup run --rm backup
+  #
+  # Both profiles: compose rejects a dependency on a service outside the active
+  # profile set, and the database has to be up to dump it.
+  #
+  # A backup that has never been restored is not proven (ADR-0020). Restore it
+  # into a scratch database with infrastructure/docker/backup/restore.sh and
+  # verify with `pnpm verify:restore`.
+  backup:
+    image: postgres:16-alpine
+    profiles: [backup]
+    <<: *logging
+    restart: 'no'
+    environment:
+      PGHOST: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:-adericel}
+      POSTGRES_DB: ${POSTGRES_DB:-adericel}
+      BACKUP_RETAIN_DAYS: ${BACKUP_RETAIN_DAYS:-14}
+    entrypoint: ['/scripts/backup.sh']
+    volumes:
+      - ./infrastructure/docker/backup:/scripts:ro
+      - ${BACKUP_DIR:-./var/backup}:/backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   # ------------------------------------------------------------------- proxy
   caddy:
     image: caddy:2-alpine
@@ -237,7 +289,15 @@ services:
       - '443:443'
     environment:
       ADERICEL_DOMAIN: ${ADERICEL_DOMAIN:?ADERICEL_DOMAIN must be set}
-      N8N_DOMAIN: ${N8N_DOMAIN:-}
+      # A real default, not an empty string. Caddy substitutes a placeholder's
+      # fallback only when the variable is UNSET; an empty value expands to
+      # nothing and produces a site block with no address, which Caddy rejects
+      # with "server block without any key" — refusing the entire configuration,
+      # not just that block. Passing an empty value here therefore left every
+      # deployment that did not run n8n with a reverse proxy in a crash loop and
+      # no route to the API or the interface. tests/unit/deployment-config.test.ts
+      # fails if this regresses.
+      N8N_DOMAIN: ${N8N_DOMAIN:-n8n.localhost}
     volumes:
       - ./infrastructure/docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

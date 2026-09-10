@@ -162,24 +162,92 @@ Largest consumers, in the order they usually appear:
 Never prune assessments, the event log, the audit log, or evidence records. If
 that becomes tempting, it is the signal to move PostgreSQL to its own host.
 
+## Taking a backup
+
+```bash
+docker compose --profile core --profile backup run --rm backup
+```
+
+Both profiles: compose rejects a dependency on a service outside the active
+profile set, and the database has to be up to dump it. Schedule it from the
+host's own crontab rather than from a container, so it cannot stop running
+because something in the stack is unhealthy:
+
+```
+0 2 * * *  cd /srv/adericel && \
+  docker compose --profile core --profile backup run --rm backup
+```
+
+Each run writes two files into `BACKUP_DIR`: the dump, and a manifest recording
+its SHA-256, the schema version it was taken at, and row counts for the tables
+carrying the assurance record. The manifest is what makes a restore verifiable
+rather than merely completed — without it, "the restore finished" and "the data
+came back" are different claims and only the first is observable.
+
+**Copy both files off the host.** A backup on the same VPS does not survive
+losing the VPS, which is the failure it exists for.
+
 ## Restoring from backup
 
 ```bash
-# Into a scratch database first. Always.
-createdb adericel_restore
-pg_restore --dbname=adericel_restore --clean --if-exists backup.dump
+# Into a scratch database. The script refuses to overwrite the live one unless
+# ADERICEL_RESTORE_OVER_LIVE=yes, because the common reason to run this is
+# verification and a script whose easiest invocation destroys production will
+# eventually destroy production.
+docker compose --profile core --profile backup run --rm \
+  --entrypoint /scripts/restore.sh backup /backup/adericel-<timestamp>.dump \
+  adericel_restore_check
 ```
 
-Then verify three things before pointing anything at it:
+It refuses a dump whose checksum does not match its manifest. A dump truncated
+in transit restores partially and silently, which is worse than failing.
 
-1. `pnpm db:status` reports the schema clean.
-2. The tenancy suite passes against the restored data.
-3. A known assessment replays to the same state — this is the check that proves
-   the assurance history survived, not merely the bytes.
+Then prove it:
+
+```bash
+pnpm verify:restore --target adericel_restore_check \
+  --manifest var/backup/adericel-<timestamp>.json
+```
+
+That checks four things, and reports each separately:
+
+1. **Row counts** against the manifest. A restore that completes with an empty
+   `assessments` table has restored nothing worth having, and reports success.
+2. **Forced row level security** on every table carrying an `organisation_id`.
+   A restored database that has quietly lost tenant isolation is worse than no
+   restore at all: it works, and it leaks.
+3. **Passport integrity** — every stored Assurance Passport re-hashed against
+   its recorded hash. That hash is derived from content rather than from any
+   database identifier, so a match proves the bytes came back, not merely the
+   rows.
+4. **Recorded assessment inputs** restored as well-formed snapshots, so
+   historical replay still works against the restored data.
+
+A non-zero exit means the backup is not proven. Treat that as an incident in
+itself: the backup you have is not the backup you thought you had.
 
 Restore the evidence objects to match the same point in time. A database restore
 without them leaves records whose artefacts are missing: recoverable and
 inspectable, but it should be a known state rather than a discovery.
+
+## A restart left `migrate` in a failed state
+
+If `docker compose restart` runs while PostgreSQL is briefly unavailable, the
+one-shot `migrate` service exits non-zero and stays that way. Because `api` and
+`worker` depend on it completing successfully, the next `up` will not start
+them.
+
+This is the intended behaviour — an API whose migrations failed should not
+serve — but it looks like a hung deployment. Re-run it once the database is
+healthy:
+
+```bash
+docker compose --profile core up -d
+docker compose --profile core logs migrate --tail 20   # expect "up to date"
+```
+
+Migrations are idempotent: a second run applies nothing and reports "database is
+up to date".
 
 ## Rotating the credential encryption key
 

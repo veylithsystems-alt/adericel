@@ -41,6 +41,7 @@
     "n8n:build": "tsx --conditions=development workflows/n8n/build.ts",
     "n8n:validate": "tsx --conditions=development workflows/n8n/validate.ts",
     "brand:build": "tsx --conditions=development scripts/build-brand-assets.ts",
+    "verify:restore": "tsx scripts/verify-restore.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {

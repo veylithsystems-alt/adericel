@@ -24,6 +24,8 @@ COPY packages/truth-engine/package.json  packages/truth-engine/
 COPY packages/policy/package.json        packages/policy/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
+COPY packages/billing/package.json       packages/billing/
+COPY packages/notifications/package.json packages/notifications/
 COPY apps/api/package.json               apps/api/
 COPY apps/worker/package.json            apps/worker/
 COPY apps/web/package.json               apps/web/

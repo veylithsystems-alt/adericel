@@ -36,11 +36,23 @@ lives in the environment; a backup that contains it is a backup that decrypts
 itself. It is backed up separately, by a different mechanism, with different
 access.
 
-**Restore is tested, not assumed.** The runbook restores into a scratch
-database and asserts three things: migrations report clean, the tenancy suite
-passes against the restored data, and a known assessment replays to the same
-state. That last check is the one that matters — it proves the _assurance
-history_, not merely the bytes, survived.
+**Restore is tested, not assumed.** This was aspirational when first written:
+the ADR described a control, and nothing implemented it — the compose file
+mounted a `/backup` directory that did not exist and no script produced a dump.
+It is now real. `infrastructure/docker/backup/backup.sh` runs in the PostgreSQL
+image, the only container carrying `pg_dump` at exactly the server's version,
+and writes a dump beside a manifest recording its SHA-256, the schema version it
+was taken at, and row counts for the tables that carry the assurance record.
+`restore.sh` refuses a dump whose checksum does not match its manifest, and
+refuses to restore over the live database unless explicitly told to.
+`pnpm verify:restore` then proves the restore rather than reporting that it
+completed: row counts against the manifest, forced row level security on every
+table carrying an `organisation_id`, and — the strongest check available — every
+stored Assurance Passport re-hashed against its recorded hash. That hash is
+derived from content rather than from any database identifier, so a match proves
+the bytes came back. `tests/integration/backup-restore.test.ts` runs the whole
+cycle, including two tests that deliberately corrupt the restored data to prove
+the verifier is capable of failing.
 
 ## Alternatives considered
 

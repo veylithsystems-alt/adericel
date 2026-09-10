@@ -29,6 +29,8 @@ COPY packages/truth-engine/package.json  packages/truth-engine/
 COPY packages/policy/package.json        packages/policy/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
+COPY packages/billing/package.json       packages/billing/
+COPY packages/notifications/package.json packages/notifications/
 COPY apps/api/package.json               apps/api/
 COPY apps/worker/package.json            apps/worker/
 COPY apps/web/package.json               apps/web/
@@ -74,6 +76,8 @@ COPY --from=build /app/packages/truth-engine/dist  packages/truth-engine/dist/
 COPY --from=build /app/packages/policy/dist        packages/policy/dist/
 COPY --from=build /app/packages/actions/dist       packages/actions/dist/
 COPY --from=build /app/packages/integrations/dist  packages/integrations/dist/
+COPY --from=build /app/packages/billing/dist       packages/billing/dist/
+COPY --from=build /app/packages/notifications/dist packages/notifications/dist/
 COPY --from=build /app/apps/api/dist               apps/api/dist/
 COPY --from=build /app/apps/worker/dist            apps/worker/dist/
 
