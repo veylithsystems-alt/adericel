@@ -10,6 +10,7 @@
     { "path": "./packages/billing" },
     { "path": "./packages/actions" },
     { "path": "./packages/integrations" },
+    { "path": "./packages/notifications" },
     { "path": "./apps/api" },
     { "path": "./apps/worker" }
   ]

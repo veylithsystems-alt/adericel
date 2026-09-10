@@ -31,6 +31,7 @@ import {
   type FixtureState,
 } from '@adericel/integrations';
 import { createFilesystemStore } from '@adericel/evidence';
+import { createRecordingNotifier, type RecordingNotifier } from '@adericel/notifications';
 import { buildServer, createAppContext, type AppContext } from '@adericel/api';
 import { up as migrateUp } from '../../scripts/migrate.js';
 
@@ -104,6 +105,12 @@ export interface Harness {
    */
   readonly clock: Clock & { advance(ms: number): void };
   readonly fixtureState: FixtureState;
+  /**
+   * Captures outbound notifications. Onboarding tests read verification and
+   * invitation links out of this rather than being handed the token directly,
+   * so they exercise the same path a person does.
+   */
+  readonly notifier: RecordingNotifier;
   readonly config: AdericelConfig;
   close(): Promise<void>;
   /** Remove all tenant and control-plane data, keeping the schema. */
@@ -152,8 +159,10 @@ export async function createHarness(
     fixtureState,
   });
 
+  const notifier = createRecordingNotifier();
   const app = createAppContext({
     config,
+    notifier,
     clock,
     logger: nullLogger,
     db,
@@ -169,6 +178,7 @@ export async function createHarness(
     db,
     clock,
     fixtureState,
+    notifier,
     config,
     async close() {
       await server.close();
@@ -193,6 +203,7 @@ export async function createHarness(
             control_requirements, controls, organisation_frameworks, graph_edges, graph_nodes,
             outbox_events, event_log, audit_log, idempotency_keys, scheduled_jobs, reports,
             subscriptions, msp_baseline_controls, msp_baselines, sessions, api_keys, grants,
+            onboarding_tasks, invitations, signups,
             user_credentials, users, organisations, msps, requirements, frameworks
           RESTART IDENTITY CASCADE`);
       });

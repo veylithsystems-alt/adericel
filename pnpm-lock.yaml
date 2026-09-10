@@ -30,6 +30,9 @@ importers:
       '@adericel/integrations':
         specifier: workspace:*
         version: link:packages/integrations
+      '@adericel/notifications':
+        specifier: workspace:*
+        version: link:packages/notifications
       '@adericel/policy':
         specifier: workspace:*
         version: link:packages/policy
@@ -102,6 +105,9 @@ importers:
       '@adericel/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      '@adericel/notifications':
+        specifier: workspace:*
+        version: link:../../packages/notifications
       '@adericel/policy':
         specifier: workspace:*
         version: link:../../packages/policy
@@ -303,6 +309,18 @@ importers:
       undici:
         specifier: ^7.29.1
         version: 7.29.1
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
+  packages/notifications:
+    dependencies:
+      '@adericel/integrations':
+        specifier: workspace:*
+        version: link:../integrations
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: ^4.1.11
         version: 4.5.4

@@ -13,6 +13,7 @@ import { registerOrganisationRoutes } from './routes/organisations.js';
 import { registerAssuranceRoutes } from './routes/assurance.js';
 import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerActionRoutes } from './routes/actions.js';
+import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerFindingRoutes } from './routes/findings.js';
 import { registerGraphRoutes } from './routes/graph.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
@@ -137,6 +138,7 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   registerAssuranceRoutes(server, app);
   registerEvidenceRoutes(server, app);
   registerActionRoutes(server, app);
+  registerOnboardingRoutes(server, app);
   registerFindingRoutes(server, app);
   registerGraphRoutes(server, app);
   registerIntegrationRoutes(server, app);

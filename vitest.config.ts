@@ -14,6 +14,7 @@ const workspacePackages = [
   'policy',
   'actions',
   'integrations',
+  'notifications',
 ];
 
 /**

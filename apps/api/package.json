@@ -15,6 +15,7 @@
     "@adericel/graph": "workspace:*",
     "@adericel/evidence": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
+    "@adericel/notifications": "workspace:*",
     "@adericel/policy": "workspace:*",
     "@adericel/actions": "workspace:*",
     "@adericel/integrations": "workspace:*",

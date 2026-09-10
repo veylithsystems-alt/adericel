@@ -62,6 +62,25 @@ export const configSchema = z.object({
     passwordPepper: z.string().default(''),
   }),
 
+  /**
+   * Outbound notification. Onboarding depends on it: a verification link that
+   * is never delivered is a customer who never arrives, and nothing in the
+   * product would report it. Production start-up refuses a driver that cannot
+   * reach a person.
+   */
+  notify: z.object({
+    driver: z.enum(['log', 'http-email']).default('log'),
+    fromAddress: z.string().default('no-reply@adericel.invalid'),
+    fromName: z.string().default('Adericel'),
+    http: z
+      .object({
+        endpoint: z.string().default(''),
+        authHeader: z.string().default('Authorization'),
+        authToken: z.string().default(''),
+      })
+      .default(() => ({ endpoint: '', authHeader: 'Authorization', authToken: '' })),
+  }),
+
   storage: z.object({
     driver: z.enum(['filesystem', 's3']).default('filesystem'),
     filesystemRoot: z.string().default('./storage/local'),
@@ -192,6 +211,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdericelConfig
         env.AUTH_CREDENTIAL_ENCRYPTION_KEY ?? (isProduction ? undefined : DEV_CREDENTIAL_KEY),
       passwordPepper: env.AUTH_PASSWORD_PEPPER,
     },
+    notify: {
+      driver: env.NOTIFY_DRIVER,
+      fromAddress: env.NOTIFY_FROM_ADDRESS,
+      fromName: env.NOTIFY_FROM_NAME,
+      http: {
+        endpoint: env.NOTIFY_HTTP_ENDPOINT,
+        authHeader: env.NOTIFY_HTTP_AUTH_HEADER,
+        authToken: env.NOTIFY_HTTP_AUTH_TOKEN,
+      },
+    },
     storage: {
       driver: env.STORAGE_DRIVER,
       filesystemRoot: env.STORAGE_FILESYSTEM_ROOT,
@@ -274,6 +303,21 @@ export function assertProductionSafety(config: AdericelConfig): void {
   if (config.api.corsOrigins.includes('*')) failures.push('API_CORS_ORIGINS must not be "*"');
   if (config.storage.driver === 'filesystem') {
     failures.push('STORAGE_DRIVER=filesystem is not supported in production; use s3');
+  }
+  if (config.notify.driver === 'log') {
+    // Accepting signups and writing their verification links to a log file is
+    // not onboarding; it is collecting addresses and losing them.
+    failures.push(
+      'NOTIFY_DRIVER=log cannot deliver to a person, so signup verification and invitations ' +
+        'would be silently lost; configure http-email',
+    );
+  }
+  if (config.notify.driver === 'http-email') {
+    if (config.notify.http.endpoint === '') failures.push('NOTIFY_HTTP_ENDPOINT is required');
+    if (config.notify.http.authToken === '') failures.push('NOTIFY_HTTP_AUTH_TOKEN is required');
+    if (config.notify.fromAddress.endsWith('.invalid')) {
+      failures.push('NOTIFY_FROM_ADDRESS is still the development placeholder');
+    }
   }
   if (config.n8n.enabled && config.n8n.webhookSigningSecret.length < 32) {
     failures.push('N8N_WEBHOOK_SIGNING_SECRET must be at least 32 characters when n8n is enabled');

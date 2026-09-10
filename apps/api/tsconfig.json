@@ -15,6 +15,7 @@
     { "path": "../../packages/truth-engine" },
     { "path": "../../packages/policy" },
     { "path": "../../packages/actions" },
-    { "path": "../../packages/integrations" }
+    { "path": "../../packages/integrations" },
+    { "path": "../../packages/notifications" }
   ]
 }

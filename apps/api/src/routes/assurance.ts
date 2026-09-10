@@ -34,19 +34,36 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
       await requireOrganisation(app, request, organisationId, 'org:read');
 
       const data = await app.db.withTenant(organisationId, async (ctx) => {
+        // Driven from `controls`, not from `assurance_states`.
+        //
+        // A control that has never been assessed has no state row, and reading
+        // the state table first meant a freshly onboarded tenant saw an empty
+        // assurance page. An empty page is read as "nothing wrong" — the same
+        // claim a green dashboard makes, only quieter, and at the exact moment
+        // a customer is deciding what this product is. A control Adericel has
+        // never assessed is UNKNOWN with no evidence, and it must say so.
         const controlStates = await ctx.many<{
           subject_id: string;
           state: string;
           unknown_reason: string | null;
-          since: Date;
-          last_assessed_at: Date;
+          since: Date | null;
+          last_assessed_at: Date | null;
           key: string;
           title: string;
         }>(
-          `SELECT a.subject_id, a.state, a.unknown_reason, a.since, a.last_assessed_at, c.key, c.title
-           FROM assurance_states a
-           JOIN controls c ON c.id = a.subject_id
-           WHERE a.organisation_id = $1 AND a.subject_kind = 'CONTROL'`,
+          `SELECT c.id AS subject_id,
+                  COALESCE(a.state, 'UNKNOWN') AS state,
+                  CASE WHEN a.state IS NULL THEN 'NO_EVIDENCE' ELSE a.unknown_reason END
+                    AS unknown_reason,
+                  a.since,
+                  a.last_assessed_at,
+                  c.key, c.title
+           FROM controls c
+           LEFT JOIN assurance_states a
+             ON a.organisation_id = c.organisation_id
+            AND a.subject_kind = 'CONTROL'
+            AND a.subject_id = c.id
+           WHERE c.organisation_id = $1 AND c.enabled`,
           [organisationId],
         );
 
@@ -138,8 +155,10 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
             title: row.title,
             state: row.state as AssuranceState,
             unknownReason: row.unknown_reason,
-            since: row.since.toISOString(),
-            lastAssessedAt: row.last_assessed_at.toISOString(),
+            since: row.since?.toISOString() ?? null,
+            // Null rather than a timestamp: this control has never been
+            // assessed, and inventing a time would imply it had.
+            lastAssessedAt: row.last_assessed_at?.toISOString() ?? null,
           }))
           .sort(
             (a, b) =>

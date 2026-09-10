@@ -25,7 +25,8 @@ export type ErrorCode =
   | 'VERIFICATION_FAILED'
   | 'NOT_IMPLEMENTED'
   | 'INTERNAL_ERROR'
-  | 'DEPENDENCY_UNAVAILABLE';
+  | 'DEPENDENCY_UNAVAILABLE'
+  | 'CONFIGURATION_INVALID';
 
 const STATUS_BY_CODE: Record<ErrorCode, number> = {
   VALIDATION_FAILED: 400,
@@ -47,6 +48,9 @@ const STATUS_BY_CODE: Record<ErrorCode, number> = {
   NOT_IMPLEMENTED: 501,
   INTERNAL_ERROR: 500,
   DEPENDENCY_UNAVAILABLE: 503,
+  // A deployment fault, not a caller fault: the request was well-formed and the
+  // system is not configured to fulfil it.
+  CONFIGURATION_INVALID: 500,
 };
 
 export interface AdericelErrorOptions {

@@ -65,7 +65,7 @@ const mfaVerifySchema = z
 
 const totpCodeSchema = z.object({ code: z.string().min(1).max(16) });
 
-interface SessionSubject {
+export interface SessionSubject {
   readonly id: string;
   readonly email: string;
   readonly display_name: string;
@@ -81,7 +81,7 @@ type MfaMethod = 'NONE' | 'TOTP' | 'RECOVERY_CODE';
  * cannot drift apart — the difference between them is one column, and a
  * duplicated implementation is how that column ends up set in both.
  */
-async function issueSession(
+export async function issueSession(
   app: AppContext,
   ctx: {
     query: (text: string, values?: readonly unknown[]) => Promise<unknown>;
@@ -113,7 +113,7 @@ async function issueSession(
   return { sessionId: session.id, refreshToken };
 }
 
-function accessTokenFor(
+export function accessTokenFor(
   app: AppContext,
   user: SessionSubject,
   sessionId: string,
@@ -596,6 +596,16 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
             WHERE id = $1`,
           [factor.id, now, String(verified.step)],
         );
+
+        // Keep the denormalised flag on `users` true to the factor table.
+        // It existed from the first migration and nothing ever wrote it, so it
+        // read false for every user who had in fact enrolled — a column that
+        // silently disagreed with reality, waiting for something to trust it.
+        // Authorisation reads the factor table directly and was never affected;
+        // the onboarding ledger and any operator query are.
+        await ctx.query(`UPDATE users SET mfa_enrolled = true WHERE id = $1 AND NOT mfa_enrolled`, [
+          principal.principalId,
+        ]);
 
         // Fresh recovery codes; any previous set is discarded so that codes
         // printed for an old factor cannot unlock the new one.

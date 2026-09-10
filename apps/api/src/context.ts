@@ -17,6 +17,12 @@ import {
 import { createObjectStore, type ObjectStore } from '@adericel/evidence';
 import { createDataKeyStore, databaseFromConfig, type Database } from '@adericel/graph';
 import { buildConnectorRegistry, type ConnectorRegistry } from '@adericel/integrations';
+import {
+  assertNotifierUsableInProduction,
+  createHttpEmailNotifier,
+  createLogNotifier,
+  type Notifier,
+} from '@adericel/notifications';
 import { compilePolicy, DEFAULT_ACTION_POLICY, type CompiledPolicy } from '@adericel/policy';
 import { createBuiltInRegistry, type RulesetRegistry } from '@adericel/truth-engine';
 import type { CredentialUnsealer } from '@adericel/actions';
@@ -56,6 +62,11 @@ export interface AppContext {
    */
   readonly tokens: TokenHasher;
   readonly unsealCredentials: CredentialUnsealer;
+  /**
+   * Outbound notification. Onboarding cannot complete without it: a signup
+   * verification link that goes nowhere is a customer lost silently.
+   */
+  readonly notifier: Notifier;
   readonly startedAtIso: string;
 }
 
@@ -67,6 +78,48 @@ export interface CreateContextOptions {
   readonly storage?: ObjectStore;
   readonly connectors?: ConnectorRegistry;
   readonly fetchImpl?: typeof fetch;
+  readonly notifier?: Notifier;
+}
+
+/**
+ * Build the outbound notification channel.
+ *
+ * The log channel is a development convenience and says so: it reports itself
+ * as unable to reach a person, and `assertNotifierUsableInProduction` turns
+ * that into a refusal to start rather than a quiet loss of every signup.
+ *
+ * The body mapping follows Postmark's field names, which SendGrid and SES via
+ * an API gateway can be pointed at with a proxy. Providers disagree on shape
+ * and nothing is gained by guessing, so the endpoint, header and token are all
+ * configuration.
+ */
+function buildNotifier(config: AdericelConfig, logger: Logger, fetchImpl?: typeof fetch): Notifier {
+  const notifier =
+    config.notify.driver === 'http-email'
+      ? createHttpEmailNotifier({
+          endpoint: config.notify.http.endpoint,
+          authHeader: config.notify.http.authHeader,
+          authToken: config.notify.http.authToken,
+          fromAddress: config.notify.fromAddress,
+          fromName: config.notify.fromName,
+          ...(fetchImpl ? { fetchImpl } : {}),
+          body: (message, from) => ({
+            From: `${from.name} <${from.address}>`,
+            To: message.to,
+            Subject: message.subject,
+            TextBody: message.text,
+            ...(message.html ? { HtmlBody: message.html } : {}),
+            MessageStream: 'outbound',
+            Metadata: {
+              kind: message.kind,
+              ...(message.correlationId ? { correlationId: message.correlationId } : {}),
+            },
+          }),
+        })
+      : createLogNotifier(logger);
+
+  assertNotifierUsableInProduction(notifier, config.nodeEnv === 'production');
+  return notifier;
 }
 
 export function createAppContext(options: CreateContextOptions): AppContext {
@@ -161,6 +214,7 @@ export function createAppContext(options: CreateContextOptions): AppContext {
     secrets: createCredentialCipher(config.auth.credentialEncryptionKey),
     tokens: createTokenHasher(config.auth.credentialEncryptionKey),
     unsealCredentials,
+    notifier: options.notifier ?? buildNotifier(config, logger, options.fetchImpl),
     startedAtIso: clock.nowIso(),
   };
 }

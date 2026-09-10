@@ -212,7 +212,15 @@ export function generateApiKey(hasher: TokenHasher, prefix = 'adk'): ApiKeyMater
  * many purpose-bound subkeys, and a fourth secret for an operator to mismanage
  * would be a worse outcome than the one it prevents.
  */
-export const TOKEN_PURPOSES = ['refresh-token', 'api-key', 'recovery-code'] as const;
+export const TOKEN_PURPOSES = [
+  'refresh-token',
+  'api-key',
+  'recovery-code',
+  // Onboarding tokens. Separated from each other so a verification link can
+  // never be presented as an invitation, or the reverse.
+  'signup-verification',
+  'invitation',
+] as const;
 export type TokenPurpose = (typeof TOKEN_PURPOSES)[number];
 
 export interface TokenHasher {
