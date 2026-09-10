@@ -16,6 +16,7 @@ import { publish, type TenantContext } from '@adericel/graph';
 import type { ConnectorRegistry, ExecutionResult } from '@adericel/integrations';
 import { evaluatePolicy, type CompiledPolicy, type PolicyDecision } from '@adericel/policy';
 import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/shared';
+import { evaluateVerification } from './verification.js';
 
 /**
  * Action lifecycle.
@@ -975,20 +976,13 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         );
       }
 
-      const expected = capability.verification.expectedValue;
-      const outcome: VerificationOutcome =
-        observedValue === undefined || observedValue === null
-          ? 'INCONCLUSIVE'
-          : JSON.stringify(observedValue) === JSON.stringify(expected)
-            ? 'CONFIRMED'
-            : 'REFUTED';
-
-      const detail =
-        outcome === 'CONFIRMED'
-          ? `Re-observation of ${capability.verification.predicate} returned the expected value.`
-          : outcome === 'REFUTED'
-            ? `Re-observation of ${capability.verification.predicate} returned ${JSON.stringify(observedValue)}, expected ${JSON.stringify(expected)}. The action did not achieve the intended state.`
-            : `Re-observation of ${capability.verification.predicate} produced no value. The outcome cannot be confirmed.`;
+      const { outcome, detail } = evaluateVerification({
+        predicate: capability.verification.predicate,
+        expectedValue: capability.verification.expectedValue,
+        comparison: capability.verification.comparison ?? 'EQUALS',
+        observedValue,
+        executedAt: action.executedAt,
+      });
 
       const verification = await ctx.oneOrFail<{ id: string }>(
         `INSERT INTO verifications

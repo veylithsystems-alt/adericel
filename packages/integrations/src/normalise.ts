@@ -121,6 +121,7 @@ export const PREDICATE_MAP: Partial<Record<ObservationKind, readonly PredicateMa
     m('osSupported', 'device.os.supported', 'boolean'),
     m('osVersion', 'device.os.version', 'string'),
     m('lastPatchedAt', 'device.patch.last_applied_at', 'string'),
+    m('lastSyncAt', 'device.management.last_sync_at', 'string'),
     m('endpointProtectionInstalled', 'device.endpoint_protection.installed', 'boolean'),
     m('endpointProtectionRealtime', 'device.endpoint_protection.realtime_enabled', 'boolean'),
     m('signaturesUpdatedAt', 'device.endpoint_protection.signatures_updated_at', 'string'),

@@ -56,6 +56,22 @@ export interface ConnectorCapability {
     /** Claim predicate re-collected after execution to confirm the change. */
     readonly predicate: string;
     readonly expectedValue: unknown;
+    /**
+     * How the re-observed value is compared.
+     *
+     * `EQUALS` — the predicate must hold `expectedValue`. Suits a setting the
+     *   action changed: disable an account, and `identity.account.enabled`
+     *   must read false.
+     * `OBSERVED_AFTER_EXECUTION` — the predicate is a timestamp that must be
+     *   later than the moment the action ran. Suits an action whose effect is
+     *   that something happened at all, such as asking a device to check in,
+     *   where there is no constant to compare against and a stale timestamp
+     *   equal to the previous one is precisely the failure to catch.
+     *
+     * Defaults to `EQUALS`. The connector declares the comparison; it never
+     * declares what the result means for a control.
+     */
+    readonly comparison?: 'EQUALS' | 'OBSERVED_AFTER_EXECUTION';
   };
 }
 

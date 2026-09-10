@@ -292,7 +292,7 @@ export function createGenericHttpConnector(deps: {
  * participate in collection planning without a code change.
  */
 export const genericHttpManifest: ConnectorManifest = connectorManifestSchema.parse({
-  id: 'generic.http',
+  id: 'generic-http-json',
   version: '1.0.0',
   vendor: 'Adericel',
   products: ['Generic HTTP/JSON'],

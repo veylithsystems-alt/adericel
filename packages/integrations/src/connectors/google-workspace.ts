@@ -386,7 +386,7 @@ export function createGoogleWorkspaceConnector(deps: {
 }
 
 export const googleWorkspaceManifest: ConnectorManifest = connectorManifestSchema.parse({
-  id: 'google.workspace',
+  id: 'google-workspace',
   version: '1.0.0',
   vendor: 'Google',
   products: ['Google Workspace', 'Cloud Identity'],
@@ -417,8 +417,8 @@ export const googleWorkspaceManifest: ConnectorManifest = connectorManifestSchem
       incremental: false,
     },
   ],
-  execute: [],
-  verify: [],
+  execute: ['identity.account.disable'],
+  verify: ['identity.account.enabled'],
   pagination: true,
   incrementalCollection: false,
   fidelity: 'LIVE',

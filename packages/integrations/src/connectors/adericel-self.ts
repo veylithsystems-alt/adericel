@@ -186,7 +186,7 @@ export function createAdericelSelfConnector(
 }
 
 export const adericelSelfManifest: ConnectorManifest = connectorManifestSchema.parse({
-  id: 'adericel.self',
+  id: 'adericel-self',
   version: '1.0.0',
   vendor: 'Adericel',
   products: ['Adericel'],

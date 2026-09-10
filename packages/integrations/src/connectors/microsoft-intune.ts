@@ -155,8 +155,9 @@ export function createMicrosoftIntuneConnector(deps: {
           description:
             'Re-read the device and confirm it has synced since the request. A device that is ' +
             'switched off will not, and the action reports UNVERIFIED rather than success.',
-          predicate: 'device.sync.recent',
-          expectedValue: true,
+          predicate: 'device.management.last_sync_at',
+          expectedValue: null,
+          comparison: 'OBSERVED_AFTER_EXECUTION',
         },
       },
     ],
@@ -290,7 +291,7 @@ export function createMicrosoftIntuneConnector(deps: {
 }
 
 export const microsoftIntuneManifest: ConnectorManifest = connectorManifestSchema.parse({
-  id: 'microsoft.intune',
+  id: 'microsoft-intune',
   version: '1.0.0',
   vendor: 'Microsoft',
   products: ['Intune', 'Endpoint Manager'],
@@ -324,14 +325,14 @@ export const microsoftIntuneManifest: ConnectorManifest = connectorManifestSchem
       key: 'collect.patch_state',
       title: 'Operating system patch currency',
       domain: 'ENDPOINT',
-      produces: ['PATCH_STATE'],
-      predicates: ['device.patch.last_applied_at'],
+      produces: ['DEVICE_STATE'],
+      predicates: ['device.patch.last_applied_at', 'device.management.last_sync_at'],
       requiredPermission: 'DeviceManagementManagedDevices.Read.All',
       incremental: false,
     },
   ],
-  execute: [],
-  verify: [],
+  execute: ['device.management.sync'],
+  verify: ['device.management.last_sync_at'],
   pagination: true,
   incrementalCollection: false,
   fidelity: 'LIVE',

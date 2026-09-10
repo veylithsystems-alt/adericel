@@ -78,6 +78,17 @@ export function indexPredicateSources(
       }
     }
   }
+  // Sorted, not left in whatever order the integrations arrived in. A plan that
+  // changes when the caller's list is reordered cannot be shown to an operator
+  // before it runs, replayed afterwards, or compared between two runs — and
+  // this ordering also decides which source a reader sees first in a conflict.
+  for (const sources of index.values()) {
+    sources.sort((a, b) =>
+      a.integrationId === b.integrationId
+        ? a.capability.localeCompare(b.capability)
+        : a.integrationId.localeCompare(b.integrationId),
+    );
+  }
   return index;
 }
 

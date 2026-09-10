@@ -438,7 +438,7 @@ export function createMicrosoftEntraConnector(
  * connector may encode it.
  */
 export const microsoftEntraManifest: ConnectorManifest = connectorManifestSchema.parse({
-  id: 'microsoft.entra',
+  id: 'microsoft-entra',
   version: '1.0.0',
   vendor: 'Microsoft',
   products: ['Entra ID'],
@@ -471,7 +471,7 @@ export const microsoftEntraManifest: ConnectorManifest = connectorManifestSchema
       key: 'collect.privileged_roles',
       title: 'Directory role assignments',
       domain: 'IDENTITY',
-      produces: ['IDENTITY_STATE', 'ACCESS_GRANT'],
+      produces: ['IDENTITY_STATE', 'CONFIGURATION_SETTING'],
       predicates: [
         'identity.privileged',
         'identity.admin_account_separate',
@@ -481,8 +481,8 @@ export const microsoftEntraManifest: ConnectorManifest = connectorManifestSchema
       incremental: false,
     },
   ],
-  execute: [],
-  verify: [],
+  execute: ['identity.mfa.require', 'identity.account.disable'],
+  verify: ['identity.mfa.enforced', 'identity.account.enabled'],
   pagination: true,
   incrementalCollection: false,
   fidelity: 'LIVE',

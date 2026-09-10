@@ -261,7 +261,7 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
  * can see it.
  */
 export const demoFixtureManifest: ConnectorManifest = connectorManifestSchema.parse({
-  id: 'adericel.demo-fixture',
+  id: 'adericel-demo-fixture',
   version: '1.0.0',
   vendor: 'Adericel',
   products: ['Demonstration fixture'],
