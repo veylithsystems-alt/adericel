@@ -32,7 +32,29 @@ describe.skipIf(!available)('observation coverage', () => {
   beforeAll(async () => {
     harness = await createHarness();
     await harness.truncate();
-    tenant = await seedTenant(harness, { slug: 'coverage-corp', records: [] });
+    // A fixture configured with real records, because the fixture's capability
+    // is a property of its dataset: an empty one honestly supplies nothing.
+    tenant = await seedTenant(harness, {
+      slug: 'coverage-corp',
+      records: [
+        {
+          kind: 'IDENTITY_STATE',
+          subjectExternalId: 'u1',
+          payload: {
+            externalId: 'u1',
+            displayName: 'Alex Doe',
+            enabled: true,
+            accountType: 'USER',
+            mfaEnforced: true,
+          },
+        },
+        {
+          kind: 'DEVICE_STATE',
+          subjectExternalId: 'd1',
+          payload: { externalId: 'd1', name: 'laptop-1', managed: true, diskEncrypted: true },
+        },
+      ],
+    });
     token = await signIn(harness, 'owner-coverage-corp@test.invalid');
   });
 
@@ -48,7 +70,11 @@ describe.skipIf(!available)('observation coverage', () => {
     });
     expect(response.statusCode).toBe(200);
     return response.json() as {
-      domains: { domain: string; capabilities: { key: string; available: boolean }[] }[];
+      domains: {
+        domain: string;
+        noConnectorExists: boolean;
+        capabilities: { key: string; available: boolean }[];
+      }[];
       requiredPredicates: number;
       satisfiedPredicates: number;
       gaps: { predicate: string; wouldBeSuppliedBy: { connectorKey: string; name: string }[] }[];
@@ -99,10 +125,15 @@ describe.skipIf(!available)('observation coverage', () => {
     const report = await coverage();
     const identity = report.domains.find((d) => d.domain === 'IDENTITY');
     expect(identity?.capabilities.some((c) => c.available)).toBe(true);
+    expect(identity?.noConnectorExists).toBe(false);
+    // A domain nothing can see must appear and say so. Omitting it would let a
+    // customer read the covered domains as the whole picture and conclude
+    // their backups were fine because nothing said otherwise.
     const backup = report.domains.find((d) => d.domain === 'BACKUP');
-    // Nothing supplies backup evidence, so if the domain appears at all every
-    // capability in it must read unavailable rather than silently absent.
-    if (backup) expect(backup.capabilities.every((c) => !c.available)).toBe(true);
+    expect(backup, 'a domain with no connector must still be listed').toBeDefined();
+    expect(backup!.noConnectorExists).toBe(true);
+    expect(backup!.capabilities).toEqual([]);
+
   });
 
   describe('an integration in detail', () => {

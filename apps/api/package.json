@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc -b",
-    "dev": "tsx --conditions=development watch src/main.ts",
+    "dev": "tsx watch --conditions=development src/main.ts",
     "start": "node dist/main.js"
   },
   "dependencies": {

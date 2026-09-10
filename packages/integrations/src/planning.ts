@@ -1,3 +1,4 @@
+import { EVIDENCE_DOMAINS } from './manifest.js';
 import type { CollectCapability, ConnectorManifest, EvidenceDomain } from './manifest.js';
 
 /**
@@ -166,6 +167,12 @@ export function planCollection(
 
 export interface DomainCoverage {
   readonly domain: EvidenceDomain;
+  /**
+   * True when no connector this deployment ships can supply anything in this
+   * domain. Distinct from "available: false" on a capability, which means the
+   * capability exists and is not connected here.
+   */
+  readonly noConnectorExists: boolean;
   readonly capabilities: readonly {
     readonly key: string;
     readonly title: string;
@@ -188,6 +195,12 @@ export function discoverCoverage(
   knownCapabilities: readonly CollectCapability[],
 ): readonly DomainCoverage[] {
   const configured = new Map<string, string[]>();
+  // Capabilities an integration actually has, whether or not any static
+  // manifest declares them. A connector whose capability is derived from its
+  // configuration — a declaratively configured API, a fixture dataset — has
+  // capabilities that exist nowhere in the shipped catalogue, and leaving them
+  // out reports a connected, working source as covering nothing.
+  const derived = new Map<string, CollectCapability>();
   for (const integration of integrations) {
     const disabled = new Set(integration.disabledCapabilities ?? []);
     for (const capability of integration.manifest.collect) {
@@ -195,12 +208,20 @@ export function discoverCoverage(
       const sources = configured.get(capability.key) ?? [];
       sources.push(integration.displayName);
       configured.set(capability.key, sources);
+      derived.set(capability.key, capability);
     }
   }
 
-  const byDomain = new Map<EvidenceDomain, DomainCoverage['capabilities'][number][]>();
+  // Every evidence domain, including the ones no connector reaches yet.
+  //
+  // Omitting an empty domain would let a customer read "identity and endpoint"
+  // as the whole picture and conclude their backups are covered by silence.
+  // A domain Adericel cannot see at all is exactly the thing they need told.
+  const byDomain = new Map<EvidenceDomain, DomainCoverage['capabilities'][number][]>(
+    EVIDENCE_DOMAINS.map((domain) => [domain, []]),
+  );
   const seen = new Set<string>();
-  for (const capability of knownCapabilities) {
+  for (const capability of [...knownCapabilities, ...derived.values()]) {
     if (seen.has(capability.key)) continue;
     seen.add(capability.key);
     const sources = configured.get(capability.key) ?? [];
@@ -217,6 +238,7 @@ export function discoverCoverage(
   return [...byDomain.entries()]
     .map(([domain, capabilities]) => ({
       domain,
+      noConnectorExists: capabilities.length === 0,
       capabilities: [...capabilities].sort((a, b) => a.key.localeCompare(b.key)),
     }))
     .sort((a, b) => a.domain.localeCompare(b.domain));

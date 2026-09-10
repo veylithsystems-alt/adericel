@@ -8,7 +8,14 @@ import type {
   ExecutionRequest,
   ExecutionResult,
 } from '../connector.js';
-import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
+import {
+  capabilityReport,
+  connectorManifestSchema,
+  DOMAIN_BY_OBSERVATION_KIND,
+  type CapabilityReport,
+  type ConnectorManifest,
+} from '../manifest.js';
+import { predicatesForPayloadKeys } from '../normalise.js';
 
 /**
  * Demonstration fixture connector.
@@ -180,6 +187,31 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
         };
       });
 
+      // Reported per capability like any other connector. The demonstration
+      // path must exercise the same machinery a live one does, or the first
+      // time an operator sees a capability report will be the day a real
+      // integration breaks.
+      const manifest = demoFixtureManifestFor(config);
+      const countByKind = new Map<string, number>();
+      for (const record of config.records) {
+        countByKind.set(record.kind, (countByKind.get(record.kind) ?? 0) + 1);
+      }
+      const capabilityReports: CapabilityReport[] = manifest.collect.map((capability) => {
+        const records = capability.produces.reduce(
+          (total, kind) => total + (countByKind.get(kind) ?? 0),
+          0,
+        );
+        return capabilityReport(
+          manifest,
+          capability.key,
+          records === 0 ? 'EMPTY' : 'AVAILABLE',
+          records === 0
+            ? 'The configured dataset contains no records of this kind.'
+            : `Replayed ${records} demonstration record(s).`,
+          { records, observations: records },
+        );
+      });
+
       return {
         observations,
         warnings: [
@@ -189,6 +221,7 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
         // Advisory only. The fixture returns its whole dataset every time, so
         // the collection is complete even though the data is not real.
         partial: false,
+        capabilityReports,
         cursor: null,
       };
     },
@@ -296,3 +329,40 @@ export const demoFixtureManifest: ConnectorManifest = connectorManifestSchema.pa
   incrementalCollection: false,
   fidelity: 'DEMONSTRATION',
 });
+
+/**
+ * The manifest this fixture actually has, given the dataset it was configured
+ * with.
+ *
+ * Like the generic HTTP connector, the fixture's capability is a property of
+ * its configuration rather than of its code. A fixed declaration would be wrong
+ * in both directions: overclaiming makes a control read as a real gap in the
+ * estate, and underclaiming makes the coverage report tell a customer to
+ * connect a source for evidence something connected is already supplying.
+ */
+export function demoFixtureManifestFor(config: {
+  readonly records: readonly { readonly kind: string; readonly payload: Record<string, unknown> }[];
+}): ConnectorManifest {
+  const byKind = new Map<string, Set<string>>();
+  for (const record of config.records) {
+    const keys = byKind.get(record.kind) ?? new Set<string>();
+    for (const key of Object.keys(record.payload)) keys.add(key);
+    byKind.set(record.kind, keys);
+  }
+
+  const collect = [...byKind.entries()]
+    .map(([kind, keys]) => ({ kind, predicates: predicatesForPayloadKeys(kind as never, [...keys]) }))
+    .filter((entry) => entry.predicates.length > 0)
+    .map((entry) => ({
+      key: `collect.fixture_${entry.kind.toLowerCase()}`,
+      title: `Demonstration ${entry.kind.replace(/_/g, ' ').toLowerCase()} records`,
+      domain: DOMAIN_BY_OBSERVATION_KIND[entry.kind as never] ?? 'DOCUMENTATION',
+      produces: [entry.kind],
+      predicates: entry.predicates,
+      requiredPermission: '',
+      incremental: false,
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+  return connectorManifestSchema.parse({ ...demoFixtureManifest, collect });
+}

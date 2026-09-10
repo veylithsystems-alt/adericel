@@ -715,6 +715,63 @@ function buildPaths(): Record<string, unknown> {
         },
       }),
     },
+    '/v1/organisations/{organisationId}/integrations/{id}': {
+      get: operation({
+        summary: 'One integration in full',
+        description:
+          'Health derived from the last run\u2019s capability reports, and what each declared ' +
+          'capability did \u2014 including which canonical predicates its failure has made ' +
+          'unavailable, and the vendor permission that would restore them. Also states whether ' +
+          'the integration is LIVE or DEMONSTRATION, so fixture data can never be mistaken for ' +
+          'an observation of a real estate.',
+        tags: ['Integrations'],
+        parameters: [ORG_PARAM, ID_PARAM],
+        responses: { '200': { description: 'Integration detail' } },
+      }),
+    },
+    '/v1/organisations/{organisationId}/observation-coverage': {
+      get: operation({
+        summary: 'What Adericel can currently see',
+        description:
+          'How much of what the active rulesets need any connected integration can supply, by ' +
+          'evidence domain, with the connector that would close each gap. A domain no shipped ' +
+          'connector reaches is listed and marked, rather than omitted \u2014 omitting it would ' +
+          'let a customer read the covered domains as the whole picture. Demonstration ' +
+          'connectors are never offered as coverage.',
+        tags: ['Integrations'],
+        parameters: [ORG_PARAM],
+        responses: { '200': { description: 'Coverage report' } },
+      }),
+    },
+    '/v1/organisations/{organisationId}/source-conflicts': {
+      get: operation({
+        summary: 'Where two sources disagree',
+        description:
+          'Each entry is a claim Adericel is withholding because two systems contradict each ' +
+          'other and nothing configured resolves it. Both positions are named so the ' +
+          'disagreement can be settled. Controls resting on a contested predicate report ' +
+          'UNKNOWN until it is.',
+        tags: ['Integrations'],
+        parameters: [ORG_PARAM],
+        responses: { '200': { description: 'Open conflicts' } },
+      }),
+    },
+    '/v1/organisations/{organisationId}/source-authority': {
+      put: operation({
+        summary: 'Name the authoritative source for a predicate',
+        description:
+          'Per-predicate, because the system that best knows endpoint patch state is rarely the ' +
+          'one that best knows identity state. Longest matching pattern wins. The freshness ' +
+          'window is null by default: recency is not authority. No connector may assert its own ' +
+          'authority \u2014 this is the only way it is set.',
+        tags: ['Integrations'],
+        parameters: [ORG_PARAM],
+        responses: {
+          '204': { description: 'Stored' },
+          '400': { description: 'A named integration does not belong to this organisation' },
+        },
+      }),
+    },
     '/v1/organisations/{organisationId}/audit': {
       get: operation({
         summary: 'Audit trail',

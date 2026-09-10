@@ -374,20 +374,30 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
             ...(rule.applicability ? referencedPredicates(rule.applicability) : []),
           ]
         : [];
-      const answered = new Set(
-        data.claims
-          .filter((claim) => claim.status === 'CANDIDATE' || claim.status === 'CONFIRMED')
-          .map((claim) => claim.predicate),
-      );
       const evidenceGaps =
         state === 'UNKNOWN' && rulePredicates.length > 0
-          ? await app.db.withTenant(params.organisationId, async (ctx) =>
-              explainEvidenceGaps(
+          ? await app.db.withTenant(params.organisationId, async (ctx) => {
+              // Which of these predicates Adericel currently holds a readable
+              // value for. Asked of the live claims rather than of the
+              // assessment's recorded inputs: an assessment records what it
+              // read, and a predicate consumed by a rule's applicability — or
+              // one it never reached because an earlier input was missing —
+              // is absent from that list while being perfectly well known.
+              // Reading the wrong set told a customer to connect Intune for
+              // evidence a connected source had already supplied.
+              const held = await ctx.many<{ predicate: string }>(
+                `SELECT DISTINCT predicate FROM claims
+                 WHERE organisation_id = $1 AND predicate = ANY($2::text[])
+                   AND status IN ('CANDIDATE', 'CONFIRMED')`,
+                [params.organisationId, rulePredicates],
+              );
+              const answered = new Set(held.map((row) => row.predicate));
+              return explainEvidenceGaps(
                 ctx,
                 app.connectors,
                 rulePredicates.filter((predicate) => !answered.has(predicate)),
-              ),
-            )
+              );
+            })
           : [];
 
       return reply.status(200).send({

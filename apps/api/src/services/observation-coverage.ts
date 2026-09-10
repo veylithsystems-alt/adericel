@@ -1,5 +1,6 @@
 import type { TenantContext } from '@adericel/graph';
 import {
+  demoFixtureManifestFor,
   discoverCoverage,
   genericHttpManifestFor,
   indexPredicateSources,
@@ -46,6 +47,8 @@ export interface BrokenCapability {
 export interface CoverageReport {
   readonly domains: readonly {
     readonly domain: EvidenceDomain;
+    /** No connector this deployment ships supplies anything in this domain. */
+    readonly noConnectorExists: boolean;
     readonly capabilities: readonly {
       readonly key: string;
       readonly title: string;
@@ -93,15 +96,26 @@ export function effectiveManifest(
 ): PlannableIntegration['manifest'] | null {
   const connector = connectors.tryGet(row.connector_key);
   if (!connector) return null;
-  if (connector.key !== 'generic-http-json') return connector.manifest;
 
   const parsed = connector.configSchema.safeParse(row.configuration);
   if (!parsed.success) return connector.manifest;
-  const config = parsed.data as { observationKind: string; mappings: { to: string }[] };
-  return genericHttpManifestFor({
-    observationKind: config.observationKind as never,
-    mappings: config.mappings ?? [],
-  });
+
+  if (connector.key === 'generic-http-json') {
+    const config = parsed.data as { observationKind: string; mappings: { to: string }[] };
+    return genericHttpManifestFor({
+      observationKind: config.observationKind as never,
+      mappings: config.mappings ?? [],
+    });
+  }
+
+  if (connector.key === 'adericel-demo-fixture') {
+    const config = parsed.data as {
+      records: { kind: string; payload: Record<string, unknown> }[];
+    };
+    return demoFixtureManifestFor({ records: config.records ?? [] });
+  }
+
+  return connector.manifest;
 }
 
 export async function buildCoverageReport(
@@ -197,8 +211,13 @@ export async function buildCoverageReport(
     for (const predicate of row.unavailable_predicates) temporarilyUnavailable.add(predicate);
   }
 
+  // The catalogue a customer is shown, which is what they could connect. A
+  // demonstration connector's capabilities are excluded: listing one as
+  // available coverage would invite a customer to satisfy a control with
+  // fixture data, which is the single worst thing this page could do.
   const knownCapabilities: CollectCapability[] = connectors
     .list()
+    .filter((connector) => connector.manifest.fidelity === 'LIVE')
     .flatMap((connector) => connector.manifest.collect);
 
   return {
