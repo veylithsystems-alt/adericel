@@ -9,6 +9,7 @@ import type {
   ExecutionResult,
 } from '../connector.js';
 import { createHttpClient, type EgressPolicy } from '../http.js';
+import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
 
 /**
  * Google Workspace connector.
@@ -227,6 +228,7 @@ export function createGoogleWorkspaceConnector(deps: {
       'Domain-wide delegation, authorised in the Admin console for the service account client id',
     ],
     defaultSchedule: '0 */6 * * *',
+    manifest: googleWorkspaceManifest,
 
     capabilities: [
       {
@@ -382,3 +384,42 @@ export function createGoogleWorkspaceConnector(deps: {
     },
   };
 }
+
+export const googleWorkspaceManifest: ConnectorManifest = connectorManifestSchema.parse({
+  id: 'google.workspace',
+  version: '1.0.0',
+  vendor: 'Google',
+  products: ['Google Workspace', 'Cloud Identity'],
+  category: 'IDENTITY',
+  authentication: ['OAUTH2_CLIENT_CREDENTIALS'],
+  collect: [
+    {
+      key: 'collect.identities',
+      title: 'Directory users and their sign-in state',
+      domain: 'IDENTITY',
+      produces: ['IDENTITY_STATE'],
+      predicates: [
+        'identity.account.enabled',
+        'identity.account.type',
+        'identity.last_sign_in_at',
+        'identity.privileged',
+      ],
+      requiredPermission: 'https://www.googleapis.com/auth/admin.directory.user.readonly',
+      incremental: false,
+    },
+    {
+      key: 'collect.mfa',
+      title: 'Two-step verification enrolment',
+      domain: 'IDENTITY',
+      produces: ['IDENTITY_STATE'],
+      predicates: ['identity.mfa.enforced'],
+      requiredPermission: 'https://www.googleapis.com/auth/admin.directory.user.readonly',
+      incremental: false,
+    },
+  ],
+  execute: [],
+  verify: [],
+  pagination: true,
+  incrementalCollection: false,
+  fidelity: 'LIVE',
+});

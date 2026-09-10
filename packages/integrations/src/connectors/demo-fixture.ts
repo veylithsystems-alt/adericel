@@ -8,6 +8,7 @@ import type {
   ExecutionRequest,
   ExecutionResult,
 } from '../connector.js';
+import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
 
 /**
  * Demonstration fixture connector.
@@ -110,6 +111,7 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
     credentialSchema,
     requiredPermissions: ['None. The fixture holds its dataset in configuration.'],
     defaultSchedule: '*/15 * * * *',
+    manifest: demoFixtureManifest,
 
     capabilities: [
       {
@@ -248,3 +250,49 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
     },
   };
 }
+
+/**
+ * Manifest.
+ *
+ * `fidelity: DEMONSTRATION` is the important field. This connector serves a
+ * dataset from its own configuration and observes nothing. Presenting that as a
+ * live integration would put fabricated data into an assurance record, so the
+ * API and the interface carry the distinction through to anywhere a customer
+ * can see it.
+ */
+export const demoFixtureManifest: ConnectorManifest = connectorManifestSchema.parse({
+  id: 'adericel.demo-fixture',
+  version: '1.0.0',
+  vendor: 'Adericel',
+  products: ['Demonstration fixture'],
+  category: 'MANUAL',
+  authentication: ['NONE'],
+  collect: [
+    {
+      key: 'collect.fixture_records',
+      title: 'Demonstration dataset',
+      domain: 'IDENTITY',
+      produces: ['IDENTITY_STATE', 'DEVICE_STATE', 'CLOUD_RESOURCE_STATE'],
+      predicates: [
+        'identity.mfa.enforced',
+        'identity.account.enabled',
+        'identity.account.type',
+        'identity.last_sign_in_at',
+        'device.disk.encrypted',
+        'device.firewall.enabled',
+        'cloud.storage.public_access',
+      ],
+      requiredPermission: '',
+      incremental: false,
+    },
+  ],
+  execute: [
+    'identity.mfa.require',
+    'identity.account.disable',
+    'cloud.storage.block_public_access',
+  ],
+  verify: ['identity.mfa.enforced', 'identity.account.enabled', 'cloud.storage.public_access'],
+  pagination: false,
+  incrementalCollection: false,
+  fidelity: 'DEMONSTRATION',
+});

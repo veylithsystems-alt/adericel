@@ -1,6 +1,7 @@
 import type { ActionRiskClass, ObservationInput } from '@adericel/domain';
 import type { Logger } from '@adericel/shared';
 import { type z } from 'zod';
+import type { CapabilityReport, ConnectorManifest } from './manifest.js';
 
 /**
  * The connector contract.
@@ -73,6 +74,18 @@ export interface CollectionResult {
    * the resulting assurance picture has holes the connector can see.
    */
   readonly partial?: boolean;
+  /**
+   * How each declared capability fared.
+   *
+   * `partial` says the picture has holes; this says which holes and why. That
+   * difference decides whether an operator can act: "the integration is
+   * degraded" is not actionable, and "device compliance returned
+   * PERMISSION_DENIED, so these four controls are UNKNOWN" is.
+   *
+   * Optional so existing connectors keep working; the conformance suite
+   * requires it of any connector that declares collection capabilities.
+   */
+  readonly capabilityReports?: readonly CapabilityReport[];
   /** Opaque cursor for incremental collection on the next run. */
   readonly cursor: string | null;
 }
@@ -137,6 +150,15 @@ export interface Connector<
   readonly capabilities: readonly ConnectorCapability[];
   /** Default collection schedule as a cron expression. */
   readonly defaultSchedule: string;
+  /**
+   * Machine-readable, authoritative metadata.
+   *
+   * The interface fields above are what TypeScript can see; the manifest is
+   * what the rest of the system can reason about — which canonical predicates
+   * this connector supplies, and therefore whether a control is unassessable
+   * rather than failing.
+   */
+  readonly manifest: ConnectorManifest;
 
   checkConnection(
     config: TConfig,

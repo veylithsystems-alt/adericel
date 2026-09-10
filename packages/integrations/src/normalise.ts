@@ -8,6 +8,13 @@ import type { ClaimInput, NodeKind, ObservationKind, ObservationRecord } from '@
  * side-effect free, which matters because a claim's origin is recorded as
  * DETERMINISTIC_NORMALISATION — an assertion that a human can check by reading
  * this code, not a probabilistic extraction.
+ *
+ * The payload-key to predicate mapping is a declarative table rather than a
+ * sequence of statements. That is deliberate: the mapping is not only executed,
+ * it is *read* — by capability derivation for declaratively configured
+ * connectors, by the conformance suite, and by capability discovery answering
+ * "what could this integration ever tell us?". A mapping that exists only as
+ * control flow can be run but cannot be asked.
  */
 
 export interface NormalisedSubject {
@@ -31,24 +38,6 @@ export interface Normalisation {
 
 export type Normaliser = (observation: ObservationRecord) => Normalisation;
 
-function claim(
-  predicate: string,
-  value: unknown,
-  subjectExternalId: string | null,
-  observedAt: string | null,
-): NormalisedClaim {
-  return {
-    predicate,
-    value,
-    subjectExternalId,
-    subjectNodeId: null,
-    extractionConfidence: null,
-    observedAt,
-    validUntil: null,
-    supersedesClaimId: null,
-  };
-}
-
 function bool(value: unknown): boolean | undefined {
   if (typeof value === 'boolean') return value;
   if (value === 'true' || value === 'True' || value === 1) return true;
@@ -68,309 +57,296 @@ function num(value: unknown): number | undefined {
   return undefined;
 }
 
-function push(
-  claims: NormalisedClaim[],
+function raw(value: unknown): unknown {
+  return value;
+}
+
+/** How a payload value is coerced before it becomes a claim value. */
+export type Coercion = 'boolean' | 'string' | 'number' | 'raw';
+
+const COERCIONS: Record<Coercion, (value: unknown) => unknown> = {
+  boolean: bool,
+  string: str,
+  number: num,
+  raw,
+};
+
+/**
+ * One canonical payload key and the predicate it becomes.
+ *
+ * `subject: 'record'` attaches the claim to the observed thing; `'organisation'`
+ * makes it a claim about the organisation itself, which is how SINGLE-aggregation
+ * rules consume settings that have no per-asset subject.
+ */
+export interface PredicateMapping {
+  /** Canonical payload key a connector writes, e.g. `diskEncrypted`. */
+  readonly payloadKey: string;
+  /** Canonical predicate the Truth Engine reasons about. */
+  readonly predicate: string;
+  readonly coercion: Coercion;
+  readonly subject: 'record' | 'organisation';
+}
+
+function m(
+  payloadKey: string,
   predicate: string,
-  value: unknown,
-  subject: string | null,
-  observedAt: string | null,
-): void {
-  // A predicate is only asserted when the source actually said something. An
-  // absent field must stay absent so it becomes UNKNOWN rather than a default.
-  if (value === undefined) return;
-  claims.push(claim(predicate, value, subject, observedAt));
+  coercion: Coercion,
+  subject: 'record' | 'organisation' = 'record',
+): PredicateMapping {
+  return { payloadKey, predicate, coercion, subject };
 }
 
 /**
- * Canonical normalisers by observation kind.
+ * The canonical mapping table, by observation kind.
  *
- * Payload keys are Adericel's canonical vocabulary — connectors map their
- * vendor's shape onto these keys, which is why one normaliser serves every
- * vendor in a category.
+ * Payload keys are Adericel's own vocabulary — connectors map their vendor's
+ * shape onto these keys, which is why one table serves every vendor in a
+ * category and why swapping Intune for an RMM changes no rule.
  */
-export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = {
-  IDENTITY_STATE(observation) {
-    const p = observation.payload;
-    const externalId = str(p.externalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'identity.account.enabled', bool(p.enabled), externalId, observedAt);
-    push(claims, 'identity.account.type', str(p.accountType), externalId, observedAt);
-    push(claims, 'identity.mfa.enforced', bool(p.mfaEnforced), externalId, observedAt);
-    push(claims, 'identity.mfa.methods', p.mfaMethods, externalId, observedAt);
-    push(claims, 'identity.privileged', bool(p.privileged), externalId, observedAt);
-    push(
-      claims,
-      'identity.admin_account_separate',
-      bool(p.adminAccountSeparate),
-      externalId,
-      observedAt,
-    );
-    push(claims, 'identity.last_sign_in_at', str(p.lastSignInAt), externalId, observedAt);
-    return {
-      subjects: [
-        {
-          kind: 'Identity',
-          externalId,
-          label: str(p.displayName) ?? str(p.userPrincipalName) ?? externalId,
-          attributes: {
-            userPrincipalName: p.userPrincipalName ?? null,
-            accountType: p.accountType ?? null,
-            privileged: p.privileged ?? null,
-          },
-        },
-      ],
-      claims,
-    };
-  },
-
-  DEVICE_STATE(observation) {
-    const p = observation.payload;
-    const externalId = str(p.externalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'device.managed', bool(p.managed), externalId, observedAt);
-    push(claims, 'device.disk.encrypted', bool(p.diskEncrypted), externalId, observedAt);
-    push(claims, 'device.firewall.enabled', bool(p.firewallEnabled), externalId, observedAt);
-    push(claims, 'device.autorun_disabled', bool(p.autorunDisabled), externalId, observedAt);
-    push(claims, 'device.os.supported', bool(p.osSupported), externalId, observedAt);
-    push(claims, 'device.os.version', str(p.osVersion), externalId, observedAt);
-    push(claims, 'device.patch.last_applied_at', str(p.lastPatchedAt), externalId, observedAt);
-    push(
-      claims,
-      'device.endpoint_protection.installed',
-      bool(p.endpointProtectionInstalled),
-      externalId,
-      observedAt,
-    );
-    push(
-      claims,
-      'device.endpoint_protection.realtime_enabled',
-      bool(p.endpointProtectionRealtime),
-      externalId,
-      observedAt,
-    );
-    push(
-      claims,
-      'device.endpoint_protection.signatures_updated_at',
-      str(p.signaturesUpdatedAt),
-      externalId,
-      observedAt,
-    );
-    push(claims, 'asset.vendor_supported', bool(p.vendorSupported), externalId, observedAt);
-    push(
-      claims,
-      'asset.default_credentials_present',
-      bool(p.defaultCredentialsPresent),
-      externalId,
-      observedAt,
-    );
-    return {
-      subjects: [
-        {
-          kind: 'Device',
-          externalId,
-          label: str(p.name) ?? externalId,
-          attributes: {
-            operatingSystem: p.operatingSystem ?? null,
-            osVersion: p.osVersion ?? null,
-            owner: p.owner ?? null,
-          },
-        },
-      ],
-      claims,
-    };
-  },
-
-  CLOUD_RESOURCE_STATE(observation) {
-    const p = observation.payload;
-    const externalId = str(p.externalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'cloud.resource.category', str(p.category), externalId, observedAt);
-    push(claims, 'cloud.storage.public_access', bool(p.publicAccess), externalId, observedAt);
-    push(
-      claims,
-      'cloud.storage.encryption_enabled',
-      bool(p.encryptionEnabled),
-      externalId,
-      observedAt,
-    );
-    push(
-      claims,
-      'asset.default_credentials_present',
-      bool(p.defaultCredentialsPresent),
-      externalId,
-      observedAt,
-    );
-    return {
-      subjects: [
-        {
-          kind: 'CloudResource',
-          externalId,
-          label: str(p.name) ?? externalId,
-          attributes: {
-            provider: p.provider ?? null,
-            region: p.region ?? null,
-            category: p.category ?? null,
-          },
-        },
-      ],
-      claims,
-    };
-  },
-
-  VULNERABILITY(observation) {
-    const p = observation.payload;
-    const externalId = str(p.assetExternalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'vulnerability.critical_overdue', bool(p.criticalOverdue), externalId, observedAt);
-    push(
-      claims,
-      'vulnerability.high_or_critical_overdue_14d',
-      bool(p.highOrCriticalOverdue14d),
-      externalId,
-      observedAt,
-    );
-    push(claims, 'vulnerability.open_count', num(p.openCount), externalId, observedAt);
-    return { subjects: [], claims };
-  },
-
-  BACKUP_STATE(observation) {
-    const p = observation.payload;
-    const externalId = str(p.externalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'data.backup.required', bool(p.required), externalId, observedAt);
-    push(claims, 'data.backup.last_status', str(p.lastStatus), externalId, observedAt);
-    push(claims, 'data.backup.last_success_at', str(p.lastSuccessAt), externalId, observedAt);
-    return {
-      subjects: [
-        {
-          kind: 'DataAsset',
-          externalId,
-          label: str(p.name) ?? externalId,
-          attributes: { system: p.system ?? null },
-        },
-      ],
-      claims,
-    };
-  },
-
-  CONFIGURATION_SETTING(observation) {
-    const p = observation.payload;
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    // Organisation-wide settings carry no subject: they are claims about the
-    // organisation itself, which is how SINGLE-aggregation rules consume them.
-    push(claims, 'organisation.password.min_length', num(p.passwordMinLength), null, observedAt);
-    push(
-      claims,
+export const PREDICATE_MAP: Partial<Record<ObservationKind, readonly PredicateMapping[]>> = {
+  IDENTITY_STATE: [
+    m('enabled', 'identity.account.enabled', 'boolean'),
+    m('accountType', 'identity.account.type', 'string'),
+    m('mfaEnforced', 'identity.mfa.enforced', 'boolean'),
+    m('mfaMethods', 'identity.mfa.methods', 'raw'),
+    m('privileged', 'identity.privileged', 'boolean'),
+    m('adminAccountSeparate', 'identity.admin_account_separate', 'boolean'),
+    m('lastSignInAt', 'identity.last_sign_in_at', 'string'),
+  ],
+  DEVICE_STATE: [
+    m('managed', 'device.managed', 'boolean'),
+    m('diskEncrypted', 'device.disk.encrypted', 'boolean'),
+    m('firewallEnabled', 'device.firewall.enabled', 'boolean'),
+    m('autorunDisabled', 'device.autorun_disabled', 'boolean'),
+    m('osSupported', 'device.os.supported', 'boolean'),
+    m('osVersion', 'device.os.version', 'string'),
+    m('lastPatchedAt', 'device.patch.last_applied_at', 'string'),
+    m('endpointProtectionInstalled', 'device.endpoint_protection.installed', 'boolean'),
+    m('endpointProtectionRealtime', 'device.endpoint_protection.realtime_enabled', 'boolean'),
+    m('signaturesUpdatedAt', 'device.endpoint_protection.signatures_updated_at', 'string'),
+    m('vendorSupported', 'asset.vendor_supported', 'boolean'),
+    m('defaultCredentialsPresent', 'asset.default_credentials_present', 'boolean'),
+  ],
+  CLOUD_RESOURCE_STATE: [
+    m('category', 'cloud.resource.category', 'string'),
+    m('publicAccess', 'cloud.storage.public_access', 'boolean'),
+    m('encryptionEnabled', 'cloud.storage.encryption_enabled', 'boolean'),
+    m('defaultCredentialsPresent', 'asset.default_credentials_present', 'boolean'),
+  ],
+  VULNERABILITY: [
+    m('criticalOverdue', 'vulnerability.critical_overdue', 'boolean'),
+    m('highOrCriticalOverdue14d', 'vulnerability.high_or_critical_overdue_14d', 'boolean'),
+    m('openCount', 'vulnerability.open_count', 'number'),
+  ],
+  BACKUP_STATE: [
+    m('required', 'data.backup.required', 'boolean'),
+    m('lastStatus', 'data.backup.last_status', 'string'),
+    m('lastSuccessAt', 'data.backup.last_success_at', 'string'),
+  ],
+  CONFIGURATION_SETTING: [
+    m('passwordMinLength', 'organisation.password.min_length', 'number', 'organisation'),
+    m(
+      'passwordBreachScreening',
       'organisation.password.breach_screening_enabled',
-      bool(p.passwordBreachScreening),
-      null,
-      observedAt,
-    );
-    push(claims, 'organisation.identity.admin_count', num(p.adminCount), null, observedAt);
-    push(claims, 'organisation.logging.enabled', bool(p.loggingEnabled), null, observedAt);
-    push(claims, 'organisation.logging.retention_days', num(p.logRetentionDays), null, observedAt);
-    push(
-      claims,
+      'boolean',
+      'organisation',
+    ),
+    m('adminCount', 'organisation.identity.admin_count', 'number', 'organisation'),
+    m('loggingEnabled', 'organisation.logging.enabled', 'boolean', 'organisation'),
+    m('logRetentionDays', 'organisation.logging.retention_days', 'number', 'organisation'),
+    m(
+      'lastRestoreTestAt',
       'organisation.backup.last_restore_test_at',
-      str(p.lastRestoreTestAt),
-      null,
-      observedAt,
-    );
-    push(
-      claims,
+      'string',
+      'organisation',
+    ),
+    m(
+      'trainingCompletionRate',
       'organisation.training.completion_rate',
-      num(p.trainingCompletionRate),
-      null,
-      observedAt,
-    );
-    push(claims, 'network.firewall.present', bool(p.boundaryFirewallPresent), null, observedAt);
-    push(
-      claims,
+      'number',
+      'organisation',
+    ),
+    m('boundaryFirewallPresent', 'network.firewall.present', 'boolean', 'organisation'),
+    m(
+      'firewallDefaultDenyInbound',
       'network.firewall.default_deny_inbound',
-      bool(p.firewallDefaultDenyInbound),
-      null,
-      observedAt,
-    );
-    return { subjects: [], claims };
-  },
-
-  POLICY_DOCUMENT(observation) {
-    const p = observation.payload;
-    const externalId = str(p.externalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'policy.published', bool(p.published), externalId, observedAt);
-    push(claims, 'policy.last_reviewed_at', str(p.lastReviewedAt), externalId, observedAt);
-    return {
-      subjects: [
-        {
-          kind: 'Policy',
-          externalId,
-          label: str(p.title) ?? externalId,
-          attributes: { owner: p.owner ?? null, version: p.version ?? null },
-        },
-      ],
-      claims,
-    };
-  },
-
-  SUPPLIER_ATTESTATION(observation) {
-    const p = observation.payload;
-    const externalId = str(p.externalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'supplier.criticality', str(p.criticality), externalId, observedAt);
-    push(claims, 'supplier.assurance.type', str(p.assuranceType), externalId, observedAt);
-    push(claims, 'supplier.assurance.verified_at', str(p.verifiedAt), externalId, observedAt);
-    return {
-      subjects: [
-        {
-          kind: 'Supplier',
-          externalId,
-          label: str(p.name) ?? externalId,
-          attributes: { criticality: p.criticality ?? null },
-        },
-      ],
-      claims,
-    };
-  },
-
-  APPLICATION_STATE(observation) {
-    const p = observation.payload;
-    const externalId = str(p.externalId) ?? observation.subjectExternalId ?? '';
-    const observedAt = observation.observedAt;
-    const claims: NormalisedClaim[] = [];
-    push(claims, 'asset.vendor_supported', bool(p.vendorSupported), externalId, observedAt);
-    push(
-      claims,
-      'asset.default_credentials_present',
-      bool(p.defaultCredentialsPresent),
-      externalId,
-      observedAt,
-    );
-    return {
-      subjects: [
-        {
-          kind: 'Application',
-          externalId,
-          label: str(p.name) ?? externalId,
-          attributes: { vendor: p.vendor ?? null, version: p.version ?? null },
-        },
-      ],
-      claims,
-    };
-  },
+      'boolean',
+      'organisation',
+    ),
+  ],
+  POLICY_DOCUMENT: [
+    m('published', 'policy.published', 'boolean'),
+    m('lastReviewedAt', 'policy.last_reviewed_at', 'string'),
+  ],
+  SUPPLIER_ATTESTATION: [
+    m('criticality', 'supplier.criticality', 'string'),
+    m('assuranceType', 'supplier.assurance.type', 'string'),
+    m('verifiedAt', 'supplier.assurance.verified_at', 'string'),
+  ],
+  APPLICATION_STATE: [
+    m('vendorSupported', 'asset.vendor_supported', 'boolean'),
+    m('defaultCredentialsPresent', 'asset.default_credentials_present', 'boolean'),
+  ],
 };
 
-/** Normalise an observation; returns empty when no normaliser is registered. */
-export function normalise(observation: ObservationRecord): Normalisation {
-  const normaliser = NORMALISERS[observation.kind];
-  if (!normaliser) return { subjects: [], claims: [] };
-  return normaliser(observation);
+/**
+ * The canonical predicates a set of payload keys would produce.
+ *
+ * Used to derive a declaratively configured connector's real capability from
+ * its field mappings. A connector that writes `diskEncrypted` supplies
+ * `device.disk.encrypted`; claiming it supplies `diskEncrypted` would make the
+ * predicate unresolvable and the control silently unassessable.
+ */
+export function predicatesForPayloadKeys(
+  kind: ObservationKind,
+  payloadKeys: readonly string[],
+): readonly string[] {
+  const mappings = PREDICATE_MAP[kind] ?? [];
+  const wanted = new Set(payloadKeys);
+  return [
+    ...new Set(mappings.filter((entry) => wanted.has(entry.payloadKey)).map((e) => e.predicate)),
+  ].sort();
 }
+
+/** Every canonical predicate an observation kind can produce. */
+export function predicatesForKind(kind: ObservationKind): readonly string[] {
+  return [...new Set((PREDICATE_MAP[kind] ?? []).map((e) => e.predicate))].sort();
+}
+
+/** Every canonical payload key an observation kind understands. */
+export function payloadKeysForKind(kind: ObservationKind): readonly string[] {
+  return [...new Set((PREDICATE_MAP[kind] ?? []).map((e) => e.payloadKey))].sort();
+}
+
+function claimsFromTable(observation: ObservationRecord, recordSubject: string | null) {
+  const mappings = PREDICATE_MAP[observation.kind] ?? [];
+  const payload = observation.payload;
+  const claims: NormalisedClaim[] = [];
+  for (const entry of mappings) {
+    const value = COERCIONS[entry.coercion](payload[entry.payloadKey]);
+    // A predicate is only asserted when the source actually said something. An
+    // absent field must stay absent so it becomes UNKNOWN rather than a default.
+    if (value === undefined) continue;
+    claims.push({
+      predicate: entry.predicate,
+      value,
+      subjectExternalId: entry.subject === 'organisation' ? null : recordSubject,
+      subjectNodeId: null,
+      extractionConfidence: null,
+      observedAt: observation.observedAt,
+      validUntil: null,
+      supersedesClaimId: null,
+    });
+  }
+  return claims;
+}
+
+/**
+ * Subject construction by observation kind.
+ *
+ * Claims come from the table above; the node a claim hangs off is
+ * kind-specific, so it stays here.
+ */
+type SubjectBuilder = (
+  observation: ObservationRecord,
+  externalId: string,
+) => readonly NormalisedSubject[];
+
+const SUBJECT_BUILDERS: Partial<Record<ObservationKind, SubjectBuilder>> = {
+  IDENTITY_STATE: (o, externalId) => [
+    {
+      kind: 'Identity',
+      externalId,
+      label: str(o.payload.displayName) ?? str(o.payload.userPrincipalName) ?? externalId,
+      attributes: {
+        userPrincipalName: o.payload.userPrincipalName ?? null,
+        accountType: o.payload.accountType ?? null,
+        privileged: o.payload.privileged ?? null,
+      },
+    },
+  ],
+  DEVICE_STATE: (o, externalId) => [
+    {
+      kind: 'Device',
+      externalId,
+      label: str(o.payload.name) ?? externalId,
+      attributes: {
+        operatingSystem: o.payload.operatingSystem ?? null,
+        osVersion: o.payload.osVersion ?? null,
+        owner: o.payload.owner ?? null,
+      },
+    },
+  ],
+  CLOUD_RESOURCE_STATE: (o, externalId) => [
+    {
+      kind: 'CloudResource',
+      externalId,
+      label: str(o.payload.name) ?? externalId,
+      attributes: {
+        provider: o.payload.provider ?? null,
+        region: o.payload.region ?? null,
+        category: o.payload.category ?? null,
+      },
+    },
+  ],
+  BACKUP_STATE: (o, externalId) => [
+    {
+      kind: 'DataAsset',
+      externalId,
+      label: str(o.payload.name) ?? externalId,
+      attributes: { system: o.payload.system ?? null },
+    },
+  ],
+  POLICY_DOCUMENT: (o, externalId) => [
+    {
+      kind: 'Policy',
+      externalId,
+      label: str(o.payload.title) ?? externalId,
+      attributes: { owner: o.payload.owner ?? null, version: o.payload.version ?? null },
+    },
+  ],
+  SUPPLIER_ATTESTATION: (o, externalId) => [
+    {
+      kind: 'Supplier',
+      externalId,
+      label: str(o.payload.name) ?? externalId,
+      attributes: { criticality: o.payload.criticality ?? null },
+    },
+  ],
+  APPLICATION_STATE: (o, externalId) => [
+    {
+      kind: 'Application',
+      externalId,
+      label: str(o.payload.name) ?? externalId,
+      attributes: { vendor: o.payload.vendor ?? null, version: o.payload.version ?? null },
+    },
+  ],
+  // VULNERABILITY and CONFIGURATION_SETTING create no nodes of their own: a
+  // vulnerability is a fact about an asset another observation already created,
+  // and a setting is a fact about the organisation.
+};
+
+/** Where an observation's per-record subject identifier lives in its payload. */
+const SUBJECT_ID_FIELD: Partial<Record<ObservationKind, string>> = {
+  VULNERABILITY: 'assetExternalId',
+};
+
+/** Normalise an observation; returns empty when no mapping is registered. */
+export function normalise(observation: ObservationRecord): Normalisation {
+  const mappings = PREDICATE_MAP[observation.kind];
+  if (!mappings) return { subjects: [], claims: [] };
+
+  const idField = SUBJECT_ID_FIELD[observation.kind] ?? 'externalId';
+  const externalId = str(observation.payload[idField]) ?? observation.subjectExternalId ?? '';
+
+  const subjects = SUBJECT_BUILDERS[observation.kind]?.(observation, externalId) ?? [];
+  return { subjects, claims: claimsFromTable(observation, externalId) };
+}
+
+/**
+ * Kept for callers that dispatch by kind. Backed by the same table, so there is
+ * no second implementation to drift.
+ */
+export const NORMALISERS: Partial<Record<ObservationKind, Normaliser>> = Object.fromEntries(
+  Object.keys(PREDICATE_MAP).map((kind) => [kind, (o: ObservationRecord) => normalise(o)]),
+) as Partial<Record<ObservationKind, Normaliser>>;

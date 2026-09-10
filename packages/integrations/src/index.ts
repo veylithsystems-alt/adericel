@@ -8,3 +8,7 @@ export * from './connectors/generic-http.js';
 export * from './connectors/adericel-self.js';
 export * from './connectors/demo-fixture.js';
 export * from './registry.js';
+export * from './manifest.js';
+export * from './planning.js';
+export * from './conflict.js';
+export * from './drift.js';

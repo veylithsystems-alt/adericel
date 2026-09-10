@@ -7,6 +7,7 @@ import type {
   CollectionResult,
 } from '../connector.js';
 import { createHttpClient, type EgressPolicy } from '../http.js';
+import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
 
 /**
  * Microsoft Intune connector.
@@ -137,6 +138,7 @@ export function createMicrosoftIntuneConnector(deps: {
       'DeviceManagementConfiguration.Read.All (application) — read configuration profile assignment',
     ],
     defaultSchedule: '0 */4 * * *',
+    manifest: microsoftIntuneManifest,
 
     capabilities: [
       {
@@ -286,3 +288,51 @@ export function createMicrosoftIntuneConnector(deps: {
     },
   };
 }
+
+export const microsoftIntuneManifest: ConnectorManifest = connectorManifestSchema.parse({
+  id: 'microsoft.intune',
+  version: '1.0.0',
+  vendor: 'Microsoft',
+  products: ['Intune', 'Endpoint Manager'],
+  category: 'ENDPOINT',
+  authentication: ['OAUTH2_CLIENT_CREDENTIALS'],
+  collect: [
+    {
+      key: 'collect.devices',
+      title: 'Managed device inventory',
+      domain: 'ENDPOINT',
+      produces: ['DEVICE_STATE'],
+      predicates: ['device.managed', 'device.os.version', 'device.os.supported'],
+      requiredPermission: 'DeviceManagementManagedDevices.Read.All',
+      incremental: false,
+    },
+    {
+      key: 'collect.device_compliance',
+      title: 'Device compliance, encryption and firewall state',
+      domain: 'ENDPOINT',
+      produces: ['DEVICE_STATE'],
+      predicates: [
+        'device.disk.encrypted',
+        'device.firewall.enabled',
+        'device.endpoint_protection.installed',
+        'device.endpoint_protection.realtime_enabled',
+      ],
+      requiredPermission: 'DeviceManagementConfiguration.Read.All',
+      incremental: false,
+    },
+    {
+      key: 'collect.patch_state',
+      title: 'Operating system patch currency',
+      domain: 'ENDPOINT',
+      produces: ['PATCH_STATE'],
+      predicates: ['device.patch.last_applied_at'],
+      requiredPermission: 'DeviceManagementManagedDevices.Read.All',
+      incremental: false,
+    },
+  ],
+  execute: [],
+  verify: [],
+  pagination: true,
+  incrementalCollection: false,
+  fidelity: 'LIVE',
+});

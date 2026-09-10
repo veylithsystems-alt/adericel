@@ -8,6 +8,7 @@ import type {
   ExecutionResult,
 } from '../connector.js';
 import { createHttpClient, type EgressPolicy } from '../http.js';
+import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
 
 /**
  * Microsoft Entra ID (Azure AD) connector.
@@ -156,6 +157,7 @@ export function createMicrosoftEntraConnector(
       'User.ReadWrite.All (application) — only if account disable actions are used',
     ],
     defaultSchedule: '0 */6 * * *',
+    manifest: microsoftEntraManifest,
 
     capabilities: [
       {
@@ -426,3 +428,62 @@ export function createMicrosoftEntraConnector(
     },
   };
 }
+
+/**
+ * Manifest.
+ *
+ * Declares the canonical predicates this connector supplies — never what they
+ * prove. Entra saying "MFA is enforced" is an observation; whether that
+ * satisfies a Cyber Essentials control is the ruleset's business, and no
+ * connector may encode it.
+ */
+export const microsoftEntraManifest: ConnectorManifest = connectorManifestSchema.parse({
+  id: 'microsoft.entra',
+  version: '1.0.0',
+  vendor: 'Microsoft',
+  products: ['Entra ID'],
+  category: 'IDENTITY',
+  authentication: ['OAUTH2_CLIENT_CREDENTIALS'],
+  collect: [
+    {
+      key: 'collect.identities',
+      title: 'User accounts and their sign-in state',
+      domain: 'IDENTITY',
+      produces: ['IDENTITY_STATE'],
+      predicates: [
+        'identity.account.enabled',
+        'identity.account.type',
+        'identity.last_sign_in_at',
+      ],
+      requiredPermission: 'User.Read.All',
+      incremental: false,
+    },
+    {
+      key: 'collect.mfa',
+      title: 'Multi-factor authentication registration and enforcement',
+      domain: 'IDENTITY',
+      produces: ['IDENTITY_STATE'],
+      predicates: ['identity.mfa.enforced', 'identity.mfa.methods'],
+      requiredPermission: 'UserAuthenticationMethod.Read.All',
+      incremental: false,
+    },
+    {
+      key: 'collect.privileged_roles',
+      title: 'Directory role assignments',
+      domain: 'IDENTITY',
+      produces: ['IDENTITY_STATE', 'ACCESS_GRANT'],
+      predicates: [
+        'identity.privileged',
+        'identity.admin_account_separate',
+        'organisation.identity.admin_count',
+      ],
+      requiredPermission: 'RoleManagement.Read.Directory',
+      incremental: false,
+    },
+  ],
+  execute: [],
+  verify: [],
+  pagination: true,
+  incrementalCollection: false,
+  fidelity: 'LIVE',
+});

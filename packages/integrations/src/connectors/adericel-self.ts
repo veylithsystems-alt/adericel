@@ -6,6 +6,7 @@ import type {
   ConnectorContext,
   CollectionResult,
 } from '../connector.js';
+import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
 
 /**
  * Adericel self-assurance connector.
@@ -63,6 +64,7 @@ export function createAdericelSelfConnector(
     credentialSchema,
     requiredPermissions: ['None. The connector reads Adericel-internal health state only.'],
     defaultSchedule: '0 * * * *',
+    manifest: adericelSelfManifest,
     capabilities: [],
 
     async checkConnection(_config, _credentials, _context): Promise<ConnectionCheck> {
@@ -182,3 +184,28 @@ export function createAdericelSelfConnector(
     },
   };
 }
+
+export const adericelSelfManifest: ConnectorManifest = connectorManifestSchema.parse({
+  id: 'adericel.self',
+  version: '1.0.0',
+  vendor: 'Adericel',
+  products: ['Adericel'],
+  category: 'MANUAL',
+  authentication: ['NONE'],
+  collect: [
+    {
+      key: 'collect.platform_state',
+      title: "Adericel's own operational state",
+      domain: 'DOCUMENTATION',
+      produces: ['CONFIGURATION_SETTING'],
+      predicates: ['organisation.logging.enabled', 'organisation.logging.retention_days'],
+      requiredPermission: '',
+      incremental: false,
+    },
+  ],
+  execute: [],
+  verify: [],
+  pagination: false,
+  incrementalCollection: false,
+  fidelity: 'LIVE',
+});

@@ -7,6 +7,12 @@ import type {
   CollectionResult,
 } from '../connector.js';
 import { createHttpClient, type EgressPolicy } from '../http.js';
+import {
+  connectorManifestSchema,
+  DOMAIN_BY_OBSERVATION_KIND,
+  type ConnectorManifest,
+} from '../manifest.js';
+import { predicatesForPayloadKeys } from '../normalise.js';
 
 /**
  * Generic HTTP/JSON connector.
@@ -178,6 +184,7 @@ export function createGenericHttpConnector(deps: {
       'Read access to the configured endpoint, scoped to the data Adericel needs and no more.',
     ],
     defaultSchedule: '0 */6 * * *',
+    manifest: genericHttpManifest,
     capabilities: [],
 
     async checkConnection(config, credentials, context): Promise<ConnectionCheck> {
@@ -273,4 +280,69 @@ export function createGenericHttpConnector(deps: {
       return { observations, warnings, partial: warnings.length > 0, cursor };
     },
   };
+}
+
+/**
+ * Manifest.
+ *
+ * The predicates are supplied by configuration rather than fixed by code, so
+ * the manifest a registry sees is the empty template and the effective one is
+ * derived per integration from its field mappings. `genericHttpManifestFor`
+ * below does that derivation, which is what lets a customer-specific API
+ * participate in collection planning without a code change.
+ */
+export const genericHttpManifest: ConnectorManifest = connectorManifestSchema.parse({
+  id: 'generic.http',
+  version: '1.0.0',
+  vendor: 'Adericel',
+  products: ['Generic HTTP/JSON'],
+  category: 'MANUAL',
+  authentication: ['API_KEY', 'BEARER', 'BASIC', 'NONE'],
+  collect: [],
+  execute: [],
+  verify: [],
+  pagination: true,
+  incrementalCollection: true,
+  fidelity: 'LIVE',
+});
+
+/**
+ * The manifest this integration actually has, given its configured mappings.
+ *
+ * A generic connector's capability is a property of its configuration, not of
+ * its code. Deriving it here means a declaratively configured API is a
+ * first-class participant in capability discovery and collection planning —
+ * the point of the generic connector being genuinely useful rather than a
+ * technical curiosity.
+ */
+export function genericHttpManifestFor(config: {
+  readonly observationKind: ObservationKind;
+  readonly mappings: readonly { readonly to: string }[];
+}): ConnectorManifest {
+  // The configuration names canonical *payload keys*; the manifest must declare
+  // canonical *predicates*. Deriving one from the other through the same table
+  // the normaliser uses is what keeps the claim honest: a manifest promising
+  // `diskEncrypted` would resolve to no rule at all, and the control it was
+  // meant to answer would go quietly unassessable.
+  const predicates = predicatesForPayloadKeys(
+    config.observationKind,
+    config.mappings.map((mapping) => mapping.to),
+  );
+  return connectorManifestSchema.parse({
+    ...genericHttpManifest,
+    collect:
+      predicates.length === 0
+        ? []
+        : [
+            {
+              key: 'collect.mapped_records',
+              title: 'Records mapped by this integration configuration',
+              domain: DOMAIN_BY_OBSERVATION_KIND[config.observationKind] ?? 'DOCUMENTATION',
+              produces: [config.observationKind],
+              predicates,
+              requiredPermission: '',
+              incremental: true,
+            },
+          ],
+  });
 }
