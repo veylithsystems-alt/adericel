@@ -7539,7 +7539,8 @@
           "rule": {
             "interval": [
               {
-                "field": "cronExpression"
+                "field": "cronExpression",
+                "expression": "0 7 * * *"
               }
             ]
           }
@@ -7932,46 +7933,47 @@
     ]
   },
   {
-    "id": "a8220e0b5d86f379",
-    "name": "Adericel — 01 Event intake",
-    "active": true,
+    "id": "f509de547f0c9a26",
+    "name": "Adericel — 24 Retention watch",
+    "active": false,
     "nodes": [
       {
         "parameters": {
-          "content": "## Adericel — Event intake\n\nEvery Adericel domain event arrives here.\n\n**Security:** the payload is authenticated by an HMAC over `{timestamp}.{rawBody}` using `ADERICEL_WEBHOOK_SECRET`. Deliveries older than five minutes are rejected, so a captured request cannot be replayed.\n\n**Delivery is at-least-once.** Handlers must tolerate duplicates; the event id makes that straightforward.",
-          "height": 320,
-          "width": 560,
+          "content": "## Retention watch\n\nAdericel publishes a retention schedule and enforces it nightly from the same register the schedule is generated from. This checks that the sweep actually ran.\n\nA sweep that has not run in 48 hours means a period that is being promised and not kept. That is a data protection failure whether or not anyone has noticed, and it is silent by nature — no error, no alert, just rows quietly outliving their basis.",
+          "height": 300,
+          "width": 540,
           "color": 4
         },
-        "id": "c72ab545f4e612df",
-        "name": "Note 36a46f",
+        "id": "787ce0069fad712c",
+        "name": "Note fe0da1",
         "type": "n8n-nodes-base.stickyNote",
         "typeVersion": 1,
         "position": [
           -620,
-          -200
+          -220
         ]
       },
       {
         "parameters": {
-          "httpMethod": "POST",
-          "path": "adericel-events",
-          "responseMode": "responseNode",
-          "options": {
-            "rawBody": true
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 8 * * *"
+              }
+            ]
           }
         },
-        "id": "f878b7b5055aa9df",
-        "name": "Adericel event",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
+        "id": "100d23abef48b75d",
+        "name": "Every morning",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
         "position": [
           0,
           0
         ],
-        "notes": "Point the Adericel worker at this instance with N8N_BASE_URL and N8N_ENABLED=true. It posts to /webhook/adericel-events.",
-        "notesInFlow": false,
-        "webhookId": "adericel-events"
+        "notes": "After the nightly sweep, early enough to act on a miss the same day.",
+        "notesInFlow": false
       },
       {
         "parameters": {
@@ -8019,10 +8021,319 @@
       },
       {
         "parameters": {
+          "method": "GET",
+          "url": "={{ $json.apiBaseUrl }}/v1/veylith/retention?limit=200",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Correlation-Id",
+                "value": "={{ $json.correlationId || $execution.id }}"
+              }
+            ]
+          },
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "fullResponse": true,
+                "neverError": true
+              }
+            }
+          }
+        },
+        "id": "a2460996f1348034",
+        "name": "Ask the control room",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          440,
+          0
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "adericel-api-key",
+            "name": "Adericel API key"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
+      },
+      {
+        "parameters": {
+          "jsCode": "const body = $input.first().json.body || {};\nconst runs = body.runs || [];\n\n// Rows acted on since the last run, so a report says what actually happened\n// rather than only that something happened.\nconst lastRunAt = body.lastRunAt;\nconst latest = runs.filter((run) => run.ranAt === lastRunAt);\nconst acted = latest.filter((run) => run.rowsAffected > 0);\n\nconst lines = acted.map((run) =>\n  `- ${run.entry}: ${run.treatment.toLowerCase()} ${run.rowsAffected} row(s) older than ${run.retentionDays} days`,\n);\n\nreturn [{\n  json: {\n    overdue: body.overdue === true,\n    lastRunAt: lastRunAt,\n    hoursSinceLastRun: body.hoursSinceLastRun,\n    periodsDeclared: (body.schedule || []).length,\n    rowsActedOn: acted.reduce((total, run) => total + run.rowsAffected, 0),\n    summary: lines.length > 0 ? lines.join('\\n') : 'Nothing was past its retention period.',\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "ce82e79d74974adb",
+        "name": "Did it run?",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          660,
+          0
+        ],
+        "notes": "Reads the register and the run record together.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose",
+              "version": 2
+            },
+            "conditions": [
+              {
+                "id": "992d2a57dd971f1d",
+                "leftValue": "={{ $json.overdue }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "looseTypeValidation": true,
+          "options": {}
+        },
+        "id": "18a8d52cd7c9431a",
+        "name": "Overdue?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          880,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const state = $input.first().json;\nconst hours = state.hoursSinceLastRun;\n\nreturn [{\n  json: {\n    severity: 'HIGH',\n    subject: 'The retention sweep has not run',\n    body: [\n      hours === null\n        ? 'The retention sweep has no recorded run at all.'\n        : `The retention sweep last ran ${hours} hours ago.`,\n      '',\n      `${state.periodsDeclared} retention periods are declared in the register and published ` +\n        'in the retention schedule. While the sweep is not running, none of them is being kept.',\n      '',\n      'This is a data protection failure rather than an operational one: the periods are ' +\n        'promised to customers in the DPA and to individuals in the privacy notice.',\n      '',\n      'Check the worker is running and that the sweep-retention job is enabled.',\n    ].join('\\n'),\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "3027624fb63db755",
+        "name": "Raise it",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          -100
+        ],
+        "notes": "Says what is actually wrong, in the terms it will have to be explained in.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
+          "jsCode": "const state = $input.first().json;\nreturn [{\n  json: {\n    severity: 'INFO',\n    subject: 'Retention sweep ran',\n    body: `Last run ${state.lastRunAt}. ${state.rowsActedOn} row(s) acted on.\\n\\n${state.summary}`,\n  },\n}];",
+          "mode": "runOnceForAllItems"
+        },
+        "id": "c08098d06187db8e",
+        "name": "Record what it did",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          100
+        ],
+        "notes": "The quiet answer, kept so the schedule is answerable with evidence.",
+        "notesInFlow": false
+      }
+    ],
+    "connections": {
+      "Every morning": {
+        "main": [
+          [
+            {
+              "node": "Configuration",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Configuration": {
+        "main": [
+          [
+            {
+              "node": "Ask the control room",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Ask the control room": {
+        "main": [
+          [
+            {
+              "node": "Did it run?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Did it run?": {
+        "main": [
+          [
+            {
+              "node": "Overdue?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Overdue?": {
+        "main": [
+          [
+            {
+              "node": "Raise it",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Record what it did",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "saveManualExecutions": true,
+      "saveDataErrorExecution": "all",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": true,
+      "executionTimeout": 3600,
+      "timezone": "Europe/London",
+      "errorWorkflow": "12d18cb304b9c025"
+    },
+    "staticData": null,
+    "meta": {
+      "description": "Checks that the nightly retention sweep actually ran, and reports what it removed. A declared retention period that is not enforced is a promise being broken silently.",
+      "templateCredsSetupCompleted": false
+    },
+    "pinData": {},
+    "versionId": "e21b0e82e61ed574",
+    "tags": [
+      {
+        "id": "6e39d1a55b08d44f",
+        "name": "adericel"
+      },
+      {
+        "id": "3e26a2a1c850549f",
+        "name": "scheduled"
+      },
+      {
+        "id": "12fb1189983848a3",
+        "name": "veylith"
+      }
+    ]
+  },
+  {
+    "id": "a8220e0b5d86f379",
+    "name": "Adericel — 01 Event intake",
+    "active": true,
+    "nodes": [
+      {
+        "parameters": {
+          "content": "## Adericel — Event intake\n\nEvery Adericel domain event arrives here.\n\n**Security:** the payload is authenticated by an HMAC over `{timestamp}.{rawBody}` using `ADERICEL_WEBHOOK_SECRET`. Deliveries older than five minutes are rejected, so a captured request cannot be replayed.\n\n**Delivery is at-least-once.** Handlers must tolerate duplicates; the event id makes that straightforward.",
+          "height": 320,
+          "width": 560,
+          "color": 4
+        },
+        "id": "492dc082f18015a0",
+        "name": "Note 36a46f",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -620,
+          -200
+        ]
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "adericel-events",
+          "responseMode": "responseNode",
+          "options": {
+            "rawBody": true
+          }
+        },
+        "id": "0876924e1da5d0bc",
+        "name": "Adericel event",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "Point the Adericel worker at this instance with N8N_BASE_URL and N8N_ENABLED=true. It posts to /webhook/adericel-events.",
+        "notesInFlow": false,
+        "webhookId": "adericel-events"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "api-base-url",
+                "name": "apiBaseUrl",
+                "value": "={{ $env.ADERICEL_API_BASE_URL || 'http://adericel-api:4000' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-email",
+                "name": "notifyEmail",
+                "value": "={{ $env.ADERICEL_NOTIFY_EMAIL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "notify-webhook",
+                "name": "notifyWebhookUrl",
+                "value": "={{ $env.ADERICEL_NOTIFY_WEBHOOK_URL || '' }}",
+                "type": "string"
+              },
+              {
+                "id": "msp-id",
+                "name": "mspId",
+                "value": "={{ $env.ADERICEL_MSP_ID || '' }}",
+                "type": "string"
+              }
+            ]
+          },
+          "includeOtherFields": true,
+          "options": {}
+        },
+        "id": "dd7f019efa13a690",
+        "name": "Configuration",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          220,
+          0
+        ],
+        "notes": "Resolves configuration from the n8n environment. Nothing in this export contains a URL, a secret or a tenant identifier. Set ADERICEL_API_BASE_URL, ADERICEL_MSP_ID and the notification variables on the n8n container.",
+        "notesInFlow": false
+      },
+      {
+        "parameters": {
           "jsCode": "/**\n * Verify the delivery is genuinely from this Adericel deployment.\n *\n * The signature covers \"{timestamp}.{rawBody}\". The digest is compared in\n * constant time so response timing reveals nothing, and the timestamp window\n * makes a captured delivery useless after five minutes.\n */\nconst crypto = require('crypto');\n\nconst secret = $env.ADERICEL_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error(\n    'ADERICEL_WEBHOOK_SECRET is not set on this n8n instance. Refusing to accept unauthenticated events.',\n  );\n}\n\nconst item = $input.first();\nconst headers = item.json.headers ?? {};\nconst signature = headers['x-adericel-signature'];\nconst timestamp = headers['x-adericel-timestamp'];\nconst rawBody = item.binary && item.binary.data\n  ? Buffer.from(item.binary.data.data, 'base64').toString('utf8')\n  : JSON.stringify(item.json.body ?? {});\n\nif (!signature || !timestamp) {\n  throw new Error('Delivery is missing its signature or timestamp headers.');\n}\n\nconst ageMs = Math.abs(Date.now() - Number(timestamp));\nif (!Number.isFinite(ageMs) || ageMs > 300000) {\n  throw new Error('Delivery timestamp is outside the five minute window; treating it as a replay.');\n}\n\nconst expected = crypto\n  .createHmac('sha256', secret)\n  .update(timestamp + '.' + rawBody)\n  .digest('hex');\n\nconst provided = Buffer.from(String(signature), 'utf8');\nconst computed = Buffer.from(expected, 'utf8');\nconst valid = provided.length === computed.length && crypto.timingSafeEqual(provided, computed);\n\nif (!valid) {\n  throw new Error('Signature verification failed. This delivery is not from the configured Adericel deployment.');\n}\n\nconst event = item.json.body ?? {};\nconst config = $('Configuration').first().json;\n\nreturn [\n  {\n    json: {\n      ...event,\n      apiBaseUrl: config.apiBaseUrl,\n      notifyEmail: config.notifyEmail,\n      notifyWebhookUrl: config.notifyWebhookUrl,\n      mspId: config.mspId,\n      verifiedAt: new Date().toISOString(),\n    },\n  },\n];",
           "mode": "runOnceForAllItems"
         },
-        "id": "ece16297b50513f1",
+        "id": "e0df111c145db7d2",
         "name": "Verify signature",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
@@ -8198,7 +8509,7 @@
             "renameFallbackOutput": "other"
           }
         },
-        "id": "481cec07187fff65",
+        "id": "3e1f1ae02cc92bd2",
         "name": "Route by event type",
         "type": "n8n-nodes-base.switch",
         "typeVersion": 3.2,
@@ -8218,7 +8529,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "097fd38a35a787c0",
+        "id": "017fc6f26505db18",
         "name": "Handle assurance change",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8236,7 +8547,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "947e091bfcc14861",
+        "id": "8c7dfc832c1f9bb9",
         "name": "Triage finding",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8254,7 +8565,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "18e47ecc50806a2e",
+        "id": "14e239e99025ef83",
         "name": "Notify approvers",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8272,7 +8583,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "a853152e9c407f30",
+        "id": "164b73939d614c55",
         "name": "Execute approved action",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8290,7 +8601,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "2d73ac6a047cc8cc",
+        "id": "21715aef44224e21",
         "name": "Verify action",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8308,7 +8619,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "cbfc0a90b5da84be",
+        "id": "61f4a7ed039ccf03",
         "name": "Complete onboarding",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8326,7 +8637,7 @@
             "waitForSubWorkflow": true
           }
         },
-        "id": "7e97b7f560aaf41b",
+        "id": "0a904594c7d93262",
         "name": "Reassess after expiry",
         "type": "n8n-nodes-base.executeWorkflow",
         "typeVersion": 1.1,
@@ -8337,7 +8648,7 @@
       },
       {
         "parameters": {},
-        "id": "e102a306587d1224",
+        "id": "6efb33cb6cc63e91",
         "name": "Acknowledge",
         "type": "n8n-nodes-base.noOp",
         "typeVersion": 1,
@@ -8354,7 +8665,7 @@
           "responseCode": 202,
           "responseBody": "={{ JSON.stringify({ accepted: true, eventId: $('Verify signature').first().json.id, correlationId: $('Verify signature').first().json.correlationId }) }}"
         },
-        "id": "2b68f09ebfe82c90",
+        "id": "b765fb6b5e4a5895",
         "name": "Respond 202",
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.1,

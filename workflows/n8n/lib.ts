@@ -104,6 +104,7 @@ export const WORKFLOW_IDS = {
   offboarding: stableId('adericel.offboarding'),
   sourceConflict: stableId('adericel.source-conflict'),
   coverageWatch: stableId('adericel.coverage-watch'),
+  retentionWatch: stableId('adericel.retention-watch'),
 } as const;
 
 let nodeCounter = 0;
@@ -374,13 +375,29 @@ export function stopAndError(name: string, position: [number, number], message: 
   });
 }
 
+/**
+ * A schedule.
+ *
+ * The cron form is a separate shape rather than another field on the interval
+ * one, because n8n's schedule trigger reads `expression` and ignores
+ * `hoursInterval` when the field is `cronExpression`. A caller that passed a
+ * cron through the interval shape produced a trigger with a field and no
+ * expression: importable, silent, and never firing. That is what
+ * `coverageWatchWorkflow` was doing, and the type now makes it impossible.
+ */
+export type ScheduleRule =
+  | { field: 'minutes' | 'hours'; interval: number }
+  | { field: 'days'; interval: number; atHour?: number }
+  | { field: 'cronExpression'; expression: string };
+
 export function scheduleTrigger(
   name: string,
   position: [number, number],
-  rule: { field: 'minutes' | 'hours' | 'days'; interval: number; atHour?: number },
+  rule: ScheduleRule,
   notes: string,
 ): N8nNode {
   const intervalEntry: Record<string, unknown> = { field: rule.field };
+  if (rule.field === 'cronExpression') intervalEntry.expression = rule.expression;
   if (rule.field === 'minutes') intervalEntry.minutesInterval = rule.interval;
   if (rule.field === 'hours') intervalEntry.hoursInterval = rule.interval;
   if (rule.field === 'days') {

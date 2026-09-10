@@ -19,6 +19,11 @@ import {
   revokeAccess,
   takeFinalExport,
 } from '../services/offboarding.js';
+import {
+  eraseOrganisation,
+  erasureState,
+  requestOrganisationErasure,
+} from '../services/erasure.js';
 
 /**
  * Organisation routes.
@@ -331,7 +336,9 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
     { preHandler: server.authenticate },
     async (request, reply) => {
       const { organisationId } = parseParams(request, organisationParam);
-      await requireOrganisation(app, request, organisationId, 'org:read');
+      // Readable after closure: "what happened when we left" is a question a
+      // former customer is entitled to ask.
+      await requireOrganisation(app, request, organisationId, 'org:read', { allowClosed: true });
       return reply
         .status(200)
         .send(
@@ -432,7 +439,10 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
     { preHandler: server.authenticate },
     async (request, reply) => {
       const { organisationId } = parseParams(request, organisationParam);
-      await requireOrganisation(app, request, organisationId, 'org:export');
+      // A customer who has left may still need the record they were promised.
+      await requireOrganisation(app, request, organisationId, 'org:export', {
+        allowClosed: true,
+      });
 
       const bundle = await exportOrganisation(app, organisationId);
 
@@ -450,6 +460,94 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
           `attachment; filename="adericel-export-${bundle.organisation.slug}-${bundle.exportedAt.slice(0, 10)}.json"`,
         )
         .send(bundle);
+    },
+  );
+
+  /**
+   * Where erasure stands for this organisation, and what is blocking it.
+   *
+   * Answerable before anything is destroyed, because the answer to "can you
+   * erase us" must not be discovered by trying.
+   */
+  server.get(
+    '/v1/organisations/:organisationId/erasure',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      // Closure is a precondition of erasure, so this route must survive it.
+      await requireOrganisation(app, request, organisationId, 'org:manage', {
+        allowClosed: true,
+      });
+      return reply.status(200).send(await erasureState(app, organisationId));
+    },
+  );
+
+  /**
+   * Ask for erasure.
+   *
+   * Recorded before anything is destroyed, with a reason and a name against it,
+   * so the destruction has a cause that predates it.
+   */
+  server.post(
+    '/v1/organisations/:organisationId/erasure',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:manage', {
+        allowClosed: true,
+      });
+      const body = parseBody(request, z.object({ reason: z.string().min(10).max(2000) }));
+      const principal = requirePrincipal(request);
+
+      const state = await requestOrganisationErasure(app, organisationId, {
+        reason: body.reason,
+        requestedByUserId: principal.principalType === 'USER' ? principal.principalId : null,
+      });
+
+      await audit(app, request, {
+        action: 'organisation:erasure:request',
+        resourceType: 'Organisation',
+        resourceId: organisationId,
+        metadata: { reason: body.reason },
+      });
+
+      return reply.status(202).send(state);
+    },
+  );
+
+  /**
+   * Carry out the erasure.
+   *
+   * Separate from requesting it, and irreversible. The audit entry is written
+   * before the deletion runs, because afterwards there is no tenant context to
+   * write it into — and an unrecorded destruction of a customer's entire record
+   * is not something this system is willing to be able to do.
+   */
+  server.post(
+    '/v1/organisations/:organisationId/erasure/execute',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:manage', {
+        allowClosed: true,
+      });
+      const principal = requirePrincipal(request);
+
+      await audit(app, request, {
+        action: 'organisation:erasure:execute',
+        resourceType: 'Organisation',
+        resourceId: organisationId,
+        outcome: 'PENDING',
+        reason: 'Erasure beginning. The tenant record is about to be destroyed.',
+      });
+
+      const report = await eraseOrganisation(app, organisationId, {
+        confirmedByUserId: principal.principalType === 'USER' ? principal.principalId : null,
+      });
+
+      // 200 for ERASED, 207 for INCOMPLETE: a partial erasure must not be
+      // reported with the same status code as a complete one.
+      return reply.status(report.outcome === 'ERASED' ? 200 : 207).send(report);
     },
   );
 

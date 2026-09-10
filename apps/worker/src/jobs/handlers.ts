@@ -17,6 +17,7 @@ import {
   type Logger,
 } from '@adericel/shared';
 import { organisationSettingsSchema, type AutonomyLevel } from '@adericel/domain';
+import { sweepRetention } from '@adericel/api';
 import type { DueJob, JobHandler, JobResult, JobType } from './scheduler.js';
 
 /**
@@ -464,6 +465,26 @@ export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHan
       }
 
       return { status: 'SUCCEEDED', detail: `Purged ${purged} observation(s) past retention` };
+    },
+
+    /**
+     * Enforce every retention period in the register of personal data.
+     *
+     * The register is the single statement of what Adericel holds and for how
+     * long; this runs it. A period that changes there changes what this does,
+     * and there is nowhere for a published schedule and the running code to
+     * disagree.
+     */
+    'sweep-retention': async (): Promise<JobResult> => {
+      const report = await sweepRetention({ db, clock });
+      const acted = report.outcomes.filter((outcome) => outcome.rowsAffected > 0);
+      if (acted.length === 0) {
+        return { status: 'SUCCEEDED', detail: 'Nothing past its retention period' };
+      }
+      const detail = acted
+        .map((outcome) => `${outcome.entry}: ${outcome.treatment} ${outcome.rowsAffected}`)
+        .join('; ');
+      return { status: 'SUCCEEDED', detail };
     },
 
     'purge-idempotency-keys': async (): Promise<JobResult> => {

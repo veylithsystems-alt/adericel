@@ -141,6 +141,22 @@ export async function requireOrganisation(
   request: FastifyRequest,
   candidateOrganisationId: string,
   permission: Permission,
+  options: {
+    /**
+     * Serve this route even when the organisation is closed.
+     *
+     * A closed organisation is refused everywhere by default: nothing may be
+     * observed, asserted, or changed about an estate Adericel no longer
+     * watches. But a handful of things must still work afterwards, and the
+     * blanket refusal made them unreachable — including erasure itself, which
+     * can only be requested after closure and so could never be requested at
+     * all.
+     *
+     * Opt in per route, never per permission, so the exception stays visible
+     * at the place it applies rather than becoming a property of `org:manage`.
+     */
+    readonly allowClosed?: boolean;
+  } = {},
 ): Promise<string> {
   const principal = requirePrincipal(request);
   request.adericel.candidateOrganisationId = candidateOrganisationId;
@@ -184,7 +200,7 @@ export async function requireOrganisation(
     });
   }
 
-  if (owner.status === 'CLOSED') {
+  if (owner.status === 'CLOSED' && options.allowClosed !== true) {
     throw new AdericelError('PRECONDITION_FAILED', 'Organisation is closed');
   }
 

@@ -375,3 +375,132 @@ return [{
     errorWorkflowId: WORKFLOW_IDS.errorHandler,
   });
 }
+
+/**
+ * The retention sweep, watched.
+ *
+ * A retention period that is declared and not enforced is worse than one that
+ * was never promised: the register says ninety days, the privacy notice says
+ * ninety days, the customer believes ninety days, and the rows are still there.
+ * Nothing errors. The sweep simply stops running, and the first anyone hears of
+ * it is a subject access request that returns three years of addresses.
+ *
+ * This asks the internal control room the only question that matters — did it
+ * run, and what did it do — and says so plainly when the answer is no.
+ */
+export function retentionWatchWorkflow(): N8nWorkflow {
+  const nodes = [
+    stickyNote(
+      '## Retention watch\n\n' +
+        'Adericel publishes a retention schedule and enforces it nightly from the same register ' +
+        'the schedule is generated from. This checks that the sweep actually ran.\n\n' +
+        'A sweep that has not run in 48 hours means a period that is being promised and not ' +
+        'kept. That is a data protection failure whether or not anyone has noticed, and it is ' +
+        'silent by nature — no error, no alert, just rows quietly outliving their basis.',
+      [-620, -220],
+      [540, 300],
+      4,
+    ),
+    scheduleTrigger(
+      'Every morning',
+      [0, 0],
+      { field: 'cronExpression', expression: '0 8 * * *' },
+      'After the nightly sweep, early enough to act on a miss the same day.',
+    ),
+    configurationNode([220, 0]),
+    adericelRequest('Ask the control room', [440, 0], {
+      url: '={{ $json.apiBaseUrl }}/v1/veylith/retention?limit=200',
+    }),
+    codeNode(
+      'Did it run?',
+      [660, 0],
+      `const body = $input.first().json.body || {};
+const runs = body.runs || [];
+
+// Rows acted on since the last run, so a report says what actually happened
+// rather than only that something happened.
+const lastRunAt = body.lastRunAt;
+const latest = runs.filter((run) => run.ranAt === lastRunAt);
+const acted = latest.filter((run) => run.rowsAffected > 0);
+
+const lines = acted.map((run) =>
+  \`- \${run.entry}: \${run.treatment.toLowerCase()} \${run.rowsAffected} row(s) older than \${run.retentionDays} days\`,
+);
+
+return [{
+  json: {
+    overdue: body.overdue === true,
+    lastRunAt: lastRunAt,
+    hoursSinceLastRun: body.hoursSinceLastRun,
+    periodsDeclared: (body.schedule || []).length,
+    rowsActedOn: acted.reduce((total, run) => total + run.rowsAffected, 0),
+    summary: lines.length > 0 ? lines.join('\\n') : 'Nothing was past its retention period.',
+  },
+}];`,
+      'Reads the register and the run record together.',
+    ),
+    ifNode('Overdue?', [880, 0], { left: '={{ $json.overdue }}', operator: 'true' }),
+    codeNode(
+      'Raise it',
+      [1100, -100],
+      `const state = $input.first().json;
+const hours = state.hoursSinceLastRun;
+
+return [{
+  json: {
+    severity: 'HIGH',
+    subject: 'The retention sweep has not run',
+    body: [
+      hours === null
+        ? 'The retention sweep has no recorded run at all.'
+        : \`The retention sweep last ran \${hours} hours ago.\`,
+      '',
+      \`\${state.periodsDeclared} retention periods are declared in the register and published \` +
+        'in the retention schedule. While the sweep is not running, none of them is being kept.',
+      '',
+      'This is a data protection failure rather than an operational one: the periods are ' +
+        'promised to customers in the DPA and to individuals in the privacy notice.',
+      '',
+      'Check the worker is running and that the sweep-retention job is enabled.',
+    ].join('\\n'),
+  },
+}];`,
+      'Says what is actually wrong, in the terms it will have to be explained in.',
+    ),
+    codeNode(
+      'Record what it did',
+      [1100, 100],
+      `const state = $input.first().json;
+return [{
+  json: {
+    severity: 'INFO',
+    subject: 'Retention sweep ran',
+    body: \`Last run \${state.lastRunAt}. \${state.rowsActedOn} row(s) acted on.\\n\\n\${state.summary}\`,
+  },
+}];`,
+      'The quiet answer, kept so the schedule is answerable with evidence.',
+    ),
+  ];
+
+  let connections = chain(
+    'Every morning',
+    'Configuration',
+    'Ask the control room',
+    'Did it run?',
+    'Overdue?',
+  );
+  connections = connect(connections, 'Overdue?', 'Raise it');
+  connections = connect(connections, 'Overdue?', 'Record what it did', 1);
+
+  return workflow({
+    id: WORKFLOW_IDS.retentionWatch,
+    name: 'Adericel — 24 Retention watch',
+    description:
+      'Checks that the nightly retention sweep actually ran, and reports what it removed. A ' +
+      'declared retention period that is not enforced is a promise being broken silently.',
+    nodes,
+    connections,
+    tags: ['adericel', 'scheduled', 'veylith'],
+    errorWorkflowId: WORKFLOW_IDS.errorHandler,
+  });
+}

@@ -290,18 +290,28 @@ describe.skipIf(!available)('offboarding', () => {
       expect(Number(kept.events)).toBeGreaterThan(0);
     });
 
-    it('locks the closed organisation out of the API entirely', async () => {
+    it('stops a closed organisation being operated', async () => {
       // The tenancy middleware refuses a closed organisation before any route
-      // runs, so this covers re-opening offboarding as well as reading
-      // assurance — there is no route through which a closed organisation can
-      // be operated.
-      for (const path of ['/assurance', '/offboarding', '/export']) {
-        const response = await get(path);
-        expect(response.statusCode, path).toBe(412);
-        expect(response.body, path).toMatch(/closed/i);
-      }
+      // runs. Nothing may be observed, asserted or changed about an estate
+      // Adericel no longer watches, and offboarding cannot be re-opened.
+      const response = await get('/assurance');
+      expect(response.statusCode).toBe(412);
+      expect(response.body).toMatch(/closed/i);
+
       const reopen = await post('/offboarding', { reason: 'again' });
       expect(reopen.statusCode).toBe(412);
+    });
+
+    it('still answers the three questions a former customer may ask', async () => {
+      // The blanket refusal above used to cover these too, which made the
+      // customer's own record unreachable the moment they left — and made
+      // erasure, whose precondition is closure, impossible to request at all.
+      // Each of these is opted in at its own route rather than by widening a
+      // permission (ADR-0032).
+      for (const path of ['/offboarding', '/export', '/erasure']) {
+        const response = await get(path);
+        expect(response.statusCode, path).toBe(200);
+      }
     });
   });
 

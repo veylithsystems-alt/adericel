@@ -28,6 +28,10 @@ export const JOB_TYPES = [
   // nothing more from the provider must still lapse, and an event that never
   // arrives cannot trigger anything.
   'lapse-overdue-subscriptions',
+  // Data protection: enforce the retention periods declared in the register of
+  // personal data. Every period in that register is a promise; this is what
+  // makes it a fact.
+  'sweep-retention',
 ] as const;
 
 export type JobType = (typeof JOB_TYPES)[number];
@@ -216,12 +220,26 @@ export async function ensureOrganisationJobs(
   }
 }
 
-/** Register platform-wide jobs that are not organisation-scoped. */
+/**
+ * Register platform-wide jobs that are not organisation-scoped.
+ *
+ * Every job type must appear here or in `ensureOrganisationJobs`, or be named
+ * in `ON_DEMAND_JOBS` below. A handler that nothing schedules is a feature that
+ * works in tests and never once runs in production —
+ * `tests/unit/scheduled-jobs.test.ts` fails if one appears.
+ */
 export async function ensurePlatformJobs(ctx: PlatformContext, nowIso: string): Promise<void> {
   const jobs: { type: JobType; cron: string }[] = [
     { type: 'reconcile-executions', cron: '*/10 * * * *' },
     { type: 'purge-idempotency-keys', cron: '0 4 * * *' },
     { type: 'self-assurance', cron: '0 * * * *' },
+    // A subscription that has run out of grace lapses whether or not the
+    // payment provider ever sends another webhook. This handler existed and was
+    // tested, and nothing scheduled it: the billing lifecycle's only
+    // time-driven lever was never being pulled outside the test suite.
+    { type: 'lapse-overdue-subscriptions', cron: '0 5 * * *' },
+    // Enforce every retention period in the register of personal data.
+    { type: 'sweep-retention', cron: '30 4 * * *' },
   ];
   for (const job of jobs) {
     await ctx.query(
@@ -233,6 +251,34 @@ export async function ensurePlatformJobs(ctx: PlatformContext, nowIso: string): 
     );
   }
 }
+
+/**
+ * Job types that are deliberately run on demand rather than on a schedule.
+ *
+ * Empty today. It exists so that a job which genuinely should only run when
+ * somebody asks can be declared as such, rather than being indistinguishable
+ * from one that was forgotten.
+ */
+export const ON_DEMAND_JOBS: readonly JobType[] = [];
+
+/** The job types registered for every organisation at onboarding. */
+export const ORGANISATION_JOB_TYPES: readonly JobType[] = [
+  'reassess-organisation',
+  'collect-integrations',
+  'expire-evidence',
+  'expire-approvals',
+  'expire-exceptions',
+  'purge-observations',
+];
+
+/** The job types registered once, for the platform. */
+export const PLATFORM_JOB_TYPES: readonly JobType[] = [
+  'reconcile-executions',
+  'purge-idempotency-keys',
+  'self-assurance',
+  'lapse-overdue-subscriptions',
+  'sweep-retention',
+];
 
 export interface RunJobsOptions {
   readonly db: Database;

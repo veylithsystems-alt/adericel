@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildAllWorkflows, OUTPUT_PATH } from '../../workflows/n8n/build.js';
 import { resetNodeCounter } from '../../workflows/n8n/lib.js';
+import { validateWorkflows } from '../../workflows/n8n/validate.js';
 
 /**
  * The importable n8n export.
@@ -30,6 +31,27 @@ describe('the export matches its builder', () => {
     // Node ids are derived from a counter and a seed. If they were random, every
     // rebuild would produce a diff and the check above would be unusable.
     expect(build()).toEqual(build());
+  });
+});
+
+describe('the export is structurally sound', () => {
+  it('has no validation findings', () => {
+    // The validator existed and was only ever run by hand, which meant a
+    // workflow could be committed with an unreachable node — importable,
+    // silent, and never firing. It found exactly that on the first workflow
+    // added after it was wired in here.
+    resetNodeCounter();
+    const findings = validateWorkflows(buildAllWorkflows());
+    const errors = findings.filter((finding) => finding.severity === 'error');
+    expect(errors.map((finding) => `${finding.workflow}: ${finding.message}`)).toEqual([]);
+  });
+
+  it('has no validation warnings either', () => {
+    resetNodeCounter();
+    const findings = validateWorkflows(buildAllWorkflows());
+    expect(
+      findings.map((finding) => `${finding.severity} ${finding.workflow}: ${finding.message}`),
+    ).toEqual([]);
   });
 });
 

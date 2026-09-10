@@ -11,6 +11,7 @@ import {
 import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
 import { audit, requirePlatform } from '../middleware/request-context.js';
+import { retentionSchedule } from '../services/retention.js';
 import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
 
 /**
@@ -32,6 +33,66 @@ const idParam = z.object({ id: z.string().uuid() });
 
 export function registerVeylithRoutes(server: FastifyInstance, app: AppContext): void {
   const compiled = compileAutonomyPolicy(DEFAULT_COMPANY_POLICY);
+
+  /**
+   * Data protection, as an operational fact rather than a policy.
+   *
+   * Two questions, answered from the same register the sweep runs from: what
+   * does Adericel hold and for how long, and did the sweep actually run. A
+   * retention policy nobody can prove ran is a policy in a document.
+   */
+  server.get(
+    '/v1/veylith/retention',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      await requirePlatform(app, request, 'platform:read');
+      const query = parseQuery(
+        request,
+        z.object({ limit: z.coerce.number().int().min(1).max(500).default(100) }),
+      );
+
+      const runs = await app.db.withPlatform(async (ctx) =>
+        ctx.many<{
+          ran_at: string;
+          entry: string;
+          treatment: string;
+          retention_days: number;
+          cutoff: string;
+          rows_affected: string;
+          applied: boolean;
+        }>(
+          `SELECT ran_at, entry, treatment, retention_days, cutoff, rows_affected, applied
+             FROM retention_runs ORDER BY ran_at DESC LIMIT $1`,
+          [query.limit],
+        ),
+      );
+
+      const lastRun = runs[0]?.ran_at ?? null;
+      const hoursSince =
+        lastRun === null
+          ? null
+          : Math.floor((Date.parse(app.clock.nowIso()) - Date.parse(lastRun)) / 3_600_000);
+
+      return reply.status(200).send({
+        schedule: retentionSchedule(),
+        lastRunAt: lastRun,
+        hoursSinceLastRun: hoursSince,
+        // The sweep is scheduled daily. Anything past 48 hours means it has
+        // missed a run, and a retention period that is not being enforced is
+        // not a retention period.
+        overdue: hoursSince === null || hoursSince > 48,
+        runs: runs.map((row) => ({
+          ranAt: row.ran_at,
+          entry: row.entry,
+          treatment: row.treatment,
+          retentionDays: row.retention_days,
+          cutoff: row.cutoff,
+          rowsAffected: Number(row.rows_affected),
+          applied: row.applied,
+        })),
+      });
+    },
+  );
 
   /** The queue a person actually opens: what is stuck and who must unstick it. */
   server.get(

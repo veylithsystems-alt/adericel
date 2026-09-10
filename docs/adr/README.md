@@ -42,6 +42,7 @@ implications.
 | [0029](./ADR-0029-source-conflict.md)                               | When two systems disagree, Adericel does not choose   | Accepted |
 | [0030](./ADR-0030-offboarding.md)                                   | A customer leaves with their record                   | Accepted |
 | [0031](./ADR-0031-three-surfaces.md)                                | Three surfaces, and no standing route between them    | Accepted |
+| [0032](./ADR-0032-erasure-and-retention.md)                         | Erasure means erasure                                 | Accepted |
 
 ## Writing a new ADR
 

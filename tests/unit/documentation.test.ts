@@ -94,3 +94,48 @@ describe('the migrations are contiguous', () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe('the data protection documents describe the code that exists', () => {
+  const dir = join(ROOT, 'docs', 'data-protection');
+  const files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+  const index = readFileSync(join(dir, 'README.md'), 'utf8');
+
+  it('indexes every document', () => {
+    const missing = files.filter((file) => file !== 'README.md' && !index.includes(file));
+    expect(missing.sort()).toEqual([]);
+  });
+
+  it('publishes a retention period for every fixed period the code enforces', async () => {
+    const { timeLimitedEntries } = await import('@adericel/domain');
+    const schedule = readFileSync(join(dir, 'retention.md'), 'utf8');
+    // A published schedule that omits a period the sweep enforces is a document
+    // that is confidently incomplete, which is worse than none.
+    const undocumented = [...new Set(timeLimitedEntries().map((entry) => entry.retention.days))]
+      .filter((days) => days !== null)
+      .filter((days) => !schedule.includes(String(days)));
+    expect(undocumented).toEqual([]);
+  });
+
+  it('states the erasure limitation rather than implying erasure is total', async () => {
+    // The one place a data protection document is most tempted to overclaim.
+    const notice = readFileSync(join(dir, 'privacy-notice.md'), 'utf8');
+    const rights = readFileSync(join(dir, 'subject-rights.md'), 'utf8');
+    expect(notice).toContain('17(3)(e)');
+    expect(rights).toContain('17(3)(e)');
+    expect(rights.toLowerCase()).toContain('pseudonym');
+  });
+
+  it('does not claim a compliance status the repository cannot support', () => {
+    // Claim discipline applies to legal documents more than anywhere else,
+    // because the reader has no way to check.
+    for (const file of files) {
+      const text = readFileSync(join(dir, file), 'utf8');
+      expect(text, `${file} claims certification`).not.toMatch(
+        /\b(ISO 27001|SOC 2|Cyber Essentials)[- ]certified\b/i,
+      );
+      expect(text, `${file} claims to be fully compliant`).not.toMatch(
+        /\bfully (GDPR[- ])?compliant\b/i,
+      );
+    }
+  });
+});
