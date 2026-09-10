@@ -7,6 +7,7 @@
     { "path": "./packages/evidence" },
     { "path": "./packages/truth-engine" },
     { "path": "./packages/policy" },
+    { "path": "./packages/billing" },
     { "path": "./packages/actions" },
     { "path": "./packages/integrations" },
     { "path": "./apps/api" },

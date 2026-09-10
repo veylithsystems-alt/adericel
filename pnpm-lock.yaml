@@ -226,6 +226,18 @@ importers:
         specifier: ^4.1.11
         version: 4.5.4
 
+  packages/billing:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
   packages/domain:
     dependencies:
       '@adericel/shared':
