@@ -60,6 +60,29 @@ export const DEFAULT_COMPANY_POLICY: AutonomyPolicyDefinition = {
       requiresFacts: ['lawful_basis_recorded', 'not_suppressed', 'content_approved'],
     },
     {
+      id: 'outward.preparation-is-internal',
+      description:
+        'Drafting a message is internal work and must not need a person. Sending it is a ' +
+        'separate, separately gated operation, so a bug anywhere in the preparation path can ' +
+        'at worst produce a draft nobody sent.',
+      operations: [
+        'sales.outreach.prepare',
+        'sales.proposal.draft',
+        'marketing.draft',
+        'customer_ops.reporting.prepare',
+        'legal.contract.prepare',
+      ],
+      riskClasses: ['INTERNAL'],
+      maxUnattendedRisk: 'INTERNAL',
+      minMaturity: 2,
+      outcome: 'PERMIT',
+      requiredApprovals: 0,
+      requiredAuthority: '',
+      rateLimitPerHour: 1000,
+      allowedUtcHours: [],
+      requiresFacts: [],
+    },
+    {
       id: 'outward.first-contact-wording',
       description:
         'First contact wording is a reputational decision. The system may draft it; a person ' +
