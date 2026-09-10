@@ -85,23 +85,53 @@ export async function verifyRestore(
   }
 
   // Tenant isolation is a property of the restored database, not of the dump.
-  const unprotected = await client.query<{ relname: string }>(
-    `SELECT c.relname
-     FROM pg_class c
-     JOIN pg_namespace n ON n.oid = c.relnamespace
-     JOIN information_schema.columns col
-       ON col.table_schema = n.nspname AND col.table_name = c.relname
-      AND col.column_name = 'organisation_id'
-     WHERE n.nspname = 'adericel' AND c.relkind = 'r'
-       AND NOT (c.relrowsecurity AND c.relforcerowsecurity)`,
+  //
+  // Three populations, because they are protected for three different reasons
+  // and losing any one of them is a silent security regression that a
+  // "restore completed" message would not mention:
+  //
+  //   - tenant tables, by organisation_id;
+  //   - the company schema, which is platform scope only;
+  //   - the credential tables, which have no organisation_id and so were
+  //     invisible to the original check.
+  const unprotected = await client.query<{ nspname: string; relname: string }>(
+    `WITH expected AS (
+       SELECT n.nspname, c.relname, c.relrowsecurity, c.relforcerowsecurity
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'r'
+          AND (
+            -- Tenant data.
+            (n.nspname = 'adericel' AND EXISTS (
+               SELECT 1 FROM information_schema.columns col
+                WHERE col.table_schema = n.nspname AND col.table_name = c.relname
+                  AND col.column_name = 'organisation_id'))
+            -- The company's own operating state.
+            OR n.nspname = 'veylith'
+            -- Credential material, which carries no organisation_id.
+            OR (n.nspname = 'adericel' AND c.relname = ANY(ARRAY[
+                 'user_credentials', 'user_recovery_codes', 'mfa_challenges',
+                 'sessions', 'api_keys']))
+          )
+     )
+     SELECT nspname, relname FROM expected
+      WHERE NOT (relrowsecurity AND relforcerowsecurity)
+        OR NOT EXISTS (
+          SELECT 1 FROM pg_policy p
+           JOIN pg_class pc ON pc.oid = p.polrelid
+           JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+          WHERE pc.relname = expected.relname AND pn.nspname = expected.nspname
+        )`,
   );
   checks.push({
     check: 'row-level-security',
     passed: unprotected.rowCount === 0,
     detail:
       unprotected.rowCount === 0
-        ? 'Every table carrying an organisation_id has forced row level security'
-        : `Lost protection on: ${unprotected.rows.map((r) => r.relname).join(', ')}`,
+        ? 'Every tenant, company and credential table restored with a forced policy in place'
+        : `Lost protection on: ${unprotected.rows
+            .map((r) => `${r.nspname}.${r.relname}`)
+            .join(', ')}`,
   });
 
   // The strongest check available: content-derived hashes, recomputed.

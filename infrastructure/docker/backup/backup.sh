@@ -60,6 +60,14 @@ counts="$(psql --username="${PGUSER}" --dbname="${PGDATABASE}" -At -F',' -c "
   UNION ALL SELECT 'assurance_passports', count(*) FROM adericel.assurance_passports
   UNION ALL SELECT 'actions', count(*) FROM adericel.actions
   UNION ALL SELECT 'audit_log', count(*) FROM adericel.audit_log
+  UNION ALL SELECT 'claim_conflicts', count(*) FROM adericel.claim_conflicts
+  -- The company's own operating record. A restore that brought back every
+  -- customer and lost the pipeline, the exception queue and the ledger of what
+  -- the company decided would look successful and would not be.
+  UNION ALL SELECT 'veylith_business_events', count(*) FROM veylith.business_events
+  UNION ALL SELECT 'veylith_policy_decisions', count(*) FROM veylith.policy_decisions
+  UNION ALL SELECT 'veylith_operational_exceptions', count(*) FROM veylith.operational_exceptions
+  UNION ALL SELECT 'veylith_prospects', count(*) FROM veylith.prospects
   ORDER BY 1")"
 
 schema_version="$(psql --username="${PGUSER}" --dbname="${PGDATABASE}" -At \
