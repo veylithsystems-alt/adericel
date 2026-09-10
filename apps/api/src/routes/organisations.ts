@@ -332,7 +332,15 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
     async (request, reply) => {
       const { organisationId } = parseParams(request, organisationParam);
       await requireOrganisation(app, request, organisationId, 'org:read');
-      return reply.status(200).send(await offboardingStatus(app, organisationId));
+      return reply
+        .status(200)
+        .send(
+          await offboardingStatus(
+            app,
+            organisationId,
+            request.adericel.principal?.sessionId ?? null,
+          ),
+        );
     },
   );
 
@@ -378,6 +386,8 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
       const revoked = await revokeAccess(app, organisationId, {
         reason: body.reason,
         actor: request.adericel.principal?.displayName ?? 'api',
+        // The operator finishes what they started; their session goes at closure.
+        exceptSessionId: request.adericel.principal?.sessionId ?? null,
       });
 
       await audit(app, request, {
@@ -403,6 +413,7 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
       const status = await closeOrganisation(app, organisationId, {
         actor: request.adericel.principal?.displayName ?? 'api',
         correlationId: request.adericel.correlationId,
+        actingSessionId: request.adericel.principal?.sessionId ?? null,
       });
 
       await audit(app, request, {

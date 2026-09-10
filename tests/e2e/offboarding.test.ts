@@ -305,6 +305,106 @@ describe.skipIf(!available)('offboarding', () => {
     });
   });
 
+  describe('an owner scoped to the organisation itself', () => {
+    /**
+     * The case the rest of this suite misses.
+     *
+     * `seedTenant` grants its owner at MSP scope, so revocation — which targets
+     * organisation-scoped grants — never touched their session. A direct
+     * customer's own owner IS organisation-scoped, and running the flow live
+     * showed them revoking their own access half way through and being unable
+     * to complete the closure they had started, leaving an organisation
+     * mid-offboarding with its credentials already destroyed and nobody signed
+     * in who could finish.
+     */
+    let ownToken: string;
+    let ownOrganisationId: string;
+
+    beforeAll(async () => {
+      const signup = await harness.server.inject({
+        method: 'POST',
+        url: '/v1/signup',
+        payload: {
+          email: 'direct-owner@test.invalid',
+          password: 'Direct-password-2026!',
+          contactName: 'Direct Owner',
+          accountKind: 'DIRECT',
+          organisationName: 'Direct Ltd',
+        },
+      });
+      const { developmentToken } = signup.json() as { developmentToken: string };
+      const completed = await harness.server.inject({
+        method: 'POST',
+        url: '/v1/signup/complete',
+        payload: { token: developmentToken, password: 'Direct-password-2026!' },
+      });
+      const body = completed.json() as {
+        accessToken: string;
+        account: { organisationId: string };
+      };
+      ownToken = body.accessToken;
+      ownOrganisationId = body.account.organisationId;
+    });
+
+    it('is organisation-scoped, which is what makes this different', async () => {
+      const grants = await harness.db.withPlatform(async (ctx) =>
+        ctx.many<{ scope_type: string }>(
+          `SELECT scope_type FROM grants WHERE scope_id = $1 AND revoked_at IS NULL`,
+          [ownOrganisationId],
+        ),
+      );
+      expect(grants.map((g) => g.scope_type)).toContain('ORGANISATION');
+    });
+
+    it('can finish the offboarding it started', async () => {
+      const call = (path: string, payload: unknown = {}) =>
+        harness.server.inject({
+          method: 'POST',
+          url: `/v1/organisations/${ownOrganisationId}${path}`,
+          headers: bearer(ownToken),
+          payload,
+        });
+
+      expect((await call('/offboarding', { reason: 'Leaving' })).statusCode).toBe(200);
+      expect((await call('/offboarding/export')).statusCode).toBe(200);
+      expect((await call('/offboarding/revoke', { reason: 'Leaving' })).statusCode).toBe(200);
+
+      // The operator's own session survives the revocation step, or they
+      // cannot get any further than this line.
+      const stillIn = await harness.server.inject({
+        method: 'GET',
+        url: `/v1/organisations/${ownOrganisationId}/offboarding`,
+        headers: bearer(ownToken),
+      });
+      expect(stillIn.statusCode, 'the operator revoked their own access').toBe(200);
+
+      await harness.db.withPlatform(async (ctx) => {
+        await ctx.query(
+          `UPDATE subscriptions SET status = 'CANCELLED' WHERE organisation_id = $1`,
+          [ownOrganisationId],
+        );
+      });
+
+      const closed = await call('/offboarding/close');
+      expect(closed.statusCode, closed.body).toBe(200);
+      expect((closed.json() as { status: string }).status).toBe('CLOSED');
+    });
+
+    it('loses that session once the relationship has formally ended', async () => {
+      // Spared until closure, not spared forever.
+      const revoked = await harness.db.withPlatform(async (ctx) =>
+        ctx.many<{ id: string }>(
+          `SELECT s.id FROM sessions s
+           WHERE s.revoked_at IS NULL AND s.user_id IN (
+             SELECT g.principal_id FROM grants g
+             WHERE g.scope_type = 'ORGANISATION' AND g.scope_id = $1 AND g.revoked_at IS NULL)`,
+          [ownOrganisationId],
+        ),
+      );
+      expect(revoked).toHaveLength(0);
+    });
+  });
+
   describe('the database refuses a bad closure independently', () => {
     it('will not accept CLOSED without a recorded export', async () => {
       const other = await seedTenant(harness, { slug: 'leaving-other', records: [] });

@@ -208,7 +208,25 @@ export async function takeFinalExport(
 export async function revokeAccess(
   app: AppContext,
   organisationId: string,
-  options: { reason: string; actor: string },
+  options: {
+    reason: string;
+    actor: string;
+    /**
+     * The session doing the offboarding, which is spared.
+     *
+     * Without this the operator revokes their own access half way through and
+     * cannot complete the closure they started — and, worse, the organisation
+     * is left mid-offboarding with its credentials already destroyed and no
+     * signed-in person able to finish. It is revoked at closure instead, so
+     * access ends when the relationship formally ends rather than in the middle
+     * of ending it.
+     *
+     * Found by running the flow rather than testing it: the seeded test owner
+     * holds an MSP-scoped grant, so the tests never exercised the case that a
+     * direct customer's own owner is organisation-scoped.
+     */
+    exceptSessionId?: string | null;
+  },
 ): Promise<{ passports: number; integrations: number; sessions: number }> {
   const now = app.clock.nowIso();
 
@@ -233,13 +251,14 @@ export async function revokeAccess(
     const sessions = await ctx.many<{ id: string }>(
       `UPDATE sessions SET revoked_at = $2::timestamptz
        WHERE revoked_at IS NULL
+         AND id IS DISTINCT FROM $3::uuid
          AND user_id IN (
            SELECT DISTINCT g.principal_id FROM grants g
            WHERE g.principal_type = 'USER' AND g.scope_type = 'ORGANISATION'
              AND g.scope_id = $1 AND g.revoked_at IS NULL
          )
        RETURNING id`,
-      [organisationId, now],
+      [organisationId, now, options.exceptSessionId ?? null],
     );
 
     // API keys are NOT revoked here, and that is deliberate.
@@ -266,6 +285,7 @@ export async function revokeAccess(
 export async function offboardingStatus(
   app: AppContext,
   organisationId: string,
+  actingSessionId?: string | null,
 ): Promise<OffboardingStatus> {
   const state = await app.db.withPlatform(async (ctx) => {
     const organisation = await ctx.oneOrFail<{
@@ -294,14 +314,19 @@ export async function offboardingStatus(
           WHERE organisation_id = $1 AND revoked_at IS NULL) AS live_shares,
          (SELECT count(*)::text FROM integrations
           WHERE organisation_id = $1 AND sealed_credentials IS NOT NULL) AS sealed_integrations,
+         -- The session performing the offboarding is excluded, because it is
+         -- spared until closure. Counting it would make the task permanently
+         -- outstanding and closure permanently impossible.
          (SELECT count(*)::text FROM sessions s
-          WHERE s.revoked_at IS NULL AND s.user_id IN (
+          WHERE s.revoked_at IS NULL
+            AND s.id IS DISTINCT FROM $2::uuid
+            AND s.user_id IN (
             SELECT g.principal_id FROM grants g
             WHERE g.principal_type = 'USER' AND g.scope_type = 'ORGANISATION'
               AND g.scope_id = $1 AND g.revoked_at IS NULL)) AS live_sessions,
          (SELECT count(*)::text FROM subscriptions
           WHERE organisation_id = $1 AND status <> 'CANCELLED') AS live_subscriptions`,
-      [organisationId],
+      [organisationId, actingSessionId ?? null],
       'Organisation offboarding facts',
     );
 
@@ -368,9 +393,9 @@ export async function offboardingStatus(
 export async function closeOrganisation(
   app: AppContext,
   organisationId: string,
-  options: { actor: string; correlationId: string },
+  options: { actor: string; correlationId: string; actingSessionId?: string | null },
 ): Promise<OffboardingStatus> {
-  const status = await offboardingStatus(app, organisationId);
+  const status = await offboardingStatus(app, organisationId, options.actingSessionId);
   if (status.status !== 'OFFBOARDING') {
     throw new AdericelError(
       'PRECONDITION_FAILED',
@@ -407,6 +432,19 @@ export async function closeOrganisation(
       `UPDATE organisations SET status = 'CLOSED', closed_at = $2::timestamptz,
               updated_at = $2::timestamptz
        WHERE id = $1`,
+      [organisationId, now],
+    );
+
+    // Now the spared session goes too. The relationship has formally ended, so
+    // the access that outlived the revocation step ends with it.
+    await ctx.query(
+      `UPDATE sessions SET revoked_at = $2::timestamptz
+       WHERE revoked_at IS NULL
+         AND user_id IN (
+           SELECT DISTINCT g.principal_id FROM grants g
+           WHERE g.principal_type = 'USER' AND g.scope_type = 'ORGANISATION'
+             AND g.scope_id = $1 AND g.revoked_at IS NULL
+         )`,
       [organisationId, now],
     );
   });
