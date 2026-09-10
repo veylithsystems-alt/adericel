@@ -12,6 +12,13 @@ import {
 import { parseBody, parseParams, organisationParam } from '../middleware/validation.js';
 import { provisionOrganisation } from '../services/onboarding.js';
 import { exportOrganisation } from '../services/export.js';
+import {
+  beginOffboarding,
+  closeOrganisation,
+  offboardingStatus,
+  revokeAccess,
+  takeFinalExport,
+} from '../services/offboarding.js';
 
 /**
  * Organisation routes.
@@ -285,6 +292,128 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
    * assessments, findings, actions and history with them. The commercial moat
    * is the product, not hostage data.
    */
+
+  /**
+   * Offboarding.
+   *
+   * Deliberately several steps rather than one. A single "close this customer"
+   * button would either do the destructive parts before the export, or hide a
+   * partial failure behind a success — and the moment a customer is least able
+   * to argue about their record is exactly when it must not be lost.
+   */
+  server.post(
+    '/v1/organisations/:organisationId/offboarding',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:manage');
+      const body = parseBody(request, z.object({ reason: z.string().min(1).max(1000) }));
+
+      const status = await beginOffboarding(app, organisationId, {
+        reason: body.reason,
+        actor: request.adericel.principal?.displayName ?? 'api',
+        correlationId: request.adericel.correlationId,
+      });
+
+      await audit(app, request, {
+        action: 'organisation:offboarding:begin',
+        resourceType: 'Organisation',
+        resourceId: organisationId,
+        metadata: { reason: body.reason },
+      });
+
+      return reply.status(200).send(status);
+    },
+  );
+
+  server.get(
+    '/v1/organisations/:organisationId/offboarding',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:read');
+      return reply.status(200).send(await offboardingStatus(app, organisationId));
+    },
+  );
+
+  /** Take the record the customer leaves with, and record what was handed over. */
+  server.post(
+    '/v1/organisations/:organisationId/offboarding/export',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:export');
+
+      const { bundle } = await takeFinalExport(app, organisationId);
+
+      await audit(app, request, {
+        action: 'organisation:offboarding:export',
+        resourceType: 'Organisation',
+        resourceId: organisationId,
+        metadata: { bundleHash: bundle.bundleHash, counts: bundle.counts },
+      });
+
+      return reply
+        .status(200)
+        .header(
+          'content-disposition',
+          `attachment; filename="adericel-final-export-${bundle.organisation.slug}.json"`,
+        )
+        .send(bundle);
+    },
+  );
+
+  /** Revoke everything. Idempotent, so a partial run can simply be repeated. */
+  server.post(
+    '/v1/organisations/:organisationId/offboarding/revoke',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:manage');
+      const body = parseBody(
+        request,
+        z.object({ reason: z.string().min(1).max(500).default('The organisation is offboarding') }),
+      );
+
+      const revoked = await revokeAccess(app, organisationId, {
+        reason: body.reason,
+        actor: request.adericel.principal?.displayName ?? 'api',
+      });
+
+      await audit(app, request, {
+        action: 'organisation:offboarding:revoke',
+        resourceType: 'Organisation',
+        resourceId: organisationId,
+        metadata: revoked,
+      });
+
+      return reply.status(200).send({ revoked, status: await offboardingStatus(app, organisationId) });
+    },
+  );
+
+  server.post(
+    '/v1/organisations/:organisationId/offboarding/close',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:manage');
+
+      const status = await closeOrganisation(app, organisationId, {
+        actor: request.adericel.principal?.displayName ?? 'api',
+        correlationId: request.adericel.correlationId,
+      });
+
+      await audit(app, request, {
+        action: 'organisation:offboarding:close',
+        resourceType: 'Organisation',
+        resourceId: organisationId,
+        metadata: { finalExportHash: status.finalExportHash },
+      });
+
+      return reply.status(200).send(status);
+    },
+  );
+
   server.get(
     '/v1/organisations/:organisationId/export',
     { preHandler: server.authenticate },
