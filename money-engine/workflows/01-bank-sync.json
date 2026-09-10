@@ -1,0 +1,227 @@
+{
+  "name": "Money Engine — 01 Bank Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "id": "trigger-schedule",
+      "name": "Every 12 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-660, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bankaccountdata.gocardless.com/api/v2/token/new/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"secret_id\": \"{{ $env.GOCARDLESS_SECRET_ID }}\",\n  \"secret_key\": \"{{ $env.GOCARDLESS_SECRET_KEY }}\"\n}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "get-token",
+      "name": "Get Access Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-440, 300],
+      "notes": "GoCardless Bank Account Data tokens are short-lived, so we mint a fresh one on every run rather than storing it."
+    },
+    {
+      "parameters": {
+        "url": "=https://bankaccountdata.gocardless.com/api/v2/requisitions/{{ $env.GOCARDLESS_REQUISITION_ID }}/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "get-accounts",
+      "name": "Get Linked Accounts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// The requisition returns an array of account IDs.\n// Fan them out so each account is fetched independently — one failing\n// account must not take down the whole sync.\nconst requisition = $input.first().json;\nconst accounts = requisition.accounts || [];\n\nif (accounts.length === 0) {\n  throw new Error(\n    'No accounts on this requisition. The bank consent has probably expired — ' +\n    'GoCardless consents last 90 days and must be re-authorised. Re-run the link flow.'\n  );\n}\n\nreturn accounts.map(id => ({ json: { account_id: id } }));"
+      },
+      "id": "fan-out",
+      "name": "Fan Out Accounts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-accounts",
+      "name": "Loop Accounts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://bankaccountdata.gocardless.com/api/v2/accounts/{{ $json.account_id }}/transactions/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Access Token').first().json.access }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-transactions",
+      "name": "Get Transactions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 400],
+      "onError": "continueRegularOutput",
+      "notes": "continueRegularOutput: a rate-limited or unavailable account is skipped, not fatal. GoCardless limits you to a handful of calls per account per day."
+    },
+    {
+      "parameters": {
+        "url": "=https://bankaccountdata.gocardless.com/api/v2/accounts/{{ $('Loop Accounts').first().json.account_id }}/balances/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Access Token').first().json.access }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-balances",
+      "name": "Get Balances",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ---------------------------------------------------------------------\n// Normalise the provider payload into rows our schema understands, and\n// build idempotent upsert SQL.\n//\n// Merchant normalisation is the load-bearing part of this whole system:\n// subscription detection groups by merchant_key, so if normalisation is\n// sloppy the radar sees ten merchants where there is one.\n// ---------------------------------------------------------------------\n\nconst accountId = $('Loop Accounts').first().json.account_id;\nconst txPayload = $('Get Transactions').first().json || {};\nconst balPayload = $('Get Balances').first().json || {};\n\nfunction sqlEscape(value) {\n  if (value === null || value === undefined) return 'NULL';\n  return \"'\" + String(value).replace(/'/g, \"''\") + \"'\";\n}\n\nfunction normaliseMerchant(description) {\n  return String(description || 'unknown')\n    .toLowerCase()\n    // Card-scheme noise that varies per transaction.\n    .replace(/\\b(card|visa|mastercard|contactless|pos|atm|ref|reference)\\b/g, ' ')\n    // Dates in any common shape.\n    .replace(/\\b\\d{1,2}[\\/-]\\d{1,2}([\\/-]\\d{2,4})?\\b/g, ' ')\n    // Long digit runs: card fragments, transaction ids, store numbers.\n    .replace(/\\b\\d{3,}\\b/g, ' ')\n    // Trailing store/branch identifiers, e.g. \"TESCO 4823\".\n    .replace(/[^a-z\\s]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim()\n    // Keep the first three meaningful words — enough to identify a\n    // merchant, short enough to survive their formatting changes.\n    .split(' ')\n    .filter(w => w.length > 1)\n    .slice(0, 3)\n    .join(' ') || 'unknown';\n}\n\n// GoCardless splits booked (settled) and pending. Only booked is trustworthy\n// for recurring-payment detection — pending amounts and descriptions change.\nconst booked = (txPayload.transactions && txPayload.transactions.booked) || [];\n\nconst rows = booked.map(tx => {\n  const description =\n    tx.remittanceInformationUnstructured ||\n    (tx.remittanceInformationUnstructuredArray || []).join(' ') ||\n    (tx.creditorName || tx.debtorName) ||\n    'unknown';\n\n  const amount = parseFloat((tx.transactionAmount && tx.transactionAmount.amount) || '0');\n\n  return {\n    provider_tx_id: tx.internalTransactionId || tx.transactionId || `${tx.bookingDate}-${amount}-${description}`.slice(0, 120),\n    account_id: accountId,\n    booked_at: tx.bookingDate || tx.valueDate,\n    amount_gbp: amount,\n    currency: (tx.transactionAmount && tx.transactionAmount.currency) || 'GBP',\n    raw_description: description,\n    merchant_key: normaliseMerchant(description),\n  };\n}).filter(r => r.booked_at);\n\n// ------- transaction upsert -------\n// ON CONFLICT DO NOTHING makes re-polling free: the provider always\n// re-sends the last ~90 days, and we only ever want the new ones.\nlet txSql = 'SELECT 1;';\nif (rows.length > 0) {\n  const values = rows.map(r => `(${[\n    sqlEscape(r.provider_tx_id),\n    sqlEscape(r.account_id),\n    sqlEscape(r.booked_at),\n    Number.isFinite(r.amount_gbp) ? r.amount_gbp : 0,\n    sqlEscape(r.currency),\n    sqlEscape(r.raw_description),\n    sqlEscape(r.merchant_key),\n  ].join(', ')})`).join(',\\n  ');\n\n  txSql = `INSERT INTO money.transactions\n  (provider_tx_id, account_id, booked_at, amount_gbp, currency, raw_description, merchant_key)\nVALUES\n  ${values}\nON CONFLICT (account_id, provider_tx_id) DO NOTHING;`;\n}\n\n// ------- balance upsert -------\n// Prefer the interim available balance; fall back to whatever is present.\nconst balances = balPayload.balances || [];\nconst preferred =\n  balances.find(b => b.balanceType === 'interimAvailable') ||\n  balances.find(b => b.balanceType === 'closingBooked') ||\n  balances[0];\n\nlet balSql = 'SELECT 1;';\nif (preferred && preferred.balanceAmount) {\n  const amt = parseFloat(preferred.balanceAmount.amount || '0');\n  balSql = `INSERT INTO money.balances (account_id, balance_gbp, updated_at)\nVALUES (${sqlEscape(accountId)}, ${Number.isFinite(amt) ? amt : 0}, now())\nON CONFLICT (account_id) DO UPDATE\n  SET balance_gbp = EXCLUDED.balance_gbp,\n      updated_at  = now();`;\n}\n\nreturn [{\n  json: {\n    account_id: accountId,\n    row_count: rows.length,\n    tx_sql: txSql,\n    bal_sql: balSql,\n  }\n}];"
+      },
+      "id": "normalise",
+      "name": "Normalise & Build SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.tx_sql }}",
+        "options": {}
+      },
+      "id": "store-transactions",
+      "name": "Store Transactions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1100, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $('Normalise & Build SQL').first().json.bal_sql }}",
+        "options": {}
+      },
+      "id": "store-balances",
+      "name": "Store Balances",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1320, 400],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO money.sync_log (workflow, ok, rows_ingested, message)\nVALUES ('01-bank-sync', true, {{ $('Normalise & Build SQL').first().json.row_count }}, 'sync completed');",
+        "options": {}
+      },
+      "id": "log-sync",
+      "name": "Log Sync",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [660, 180]
+    }
+  ],
+  "connections": {
+    "Every 12 Hours": {
+      "main": [[{ "node": "Get Access Token", "type": "main", "index": 0 }]]
+    },
+    "Get Access Token": {
+      "main": [[{ "node": "Get Linked Accounts", "type": "main", "index": 0 }]]
+    },
+    "Get Linked Accounts": {
+      "main": [[{ "node": "Fan Out Accounts", "type": "main", "index": 0 }]]
+    },
+    "Fan Out Accounts": {
+      "main": [[{ "node": "Loop Accounts", "type": "main", "index": 0 }]]
+    },
+    "Loop Accounts": {
+      "main": [
+        [{ "node": "Log Sync", "type": "main", "index": 0 }],
+        [{ "node": "Get Transactions", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Transactions": {
+      "main": [[{ "node": "Get Balances", "type": "main", "index": 0 }]]
+    },
+    "Get Balances": {
+      "main": [[{ "node": "Normalise & Build SQL", "type": "main", "index": 0 }]]
+    },
+    "Normalise & Build SQL": {
+      "main": [[{ "node": "Store Transactions", "type": "main", "index": 0 }]]
+    },
+    "Store Transactions": {
+      "main": [[{ "node": "Store Balances", "type": "main", "index": 0 }]]
+    },
+    "Store Balances": {
+      "main": [[{ "node": "Loop Accounts", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": ["money-engine"]
+}

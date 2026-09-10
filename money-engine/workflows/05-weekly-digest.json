@@ -1,0 +1,236 @@
+{
+  "name": "Money Engine — 05 Weekly Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                0
+              ],
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "id": "trigger-weekly",
+      "name": "Sunday 7pm",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- The top 3, ranked by money. Nothing below the £50/yr floor.\n-- Anything with a real deadline jumps the queue regardless of value.\nSELECT\n    id,\n    source,\n    title,\n    detail,\n    action_url,\n    annual_value_gbp,\n    minutes_required,\n    due_date\nFROM money.actions\nWHERE status = 'open'\n  AND (annual_value_gbp >= 50 OR due_date IS NOT NULL)\nORDER BY\n    (due_date IS NOT NULL AND due_date <= CURRENT_DATE + 30) DESC,\n    annual_value_gbp DESC\nLIMIT 3;",
+        "options": {}
+      },
+      "id": "load-actions",
+      "name": "Top 3 Actions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -440,
+        300
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    (SELECT COALESCE(SUM(one_off_gbp), 0) FROM money.wins)  AS total_one_off_gbp,\n    (SELECT COALESCE(SUM(annual_gbp), 0)  FROM money.wins)  AS total_annual_gbp,\n    (SELECT COUNT(*) FROM money.wins)                        AS wins_count,\n    (SELECT COUNT(*) FROM money.actions WHERE status = 'open') AS open_count,\n    (SELECT COALESCE(SUM(annual_cost_gbp), 0)\n       FROM money.subscriptions WHERE status = 'active')     AS recurring_annual_gbp;",
+        "options": {}
+      },
+      "id": "load-scoreboard",
+      "name": "Load Scoreboard",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -220,
+        300
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================================\n// THE DIGEST\n//\n// Design rules, in priority order:\n//   1. If there is nothing worth £50+, SEND NOTHING. Silence is the default.\n//   2. Never more than three items. Three.\n//   3. Every item leads with the pounds, then the single next physical action.\n//   4. No dashboards, no charts, no \"insights\". Just: do this, get that.\n//\n// A system that pings you constantly is a system you mute, and a muted\n// system earns nothing. The restraint IS the feature.\n// =====================================================================\n\nconst actions = $('Top 3 Actions').all()\n  .map(i => i.json)\n  .filter(a => a && a.id);      // alwaysOutputData can yield one empty item\n\nconst score = $('Load Scoreboard').first().json || {};\n\nif (actions.length === 0) {\n  return [{ json: { should_send: false, reason: 'nothing above the value floor' } }];\n}\n\nconst gbp = n => '£' + Number(n || 0).toLocaleString('en-GB', {\n  minimumFractionDigits: 0,\n  maximumFractionDigits: 0,\n});\n\nconst totalOnTable = actions.reduce((s, a) => s + Number(a.annual_value_gbp || 0), 0);\nconst totalMinutes = actions.reduce((s, a) => s + Number(a.minutes_required || 0), 0);\n\nconst lines = [];\nlines.push(`<b>${gbp(totalOnTable)} on the table this week</b>`);\nlines.push(`<i>${totalMinutes} minutes of work, total.</i>`);\nlines.push('');\n\nactions.forEach((a, idx) => {\n  const value = Number(a.annual_value_gbp || 0);\n  const isDeadline = a.due_date != null;\n\n  let header = `<b>${idx + 1}. ${escapeHtml(a.title)}</b>`;\n  lines.push(header);\n\n  const meta = [];\n  if (value > 0) meta.push(`${gbp(value)}/yr`);\n  meta.push(`${a.minutes_required} min`);\n  if (isDeadline) {\n    const days = Math.ceil((new Date(a.due_date) - new Date()) / 86400000);\n    meta.push(days > 0 ? `⏳ ${days} days left` : '⏳ OVERDUE');\n  }\n  lines.push(`   <i>${meta.join(' · ')} · ref #${a.id}</i>`);\n\n  if (a.detail) {\n    // Keep it short — long blocks are the thing that makes people stop reading.\n    const detail = String(a.detail).replace(/\\s+/g, ' ').trim();\n    lines.push(`   ${escapeHtml(detail.length > 400 ? detail.slice(0, 397) + '…' : detail)}`);\n  }\n\n  if (a.action_url) {\n    lines.push(`   <a href=\"${escapeHtml(a.action_url)}\">→ Do it here</a>`);\n  }\n\n  lines.push('');\n});\n\n// ---- the scoreboard footer ----\n// This exists purely for motivation. Watching the number go up is what\n// keeps you opening the message in month seven.\nconst banked = Number(score.total_one_off_gbp || 0) + Number(score.total_annual_gbp || 0);\nif (banked > 0) {\n  lines.push('———');\n  lines.push(`<b>Banked so far: ${gbp(banked)}</b> across ${score.wins_count} wins.`);\n}\n\nconst recurring = Number(score.recurring_annual_gbp || 0);\nif (recurring > 0) {\n  lines.push(`<i>Watching ${gbp(recurring)}/yr of recurring payments.</i>`);\n}\n\nconst openCount = Number(score.open_count || 0);\nif (openCount > actions.length) {\n  lines.push(`<i>${openCount - actions.length} smaller items held back — they'll surface as these clear.</i>`);\n}\n\n// Closing the loop: replying \"done 42\" banks the win and clears the item.\nlines.push('');\nlines.push('<i>Reply \"done 42\" when you finish one, or \"skip 42\" to bin it.</i>');\n\nfunction escapeHtml(s) {\n  return String(s)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;');\n}\n\nreturn [{\n  json: {\n    should_send: true,\n    message: lines.join('\\n'),\n    action_ids: actions.map(a => a.id),\n    total_on_table: totalOnTable,\n  }\n}];"
+      },
+      "id": "compose",
+      "name": "Compose Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "should-send",
+              "leftValue": "={{ $json.should_send }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gate",
+      "name": "Anything Worth Saying?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ],
+      "notes": "The false branch is intentionally empty. No news is no message."
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "send-telegram",
+      "name": "Send Digest",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE money.actions\nSET status = 'sent', sent_at = now()\nWHERE id IN ({{ $('Compose Digest').first().json.action_ids.join(',') }});\n\nINSERT INTO money.sync_log (workflow, ok, rows_ingested, message)\nVALUES ('05-weekly-digest', true, {{ $('Compose Digest').first().json.action_ids.length }}, 'digest sent');",
+        "options": {}
+      },
+      "id": "mark-sent",
+      "name": "Mark As Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        660,
+        200
+      ],
+      "notes": "Marking 'sent' rather than 'done' — you still tell the engine when you actually complete one, via workflow 06."
+    },
+    {
+      "parameters": {},
+      "id": "stay-silent",
+      "name": "Stay Silent",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        440,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Sunday 7pm": {
+      "main": [
+        [
+          {
+            "node": "Top 3 Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top 3 Actions": {
+      "main": [
+        [
+          {
+            "node": "Load Scoreboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Scoreboard": {
+      "main": [
+        [
+          {
+            "node": "Compose Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Digest": {
+      "main": [
+        [
+          {
+            "node": "Anything Worth Saying?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anything Worth Saying?": {
+      "main": [
+        [
+          {
+            "node": "Send Digest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stay Silent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Digest": {
+      "main": [
+        [
+          {
+            "node": "Mark As Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": [
+    "money-engine"
+  ]
+}

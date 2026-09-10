@@ -1,0 +1,71 @@
+{
+  "name": "Money Engine — 04 Claims Calendar",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 5
+            }
+          ]
+        }
+      },
+      "id": "trigger-daily",
+      "name": "Daily 5am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================================\n// CLAIMS CALENDAR\n//\n// These are the big one-off and recurring claims. Most are worth more than\n// everything else in this system combined, and every one of them is lost\n// purely to forgetting.\n//\n// Mirrors config/levers.yml -> claims\n// Set `enabled: false` on anything that does not apply to you.\n// Rates change each April — re-check the values after each Budget.\n// =====================================================================\n\nconst CLAIMS = [\n  {\n    id: 'child_benefit',\n    enabled: true,\n    once: true,\n    title: 'Register for Child Benefit — even if you have to pay it back',\n    annual_value_gbp: 1350,\n    minutes: 20,\n    url: 'https://www.gov.uk/child-benefit/how-to-claim',\n    detail:\n      'Claim in the name of the LOWER-earning or non-earning parent. That awards '\n    + 'National Insurance credits toward their State Pension. If the High Income '\n    + 'Child Benefit Charge applies to your household, still register and tick '\n    + '\"do not pay me\" — you keep the NI credits without the tax charge. '\n    + 'Not registering at all is the single most expensive admin mistake new '\n    + 'UK parents make; it can cost tens of thousands in lost State Pension.',\n  },\n  {\n    id: 'tax_free_childcare_setup',\n    enabled: true,\n    once: true,\n    title: 'Open a Tax-Free Childcare account — government adds 25%',\n    annual_value_gbp: 2000,\n    minutes: 30,\n    url: 'https://www.gov.uk/apply-for-tax-free-childcare',\n    detail:\n      'For every £8 you pay in, the government adds £2, up to £500 per quarter '\n    + 'per child. That is a guaranteed 25% return on money you are already '\n    + 'spending on childcare. No investment matches it. '\n    + 'Note: you cannot combine this with childcare vouchers from an employer — '\n    + 'check which is better for you before switching.',\n  },\n  {\n    id: 'tax_free_childcare_reconfirm',\n    enabled: true,\n    // Every 3 months, forever. Miss it and the top-ups silently stop.\n    recurring_days: 88,\n    title: 'Reconfirm your Tax-Free Childcare details (takes 5 minutes)',\n    annual_value_gbp: 500,\n    minutes: 5,\n    url: 'https://www.gov.uk/sign-in-childcare-account',\n    detail:\n      'HMRC requires reconfirmation every 3 months. If you miss it, the account '\n    + 'stops receiving top-ups and nobody tells you. This reminder fires a few '\n    + 'days early on purpose.',\n  },\n  {\n    id: 'marriage_allowance',\n    enabled: true,\n    once: true,\n    title: 'Claim Marriage Allowance + backdate 4 years (~£1,000 lump sum)',\n    annual_value_gbp: 252,\n    minutes: 15,\n    url: 'https://www.gov.uk/marriage-allowance',\n    detail:\n      'Applies if one of you earns under the Personal Allowance and the other is '\n    + 'a basic-rate taxpayer. The lower earner transfers £1,260 of their unused '\n    + 'allowance. Worth about £252/year AND backdatable four tax years, which is '\n    + 'usually paid as a lump sum of roughly £1,000. '\n    + 'Claim direct on gov.uk — never use a claims company, they take a huge cut '\n    + 'of a form that takes fifteen minutes.',\n  },\n  {\n    id: 'pension_match',\n    enabled: true,\n    once: true,\n    title: 'Check you are contributing enough to get the full employer pension match',\n    annual_value_gbp: 900,\n    minutes: 10,\n    url: null,\n    detail:\n      'If your employer matches up to (say) 6% and you contribute 3%, you are '\n    + 'declining free money — it is a pay rise you have not accepted. '\n    + 'Contributions are pre-tax, so raising your percentage costs your take-home '\n    + 'far less than the headline figure suggests.',\n  },\n  {\n    id: 'bank_switch_check',\n    enabled: true,\n    // Offers rotate constantly; check quarterly.\n    recurring_days: 90,\n    title: 'Check current bank switching offers (£100–£200 each, genuinely free)',\n    annual_value_gbp: 175,\n    minutes: 30,\n    url: 'https://www.moneysavingexpert.com/banking/best-bank-accounts/',\n    detail:\n      'The Current Account Switch Service moves your direct debits for you and '\n    + 'guarantees the switch. Several banks pay £100–£200 to take your account at '\n    + 'any given time. Open a spare account to switch FROM so your salary account '\n    + 'is never disrupted. This is repeatable — people do it several times a year.',\n  },\n  {\n    id: 'regular_saver',\n    enabled: true,\n    recurring_days: 180,\n    title: 'Check regular saver accounts (6–8%, far above normal savings)',\n    annual_value_gbp: 120,\n    minutes: 15,\n    url: 'https://www.moneysavingexpert.com/savings/best-regular-savings-accounts/',\n    detail:\n      'Regular savers pay well above easy-access rates but cap monthly deposits '\n    + '(often £200–£500). Usually restricted to existing current-account customers, '\n    + 'so pair this with whichever bank you switched to.',\n  },\n  {\n    id: 'insurance_shop_around',\n    enabled: true,\n    recurring_days: 365,\n    title: 'Annual insurance sweep — never, ever auto-renew',\n    annual_value_gbp: 400,\n    minutes: 45,\n    url: null,\n    detail:\n      'Car, home, and life insurers price loyalty as a penalty: the renewal quote '\n    + 'is almost always worse than the new-customer price for the identical cover. '\n    + 'Get comparison quotes about 3 weeks before renewal (that is when premiums '\n    + 'tend to be cheapest), then either switch or phone and ask them to match it.',\n  },\n];\n\n// ---------------------------------------------------------------------\n// Decide what is due today.\n// ---------------------------------------------------------------------\nconst today = new Date();\nconst epochDay = Math.floor(today.getTime() / 86400000);\nconst due = [];\n\nfor (const claim of CLAIMS) {\n  if (!claim.enabled) continue;\n\n  let dedupeKey;\n\n  if (claim.once) {\n    // Fires exactly once, ever. Dismissing it in the actions table is\n    // what marks it complete.\n    dedupeKey = `claim:${claim.id}`;\n  } else if (claim.recurring_days) {\n    // Bucket time into fixed windows so the same window can only ever\n    // produce one action, no matter how many times this workflow runs.\n    const window = Math.floor(epochDay / claim.recurring_days);\n    dedupeKey = `claim:${claim.id}:w${window}`;\n  } else {\n    continue;\n  }\n\n  due.push({\n    dedupe_key: dedupeKey,\n    source: 'claims',\n    title: claim.title,\n    detail: claim.detail + (claim.url ? `\\n\\nDo it here: ${claim.url}` : ''),\n    action_url: claim.url,\n    annual_value_gbp: claim.annual_value_gbp,\n    minutes_required: claim.minutes,\n  });\n}\n\nreturn [{ json: { due, count: due.length } }];"
+      },
+      "id": "evaluate-claims",
+      "name": "Evaluate Claims Due",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nfunction esc(v) {\n  if (v === null || v === undefined) return 'NULL';\n  return \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\n}\n\n// ON CONFLICT DO NOTHING is the entire anti-nag mechanism here. A one-off\n// claim inserts once and never again; a recurring one inserts once per\n// window. Dismissing an action does not delete it, so it stays suppressed.\nconst statements = (data.due || []).map(f =>\n  `INSERT INTO money.actions\n  (dedupe_key, source, title, detail, action_url, annual_value_gbp, minutes_required, status)\nVALUES (${esc(f.dedupe_key)}, ${esc(f.source)}, ${esc(f.title)}, ${esc(f.detail)},\n        ${esc(f.action_url)}, ${f.annual_value_gbp}, ${f.minutes_required}, 'open')\nON CONFLICT (dedupe_key) DO NOTHING;`\n);\n\nstatements.push(`INSERT INTO money.sync_log (workflow, ok, rows_ingested, message)\nVALUES ('04-claims-calendar', true, ${(data.due || []).length}, 'claims evaluated');`);\n\nreturn [{ json: { sql: statements.join('\\n') } }];"
+      },
+      "id": "build-sql",
+      "name": "Build SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "persist",
+      "name": "Queue Claims",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [220, 300]
+    }
+  ],
+  "connections": {
+    "Daily 5am": {
+      "main": [[{ "node": "Evaluate Claims Due", "type": "main", "index": 0 }]]
+    },
+    "Evaluate Claims Due": {
+      "main": [[{ "node": "Build SQL", "type": "main", "index": 0 }]]
+    },
+    "Build SQL": {
+      "main": [[{ "node": "Queue Claims", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": ["money-engine"]
+}

@@ -1,0 +1,179 @@
+# ============================================================================
+# MONEY ENGINE — LEVER CONFIGURATION
+# ============================================================================
+# This is the only file you should ever need to edit.
+# Everything here is data. No code changes required.
+#
+# Rates and thresholds change every April. The engine re-checks the live
+# ones it can (savings rates, switch offers). The static ones below are
+# starting points — update after each Budget.
+# ============================================================================
+
+household:
+  currency: GBP
+  # Used to decide which claims apply to you.
+  adults: 2
+  children:
+    - name: "child-1"
+      born: "2026-01-10"        # <-- EDIT: your child's DOB
+  # Rough band only; drives which allowances are relevant.
+  # one of: basic | higher | additional
+  tax_band_higher_earner: basic
+  tax_band_lower_earner: basic
+
+# ----------------------------------------------------------------------------
+# NOISE CONTROL — the most important section in the file.
+# ----------------------------------------------------------------------------
+alerting:
+  # Nothing worth less than this per year is ever mentioned. Silence default.
+  annual_value_floor_gbp: 50
+
+  # Hard cap on items in the weekly digest. Three. Not four.
+  max_items_per_digest: 3
+
+  # If there is nothing above the floor, send NOTHING. No "all clear" message.
+  # An all-clear message trains you to ignore the channel.
+  send_empty_digest: false
+
+  # Day and hour for the weekly digest (24h, local time).
+  digest_day: "sunday"
+  digest_hour: 19
+
+  # Anything above this value breaks the silence immediately rather than
+  # waiting for Sunday. Set high — this should almost never fire.
+  urgent_threshold_gbp: 400
+
+# ----------------------------------------------------------------------------
+# TIER 1 — One-off claims. Big money, mostly a memory problem.
+# ----------------------------------------------------------------------------
+claims:
+  - id: tax_free_childcare
+    label: "Tax-Free Childcare — quarterly reconfirmation"
+    annual_value_gbp: 2000
+    url: "https://www.gov.uk/apply-for-tax-free-childcare"
+    # MUST be reconfirmed every 3 months or the account switches off silently.
+    recurrence: quarterly
+    status: not_started        # not_started | in_progress | done | n/a
+    note: >
+      Government adds £2 for every £8 you pay in, up to £500/quarter/child.
+      A guaranteed 25% return on money you are spending anyway. Nothing else
+      comes close. The quarterly reconfirmation is the whole risk — miss it
+      and the top-ups stop without telling you.
+
+  - id: child_benefit
+    label: "Child Benefit — register even if you'll repay it"
+    annual_value_gbp: 1350
+    url: "https://www.gov.uk/child-benefit/how-to-claim"
+    recurrence: once
+    status: not_started
+    note: >
+      CRITICAL: register the claim in the name of the LOWER-earning or
+      non-earning parent. That awards National Insurance credits toward their
+      State Pension. If the High Income Charge applies, still register and
+      tick the "do not pay me" option — you keep the NI credits without the
+      tax charge. Skipping this entirely can cost tens of thousands in lost
+      State Pension over a lifetime. This is the single most-missed item in
+      UK personal finance.
+
+  - id: marriage_allowance
+    label: "Marriage Allowance — claim + backdate 4 years"
+    annual_value_gbp: 252
+    one_off_bonus_gbp: 1000     # backdated 4 years, paid as a lump sum
+    url: "https://www.gov.uk/marriage-allowance"
+    recurrence: once
+    status: not_started
+    note: >
+      Only applies if one of you earns under the Personal Allowance and the
+      other is a basic-rate taxpayer. The lower earner transfers £1,260 of
+      their allowance. Backdatable four tax years — that lump sum is usually
+      the fastest ~£1,000 available to a UK couple.
+
+  - id: pension_employer_match
+    label: "Raise pension contribution to the employer match ceiling"
+    annual_value_gbp: 900       # <-- EDIT: depends on your employer's scheme
+    recurrence: once
+    status: not_started
+    note: >
+      If your employer matches up to e.g. 6% and you contribute 3%, you are
+      declining a pay rise. Contributions also come out pre-tax, so the real
+      cost to your take-home is far less than the headline number.
+
+  - id: isa_allowance
+    label: "ISA allowance — use it or lose it (resets 6 April)"
+    annual_value_gbp: 0         # value depends entirely on what you shelter
+    url: "https://www.gov.uk/individual-savings-accounts"
+    recurrence: annual
+    deadline: "04-05"           # 5 April, MM-DD
+    status: not_started
+    note: >
+      £20,000/yr adult, £9,000/yr Junior ISA. Unused allowance does not roll
+      over. The engine warns at 60 days and 14 days before the deadline.
+
+# ----------------------------------------------------------------------------
+# TIER 2 — Recurring leak detection thresholds.
+# ----------------------------------------------------------------------------
+leak_detection:
+  subscriptions:
+    # A merchant charged N+ times at a consistent interval = subscription.
+    min_occurrences: 3
+    interval_tolerance_days: 4
+    # Flag if the latest charge exceeds the running median by this much.
+    price_rise_pct: 10
+    # A charge under this, followed by a much larger one, = trial converted.
+    trial_probe_max_gbp: 2.00
+    # Not charged in this long = probably cancelled, stop tracking.
+    dormant_after_days: 95
+    # Merchants you know about and don't want flagged again.
+    ignore:
+      - "council tax"
+      - "mortgage"
+      - "rent"
+
+  idle_cash:
+    # Cash you want kept liquid in the current account. Below this, ignore.
+    buffer_gbp: 2000
+    # Only flag if switching gains at least this much per year.
+    min_annual_gain_gbp: 50
+    # Compare against this. The engine also scrapes live best-buy rates.
+    assumed_best_easy_access_pct: 4.5
+
+  insurance:
+    # Warn this many days before a renewal so you have time to shop around.
+    renewal_warning_days: 28
+    # Keywords that identify an insurance payment in your transaction feed.
+    match_keywords:
+      - insur
+      - aviva
+      - direct line
+      - admiral
+      - hastings
+      - churchill
+      - lv=
+      - axa
+
+# ----------------------------------------------------------------------------
+# TIER 3 — Offers worth repeating.
+# ----------------------------------------------------------------------------
+offers:
+  bank_switching:
+    enabled: true
+    # Don't bother mentioning switch offers below this.
+    min_bonus_gbp: 100
+    # Don't switch the account your salary lands in more than this often.
+    cooldown_days: 90
+
+  regular_savers:
+    enabled: true
+    min_rate_pct: 5.0
+
+# ----------------------------------------------------------------------------
+# TIER 4 — Capital. The only permanently autonomous lever.
+# ----------------------------------------------------------------------------
+capital:
+  # The engine does NOT move money. It only checks the standing order fired.
+  # Set this up once in your bank; the engine watches that it keeps happening.
+  monthly_investment_standing_order_gbp: 0    # <-- EDIT once set up
+  expected_reference: "look for a global index tracker inside a Stocks & Shares ISA"
+  # Alert if the expected transfer hasn't appeared within N days of payday.
+  missed_transfer_grace_days: 3
+  payday_day_of_month: 28                      # <-- EDIT

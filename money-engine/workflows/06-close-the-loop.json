@@ -1,0 +1,111 @@
+{
+  "name": "Money Engine — 06 Close The Loop",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Reply",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [-440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================================\n// Parse a one-word reply from the digest.\n//\n//   \"done 42\"   -> banks the win, marks the action complete\n//   \"skip 42\"   -> dismisses it, never shown again\n//   \"snooze 42\" -> back to open, resurfaces in a future digest\n//\n// Deliberately forgiving: case, punctuation and the word \"ref\"/\"#\" are\n// all ignored. On a phone, one-handed, with a baby in the other arm,\n// the parser should not be the hard part.\n// =====================================================================\n\nconst msg = $input.first().json.message || {};\nconst text = String(msg.text || '').trim().toLowerCase();\n\nconst match = text.match(/^(done|skip|dismiss|snooze|no)\\s*(?:ref)?\\s*#?\\s*(\\d+)$/);\n\nif (!match) {\n  return [{ json: { understood: false, echo: text } }];\n}\n\nconst verbRaw = match[1];\nconst actionId = parseInt(match[2], 10);\n\nconst verb =\n  verbRaw === 'done'                              ? 'done'   :\n  (verbRaw === 'skip' || verbRaw === 'dismiss' || verbRaw === 'no') ? 'dismissed' :\n  'open';\n\nreturn [{\n  json: {\n    understood: true,\n    verb,\n    action_id: actionId,\n    chat_id: msg.chat && msg.chat.id,\n  }\n}];"
+      },
+      "id": "parse",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "understood",
+              "leftValue": "={{ $json.understood }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gate",
+      "name": "Understood?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=-- Bank the win when the reply was \"done\". The scoreboard in the weekly\n-- digest reads from money.wins, so this is what makes the number climb.\nWITH target AS (\n  SELECT id, title, annual_value_gbp, source\n  FROM money.actions\n  WHERE id = {{ $json.action_id }}\n),\nbanked AS (\n  INSERT INTO money.wins (action_id, description, one_off_gbp, annual_gbp)\n  SELECT\n      t.id,\n      t.title,\n      -- Claims tend to pay a lump sum; leaks save money every year.\n      CASE WHEN t.source = 'claims' THEN t.annual_value_gbp ELSE 0 END,\n      CASE WHEN t.source = 'claims' THEN 0 ELSE t.annual_value_gbp END\n  FROM target t\n  WHERE '{{ $json.verb }}' = 'done'\n  RETURNING one_off_gbp, annual_gbp\n)\nUPDATE money.actions\nSET status      = '{{ $json.verb }}',\n    resolved_at = CASE WHEN '{{ $json.verb }}' = 'open' THEN NULL ELSE now() END\nWHERE id = {{ $json.action_id }}\nRETURNING title, annual_value_gbp,\n          (SELECT COALESCE(SUM(one_off_gbp + annual_gbp), 0) FROM money.wins) AS banked_total;",
+        "options": {}
+      },
+      "id": "apply",
+      "name": "Record Outcome",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [220, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Reply').first().json.chat_id }}",
+        "text": "={{ $('Parse Reply').first().json.verb === 'done'\n     ? '✅ Banked. Running total: £' + Math.round($json.banked_total || 0).toLocaleString('en-GB')\n     : $('Parse Reply').first().json.verb === 'dismissed'\n       ? '🗑 Binned — you won'  + String.fromCharCode(39) + 't hear about that one again.'\n       : '💤 Snoozed — it will come back around.' }}",
+        "additionalFields": {}
+      },
+      "id": "confirm",
+      "name": "Confirm",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {},
+      "id": "ignore",
+      "name": "Ignore Chatter",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [220, 420],
+      "notes": "Anything that isn't a command is silently ignored — the bot never argues with you."
+    }
+  ],
+  "connections": {
+    "Telegram Reply": {
+      "main": [[{ "node": "Parse Reply", "type": "main", "index": 0 }]]
+    },
+    "Parse Reply": {
+      "main": [[{ "node": "Understood?", "type": "main", "index": 0 }]]
+    },
+    "Understood?": {
+      "main": [
+        [{ "node": "Record Outcome", "type": "main", "index": 0 }],
+        [{ "node": "Ignore Chatter", "type": "main", "index": 0 }]
+      ]
+    },
+    "Record Outcome": {
+      "main": [[{ "node": "Confirm", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": ["money-engine"]
+}

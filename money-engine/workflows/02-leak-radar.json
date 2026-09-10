@@ -1,0 +1,135 @@
+{
+  "name": "Money Engine — 02 Leak Radar",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "id": "trigger-daily",
+      "name": "Daily 6am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Outgoing payments only, 400 days back.\n-- 400 rather than 365 so an annual subscription is seen twice and can be\n-- recognised as recurring rather than looking like a one-off purchase.\nSELECT\n    merchant_key,\n    booked_at,\n    ABS(amount_gbp) AS amount_gbp,\n    raw_description\nFROM money.transactions\nWHERE amount_gbp < 0\n  AND booked_at >= CURRENT_DATE - INTERVAL '400 days'\nORDER BY merchant_key, booked_at ASC;",
+        "options": {}
+      },
+      "id": "load-transactions",
+      "name": "Load 400 Days",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        -220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================================\n// RECURRING PAYMENT DETECTION\n//\n// Mirrors config/levers.yml -> leak_detection.subscriptions\n// Edit these numbers here; levers.yml is the human-readable record of why.\n// =====================================================================\nconst CONFIG = {\n  minOccurrences:       3,\n  intervalToleranceDays: 4,\n  priceRisePct:         10,\n  trialProbeMaxGbp:     2.00,\n  dormantAfterDays:     95,\n  annualValueFloorGbp:  50,\n  // Price rises get a LOWER floor than everything else. They are rare and\n  // high-signal — a 36% hike that happens to work out at £48/yr should\n  // never be invisible just because it sits under the general floor.\n  priceRiseFloorGbp:    30,\n  ignore: ['council tax', 'mortgage', 'rent'],\n};\n\nconst DAY_MS = 86400000;\nconst today = new Date();\n\nconst rows = $input.all().map(i => i.json);\nif (rows.length === 0) {\n  return [{ json: { subscriptions: [], findings: [], note: 'no transactions yet' } }];\n}\n\n// ---- group by normalised merchant ----\nconst byMerchant = new Map();\nfor (const r of rows) {\n  const key = r.merchant_key;\n  if (!key || CONFIG.ignore.some(ig => key.includes(ig))) continue;\n  if (!byMerchant.has(key)) byMerchant.set(key, []);\n  byMerchant.get(key).push({\n    date: new Date(r.booked_at),\n    amount: Math.abs(parseFloat(r.amount_gbp)),\n    description: r.raw_description,\n  });\n}\n\nconst median = arr => {\n  if (arr.length === 0) return 0;\n  const s = [...arr].sort((a, b) => a - b);\n  const mid = Math.floor(s.length / 2);\n  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;\n};\n\n// Map a raw interval onto a real-world billing cycle. Bank posting dates\n// drift (weekends, month lengths), so we snap to the nearest known cycle\n// rather than trusting the raw median.\nfunction classifyCycle(days) {\n  const cycles = [\n    { days: 7,   label: 'weekly' },\n    { days: 14,  label: 'fortnightly' },\n    { days: 30,  label: 'monthly' },\n    { days: 91,  label: 'quarterly' },\n    { days: 182, label: 'half-yearly' },\n    { days: 365, label: 'annual' },\n  ];\n  let best = null;\n  let bestDiff = Infinity;\n  for (const c of cycles) {\n    // Tolerance scales with cycle length — 4 days out on a weekly charge is\n    // a lot, 4 days out on an annual one is nothing.\n    const tolerance = Math.max(CONFIG.intervalToleranceDays, c.days * 0.15);\n    const diff = Math.abs(days - c.days);\n    if (diff <= tolerance && diff < bestDiff) {\n      best = c;\n      bestDiff = diff;\n    }\n  }\n  return best;\n}\n\nconst subscriptions = [];\nconst findings = [];\n\nfor (const [key, charges] of byMerchant.entries()) {\n  if (charges.length < CONFIG.minOccurrences) continue;\n\n  charges.sort((a, b) => a.date - b.date);\n\n  // ---- interval consistency ----\n  const intervals = [];\n  for (let i = 1; i < charges.length; i++) {\n    intervals.push(Math.round((charges[i].date - charges[i - 1].date) / DAY_MS));\n  }\n  const medianInterval = median(intervals);\n  const cycle = classifyCycle(medianInterval);\n  if (!cycle) continue;   // irregular spending, not a subscription\n\n  // At least two thirds of the gaps must match the cycle. This is what\n  // separates \"Netflix every month\" from \"Tesco roughly every month\".\n  const tolerance = Math.max(CONFIG.intervalToleranceDays, cycle.days * 0.15);\n  const consistent = intervals.filter(iv => Math.abs(iv - cycle.days) <= tolerance).length;\n  if (consistent / intervals.length < 0.66) continue;\n\n  const amounts = charges.map(c => c.amount);\n  // Use the median of the LAST THREE charges, not all-time. Robust to a\n  // one-off odd charge, but still tracks the current price after a rise —\n  // an all-time median understates what you are actually paying now.\n  const typical = median(amounts.slice(-3));\n  const latest = charges[charges.length - 1];\n  const lastCharged = latest.date;\n  const daysSinceLast = Math.round((today - lastCharged) / DAY_MS);\n  const chargesPerYear = 365 / cycle.days;\n  const annualCost = +(typical * chargesPerYear).toFixed(2);\n\n  const displayName = key.replace(/\\b\\w/g, c => c.toUpperCase());\n  const isDormant = daysSinceLast > CONFIG.dormantAfterDays;\n\n  subscriptions.push({\n    merchant_key: key,\n    display_name: displayName,\n    typical_amount_gbp: +typical.toFixed(2),\n    interval_days: cycle.days,\n    occurrences: charges.length,\n    first_seen: charges[0].date.toISOString().slice(0, 10),\n    last_charged: lastCharged.toISOString().slice(0, 10),\n    annual_cost_gbp: annualCost,\n    status: isDormant ? 'dormant' : 'active',\n  });\n\n  if (isDormant) continue;   // nothing to alert on; it already stopped\n\n  // ================= FINDING: price rise =================\n  // Compare the latest charge against the median of everything before it.\n  if (charges.length >= 3) {\n    const priorMedian = median(amounts.slice(0, -1));\n    if (priorMedian > 0) {\n      const risePct = ((latest.amount - priorMedian) / priorMedian) * 100;\n      if (risePct >= CONFIG.priceRisePct) {\n        const extraPerYear = +((latest.amount - priorMedian) * chargesPerYear).toFixed(2);\n        if (extraPerYear >= CONFIG.priceRiseFloorGbp) {\n          findings.push({\n            dedupe_key: `price_rise:${key}:${latest.amount.toFixed(2)}`,\n            source: 'leak_radar',\n            title: `${displayName} put its price up ${risePct.toFixed(0)}%`,\n            detail: `Was about £${priorMedian.toFixed(2)}, now £${latest.amount.toFixed(2)} ${cycle.label}. `\n                  + `That is £${extraPerYear.toFixed(2)} a year extra. `\n                  + `Worth a cancel-or-haggle call.`,\n            annual_value_gbp: extraPerYear,\n            minutes_required: 15,\n          });\n        }\n      }\n    }\n  }\n\n  let trialAlreadyFlagged = false;\n\n  // ================= FINDING: free trial converted =================\n  // Classic pattern: a tiny authorisation charge, then the real price.\n  const firstCharge = charges[0];\n  if (firstCharge.amount <= CONFIG.trialProbeMaxGbp && typical > CONFIG.trialProbeMaxGbp * 3) {\n    const daysSinceStart = Math.round((today - firstCharge.date) / DAY_MS);\n    if (daysSinceStart <= 120 && annualCost >= CONFIG.annualValueFloorGbp) {\n      trialAlreadyFlagged = true;\n      findings.push({\n        dedupe_key: `trial_converted:${key}`,\n        source: 'leak_radar',\n        title: `${displayName} free trial has turned into a paid subscription`,\n        detail: `Started with a £${firstCharge.amount.toFixed(2)} charge, now billing `\n              + `£${typical.toFixed(2)} ${cycle.label} — £${annualCost.toFixed(2)} a year. `\n              + `Cancel now if you never actually started using it.`,\n        annual_value_gbp: annualCost,\n        minutes_required: 5,\n      });\n    }\n  }\n\n  // ================= FINDING: newly detected subscription =================\n  // Only surface once, and only if it's worth real money.\n  const isNew = Math.round((today - charges[0].date) / DAY_MS) <= (cycle.days * CONFIG.minOccurrences) + 30;\n  // Suppressed when the trial alert already covered this merchant — two\n  // messages about one subscription is exactly the noise that gets a\n  // system muted.\n  if (isNew && !trialAlreadyFlagged && annualCost >= CONFIG.annualValueFloorGbp) {\n    findings.push({\n      dedupe_key: `new_sub:${key}`,\n      source: 'leak_radar',\n      title: `New recurring payment: ${displayName} — £${annualCost.toFixed(2)}/year`,\n      detail: `£${typical.toFixed(2)} ${cycle.label}, charged ${charges.length} times so far. `\n            + `If this is one you meant to start, ignore this. If not, that is `\n            + `£${annualCost.toFixed(2)} a year back.`,\n      annual_value_gbp: annualCost,\n      minutes_required: 5,\n    });\n  }\n}\n\n// Rank by annual value — the digest takes the top N off this pile.\nfindings.sort((a, b) => b.annual_value_gbp - a.annual_value_gbp);\n\nreturn [{\n  json: {\n    subscriptions,\n    findings,\n    total_recurring_annual_gbp: +subscriptions\n      .filter(s => s.status === 'active')\n      .reduce((sum, s) => sum + s.annual_cost_gbp, 0)\n      .toFixed(2),\n  }\n}];"
+      },
+      "id": "detect",
+      "name": "Detect Recurring Payments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn detection output into idempotent SQL.\n// Everything here is upsert-or-ignore: this workflow runs daily and must\n// never create duplicate work items.\nconst data = $input.first().json;\n\nfunction esc(v) {\n  if (v === null || v === undefined) return 'NULL';\n  return \"'\" + String(v).replace(/'/g, \"''\") + \"'\";\n}\n\nconst statements = [];\n\n// ---- subscriptions: full upsert, this table is a live mirror ----\nfor (const s of data.subscriptions || []) {\n  statements.push(`INSERT INTO money.subscriptions\n  (merchant_key, display_name, typical_amount_gbp, interval_days, occurrences,\n   first_seen, last_charged, annual_cost_gbp, status, updated_at)\nVALUES (${esc(s.merchant_key)}, ${esc(s.display_name)}, ${s.typical_amount_gbp},\n        ${s.interval_days}, ${s.occurrences}, ${esc(s.first_seen)},\n        ${esc(s.last_charged)}, ${s.annual_cost_gbp}, ${esc(s.status)}, now())\nON CONFLICT (merchant_key) DO UPDATE SET\n  typical_amount_gbp = EXCLUDED.typical_amount_gbp,\n  interval_days      = EXCLUDED.interval_days,\n  occurrences        = EXCLUDED.occurrences,\n  last_charged       = EXCLUDED.last_charged,\n  annual_cost_gbp    = EXCLUDED.annual_cost_gbp,\n  -- Never resurrect something the user has explicitly dealt with.\n  status             = CASE\n                         WHEN money.subscriptions.status IN ('cancelled_by_user','ignored')\n                         THEN money.subscriptions.status\n                         ELSE EXCLUDED.status\n                       END,\n  updated_at         = now();`);\n}\n\n// ---- findings: insert only if never seen before ----\n// The unique dedupe_key is what stops the engine nagging you weekly about\n// a subscription you already decided to keep.\nfor (const f of data.findings || []) {\n  statements.push(`INSERT INTO money.actions\n  (dedupe_key, source, title, detail, annual_value_gbp, minutes_required, status)\nVALUES (${esc(f.dedupe_key)}, ${esc(f.source)}, ${esc(f.title)}, ${esc(f.detail)},\n        ${f.annual_value_gbp}, ${f.minutes_required}, 'open')\nON CONFLICT (dedupe_key) DO NOTHING;`);\n}\n\nstatements.push(`INSERT INTO money.sync_log (workflow, ok, rows_ingested, message)\nVALUES ('02-leak-radar', true, ${(data.findings || []).length},\n        ${esc(`tracking ${(data.subscriptions || []).length} recurring payments worth £${data.total_recurring_annual_gbp || 0}/yr`)});`);\n\nreturn [{ json: { sql: statements.join('\\n'), statement_count: statements.length } }];"
+      },
+      "id": "build-sql",
+      "name": "Build SQL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "persist",
+      "name": "Persist Findings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        440,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 6am": {
+      "main": [
+        [
+          {
+            "node": "Load 400 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load 400 Days": {
+      "main": [
+        [
+          {
+            "node": "Detect Recurring Payments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Recurring Payments": {
+      "main": [
+        [
+          {
+            "node": "Build SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build SQL": {
+      "main": [
+        [
+          {
+            "node": "Persist Findings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": [
+    "money-engine"
+  ]
+}
