@@ -49,6 +49,17 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactE
         >
           Portfolio
         </NavLink>
+        {/* Veylith's own operations. Shown only to a platform operator — the API
+            refuses it to anyone else regardless, so this is about not offering a
+            door that will not open rather than about access control. */}
+        {me.permissions.includes('platform:read') ? (
+          <NavLink
+            to="/control-room"
+            className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+          >
+            Control room
+          </NavLink>
+        ) : null}
         {base ? (
           <>
             <NavLink

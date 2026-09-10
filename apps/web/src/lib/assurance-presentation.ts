@@ -133,3 +133,31 @@ export function formatInstant(iso: string | null): string {
     timeZoneName: 'short',
   });
 }
+
+/**
+ * A deadline, phrased as time remaining.
+ *
+ * `since` answers "how long ago", which reads as "in the future" for anything
+ * yet to happen — accurate and useless to somebody triaging a queue by
+ * urgency. This answers "how long have I got", and says plainly when the answer
+ * is that the time has passed.
+ */
+export function until(iso: string | null, nowMs = Date.now()): string {
+  if (!iso) return '—';
+  const ms = Date.parse(iso) - nowMs;
+  if (Number.isNaN(ms)) return '—';
+
+  const overdue = ms < 0;
+  const minutes = Math.floor(Math.abs(ms) / 60_000);
+  const phrase =
+    minutes < 1
+      ? 'now'
+      : minutes < 60
+        ? `${minutes} min`
+        : minutes < 60 * 48
+          ? `${Math.floor(minutes / 60)} hr`
+          : `${Math.floor(minutes / (60 * 24))} days`;
+
+  if (overdue) return phrase === 'now' ? 'due now' : `${phrase} overdue`;
+  return phrase === 'now' ? 'due now' : `in ${phrase}`;
+}

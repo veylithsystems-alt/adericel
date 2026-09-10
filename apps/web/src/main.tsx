@@ -13,6 +13,7 @@ import { ErrorNotice, Loading } from './components/Shell.js';
 import { SignIn } from './pages/SignIn.js';
 import { Portfolio } from './pages/Portfolio.js';
 import { Account } from './pages/Account.js';
+import { ControlRoom } from './pages/ControlRoom.js';
 import { Assurance } from './pages/Assurance.js';
 import { ControlExplanation } from './pages/ControlExplanation.js';
 import { Fix } from './pages/Fix.js';
@@ -67,6 +68,7 @@ function App(): ReactElement {
       <Route path="/" element={<ShellRoute me={me} />}>
         <Route index element={<Portfolio me={me} />} />
         <Route path="account" element={<Account />} />
+        <Route path="control-room" element={<ControlRoom me={me} />} />
       </Route>
       <Route path="/organisations/:organisationId" element={<ShellRoute me={me} />}>
         <Route index element={<Assurance />} />
