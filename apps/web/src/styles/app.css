@@ -515,6 +515,31 @@ code,
   margin-bottom: var(--space-1);
 }
 
+/**
+ * Provenance mark: demonstration data.
+ *
+ * Deliberately NOT a state class. DEMONSTRATION is not an assurance state, and
+ * borrowing the UNKNOWN hatching for it would imply Adericel is uncertain about
+ * a fact when what it is actually saying is that the source is not real. State
+ * treatments carry meaning here and must not be reused as decoration.
+ */
+.provenance {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-sm);
+  border: var(--border-width) dashed var(--text-primary);
+  color: var(--text-primary);
+  background: var(--surface-sunken);
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
 .meta {
   font-size: var(--text-meta);
   color: var(--text-secondary);

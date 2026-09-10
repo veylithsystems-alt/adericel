@@ -65,11 +65,13 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
           last_error: string | null;
           consecutive_failures: number;
           credential_updated_at: Date | null;
+          health: string;
+          fidelity: string;
           observation_count: string;
         }>(
           `SELECT i.id, i.connector_key, i.name, i.status, i.configuration, i.schedule_cron,
                   i.last_run_at, i.last_success_at, i.last_error, i.consecutive_failures,
-                  i.credential_updated_at,
+                  i.credential_updated_at, i.health, i.fidelity,
                   (SELECT count(*)::text FROM observations o WHERE o.integration_id = i.id) AS observation_count
            FROM integrations i WHERE i.organisation_id = $1 ORDER BY i.name`,
           [organisationId],
@@ -90,6 +92,12 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
           lastError: row.last_error,
           consecutiveFailures: row.consecutive_failures,
           credentialsConfigured: row.credential_updated_at !== null,
+          // A green light on an integration that has never run is the exact
+          // shape of a reassuring lie.
+          health: row.last_run_at === null ? 'NEVER_RUN' : row.health,
+          // Carried on the list, not only the detail, so a demonstration source
+          // cannot sit unlabelled in a table of real ones.
+          fidelity: row.fidelity,
           observationCount: Number(row.observation_count),
         })),
       });
