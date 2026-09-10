@@ -7,7 +7,13 @@ import type {
   CollectionResult,
 } from '../connector.js';
 import { createHttpClient, type EgressPolicy } from '../http.js';
-import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
+import {
+  capabilityReport,
+  connectorManifestSchema,
+  reportFromError,
+  type CapabilityReport,
+  type ConnectorManifest,
+} from '../manifest.js';
 
 /**
  * Microsoft Intune connector.
@@ -41,6 +47,15 @@ const configSchema = z.object({
   /** Days after which a device is considered to have missed the patch cadence. */
   patchCadenceDays: z.number().int().min(1).default(30),
   pageSize: z.number().int().min(1).max(999).default(200),
+  /**
+   * How many devices to read Windows protection state for in one run.
+   *
+   * Graph exposes firewall and anti-malware state only per device, so this is
+   * one request each. The cap bounds a collection run at MSP scale; passing it
+   * makes the capability PARTIAL rather than silently covering some of the
+   * estate and not the rest.
+   */
+  protectionStateLimit: z.number().int().min(0).max(5000).default(500),
 });
 
 const credentialSchema = z.object({
@@ -79,6 +94,14 @@ export function versionAtLeast(actual: string, minimum: string): boolean {
     if (av !== bv) return av > bv;
   }
   return true;
+}
+
+/** Graph's per-device Windows protection state. */
+interface WindowsProtectionState {
+  firewallEnabled?: boolean;
+  realTimeProtectionEnabled?: boolean;
+  malwareProtectionEnabled?: boolean;
+  signatureUpdateDateTime?: string | null;
 }
 
 export function createMicrosoftIntuneConnector(deps: {
@@ -231,6 +254,8 @@ export function createMicrosoftIntuneConnector(deps: {
       const client = http(context);
       const warnings: string[] = [];
       const observations: ObservationInput[] = [];
+      const capabilityReports: CapabilityReport[] = [];
+      const deviceIds: string[] = [];
 
       let url: string | undefined =
         `${config.graphBaseUrl}/deviceManagement/managedDevices?$top=${config.pageSize}`;
@@ -273,6 +298,7 @@ export function createMicrosoftIntuneConnector(deps: {
               lastSyncAt: device.lastSyncDateTime,
             },
           });
+          deviceIds.push(device.id);
         }
 
         url = page['@odata.nextLink'];
@@ -285,7 +311,111 @@ export function createMicrosoftIntuneConnector(deps: {
         warnings.push('No managed devices were returned. Endpoint controls will report UNKNOWN.');
       }
 
-      return { observations, warnings, partial: truncated, cursor: null };
+      capabilityReports.push(
+        capabilityReport(
+          microsoftIntuneManifest,
+          'collect.devices',
+          truncated ? 'PARTIAL' : deviceIds.length === 0 ? 'EMPTY' : 'AVAILABLE',
+          truncated
+            ? 'Device collection stopped at the page limit; some devices were not collected.'
+            : deviceIds.length === 0
+              ? 'Intune returned no managed devices.'
+              : `Collected ${deviceIds.length} managed device(s).`,
+          { records: deviceIds.length, observations: observations.length },
+        ),
+      );
+
+      // Firewall and anti-malware state.
+      //
+      // Graph exposes these only per device, one request each, so this is the
+      // expensive part of a run and the part most likely to be refused. It is a
+      // capability of its own precisely so that its failure names itself: an
+      // MSP whose consent covers devices but not configuration reads
+      // "endpoint protection: PERMISSION_DENIED, grant
+      // DeviceManagementConfiguration.Read.All" rather than watching four
+      // Cyber Essentials controls go UNKNOWN for no visible reason.
+      const protectionTargets = deviceIds.slice(0, config.protectionStateLimit);
+      let protectionCollected = 0;
+      let protectionError: unknown = null;
+      const protectionByDevice = new Map<string, WindowsProtectionState>();
+
+      for (const deviceId of protectionTargets) {
+        try {
+          const state = await client.json<WindowsProtectionState>({
+            url: `${config.graphBaseUrl}/deviceManagement/managedDevices/${deviceId}/windowsProtectionState`,
+            headers: { authorization: `Bearer ${accessToken}` },
+            ...(context.signal ? { signal: context.signal } : {}),
+          });
+          protectionByDevice.set(deviceId, state);
+          protectionCollected += 1;
+        } catch (error) {
+          // One device that cannot report is not a capability failure — a Mac
+          // has no Windows protection state. A failure on the first device is,
+          // because it means the permission or the endpoint is the problem.
+          if (protectionCollected === 0) {
+            protectionError = error;
+            break;
+          }
+        }
+      }
+
+      if (protectionError !== null) {
+        capabilityReports.push(
+          reportFromError(microsoftIntuneManifest, 'collect.endpoint_protection', protectionError),
+        );
+      } else {
+        const capped = deviceIds.length > protectionTargets.length;
+        capabilityReports.push(
+          capabilityReport(
+            microsoftIntuneManifest,
+            'collect.endpoint_protection',
+            capped ? 'PARTIAL' : protectionCollected === 0 ? 'EMPTY' : 'AVAILABLE',
+            capped
+              ? `Protection state read for ${protectionTargets.length} of ${deviceIds.length} devices; ` +
+                'the rest were not read this run and their protection controls stay UNKNOWN.'
+              : protectionCollected === 0
+                ? 'No device reported Windows protection state.'
+                : `Protection state collected for ${protectionCollected} device(s).`,
+            { records: protectionCollected },
+          ),
+        );
+
+        // Emitted as a second observation per device rather than merged into the
+        // first: the two came from different requests at different instants, and
+        // an evidence artefact must correspond to one thing that was actually
+        // fetched.
+        for (const [deviceId, state] of protectionByDevice) {
+          observations.push({
+            kind: 'DEVICE_STATE',
+            sourceSystem: 'microsoft-intune',
+            subjectExternalId: deviceId,
+            observedAt: context.nowIso,
+            payload: {
+              externalId: deviceId,
+              ...(state.firewallEnabled === undefined
+                ? {}
+                : { firewallEnabled: state.firewallEnabled }),
+              ...(state.malwareProtectionEnabled === undefined
+                ? {}
+                : { endpointProtectionInstalled: state.malwareProtectionEnabled }),
+              ...(state.realTimeProtectionEnabled === undefined
+                ? {}
+                : { endpointProtectionRealtime: state.realTimeProtectionEnabled }),
+              ...(state.signatureUpdateDateTime
+                ? { signaturesUpdatedAt: state.signatureUpdateDateTime }
+                : {}),
+            },
+          });
+        }
+      }
+
+      return {
+        observations,
+        warnings,
+        partial: truncated || protectionError !== null,
+        capabilityReports,
+        cursor: null,
+      };
     },
   };
 }
@@ -303,32 +433,32 @@ export const microsoftIntuneManifest: ConnectorManifest = connectorManifestSchem
       title: 'Managed device inventory',
       domain: 'ENDPOINT',
       produces: ['DEVICE_STATE'],
-      predicates: ['device.managed', 'device.os.version', 'device.os.supported'],
+      predicates: [
+        'device.managed',
+        'device.os.version',
+        'device.os.supported',
+        'device.disk.encrypted',
+        'device.management.last_sync_at',
+      ],
       requiredPermission: 'DeviceManagementManagedDevices.Read.All',
       incremental: false,
     },
     {
-      key: 'collect.device_compliance',
-      title: 'Device compliance, encryption and firewall state',
+      key: 'collect.endpoint_protection',
+      title: 'Firewall and anti-malware state',
       domain: 'ENDPOINT',
       produces: ['DEVICE_STATE'],
       predicates: [
-        'device.disk.encrypted',
         'device.firewall.enabled',
         'device.endpoint_protection.installed',
         'device.endpoint_protection.realtime_enabled',
+        'device.endpoint_protection.signatures_updated_at',
       ],
       requiredPermission: 'DeviceManagementConfiguration.Read.All',
       incremental: false,
-    },
-    {
-      key: 'collect.patch_state',
-      title: 'Operating system patch currency',
-      domain: 'ENDPOINT',
-      produces: ['DEVICE_STATE'],
-      predicates: ['device.patch.last_applied_at', 'device.management.last_sync_at'],
-      requiredPermission: 'DeviceManagementManagedDevices.Read.All',
-      incremental: false,
+      // Read per device, so a large estate may be capped in one run. Its
+      // absence is a partial picture rather than a fault.
+      optional: true,
     },
   ],
   execute: ['device.management.sync'],

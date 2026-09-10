@@ -8,7 +8,13 @@ import type {
   ExecutionResult,
 } from '../connector.js';
 import { createHttpClient, type EgressPolicy } from '../http.js';
-import { connectorManifestSchema, type ConnectorManifest } from '../manifest.js';
+import {
+  capabilityReport,
+  connectorManifestSchema,
+  reportFromError,
+  type CapabilityReport,
+  type ConnectorManifest,
+} from '../manifest.js';
 
 /**
  * Microsoft Entra ID (Azure AD) connector.
@@ -230,6 +236,10 @@ export function createMicrosoftEntraConnector(
     async collect(config, credentials, context): Promise<CollectionResult> {
       const accessToken = await token(config, credentials, context);
       const warnings: string[] = [];
+      // Per-capability, not one flag for the whole run. "The integration is
+      // degraded" is not actionable; "MFA registration returned
+      // PERMISSION_DENIED, grant AuditLog.Read.All" is.
+      const capabilityReports: CapabilityReport[] = [];
 
       const usersUrl = new URL(`${config.graphBaseUrl}/users`);
       usersUrl.searchParams.set(
@@ -261,8 +271,14 @@ export function createMicrosoftEntraConnector(
           `${config.graphBaseUrl}/reports/authenticationMethods/userRegistrationDetails`,
         );
         registrationById = new Map(items.map((item) => [item.id, item]));
+        capabilityReports.push(
+          capabilityReport(microsoftEntraManifest, 'collect.mfa', 'AVAILABLE', 'MFA registration state collected.', {
+            records: registrationById.size,
+          }),
+        );
       } catch (error) {
         mfaAvailable = false;
+        capabilityReports.push(reportFromError(microsoftEntraManifest, 'collect.mfa', error));
         warnings.push(
           `MFA registration state unavailable (${(error as Error).message}). ` +
             'MFA controls will report UNKNOWN until AuditLog.Read.All is granted.',
@@ -285,7 +301,19 @@ export function createMicrosoftEntraConnector(
           );
           for (const member of members) privilegedIds.add(member.id);
         }
+        capabilityReports.push(
+          capabilityReport(
+            microsoftEntraManifest,
+            'collect.privileged_roles',
+            'AVAILABLE',
+            `Directory role membership collected across ${roles.length} role(s).`,
+            { records: privilegedIds.size },
+          ),
+        );
       } catch (error) {
+        capabilityReports.push(
+          reportFromError(microsoftEntraManifest, 'collect.privileged_roles', error),
+        );
         warnings.push(`Directory role membership unavailable (${(error as Error).message}).`);
       }
 
@@ -328,9 +356,31 @@ export function createMicrosoftEntraConnector(
         payload: { adminCount: privilegedIds.size },
       });
 
+      capabilityReports.push(
+        capabilityReport(
+          microsoftEntraManifest,
+          'collect.identities',
+          // Truncation is a hole the connector can see, so it is PARTIAL rather
+          // than AVAILABLE. Zero users is EMPTY: a real, informative answer.
+          truncated ? 'PARTIAL' : users.length === 0 ? 'EMPTY' : 'AVAILABLE',
+          truncated
+            ? 'User collection stopped at the page limit; some identities were not collected.'
+            : users.length === 0
+              ? 'The directory returned no users.'
+              : `Collected ${users.length} user account(s).`,
+          { records: users.length, observations: observations.length },
+        ),
+      );
+
       // Truncated pages or an unavailable permission mean the picture has holes
       // the connector can see, so the run is explicitly partial.
-      return { observations, warnings, partial: truncated || !mfaAvailable, cursor: null };
+      return {
+        observations,
+        warnings,
+        partial: truncated || !mfaAvailable,
+        capabilityReports,
+        cursor: null,
+      };
     },
 
     async execute(config, credentials, request, context): Promise<ExecutionResult> {
@@ -472,11 +522,13 @@ export const microsoftEntraManifest: ConnectorManifest = connectorManifestSchema
       title: 'Directory role assignments',
       domain: 'IDENTITY',
       produces: ['IDENTITY_STATE', 'CONFIGURATION_SETTING'],
-      predicates: [
-        'identity.privileged',
-        'identity.admin_account_separate',
-        'organisation.identity.admin_count',
-      ],
+      predicates: ['identity.privileged', 'organisation.identity.admin_count'],
+      // `identity.admin_account_separate` is deliberately absent. Whether an
+      // administrator holds a separate day-to-day account is not something
+      // Graph states; inferring it from a naming convention would be a guess
+      // dressed as an observation. Nothing supplies it, so the Cyber Essentials
+      // control that needs it reads UNKNOWN and names the missing evidence —
+      // which is the truth, and is actionable.
       requiredPermission: 'RoleManagement.Read.Directory',
       incremental: false,
     },

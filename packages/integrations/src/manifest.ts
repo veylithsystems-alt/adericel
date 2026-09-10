@@ -272,3 +272,94 @@ export function healthFromReports(reports: readonly CapabilityReport[]): Integra
 export function healthIsDegraded(health: IntegrationHealth): boolean {
   return health !== 'HEALTHY';
 }
+
+/**
+ * Classify an upstream failure into a capability outcome.
+ *
+ * The distinction that matters most is PERMISSION_DENIED against
+ * UPSTREAM_UNAVAILABLE. One is a consent an administrator can grant in five
+ * minutes; the other is somebody else's outage. Reporting both as "degraded"
+ * leaves a customer with a red light and nothing to do about it.
+ *
+ * Conservative by design: anything it cannot confidently classify becomes
+ * UPSTREAM_UNAVAILABLE, which is still uninformative and still withholds the
+ * predicates. Nothing here can turn a failure into an informative outcome.
+ */
+export function classifyCollectionError(error: unknown): CapabilityOutcome {
+  const status =
+    typeof error === 'object' && error !== null && 'safeDetails' in error
+      ? Number((error as { safeDetails?: { status?: unknown } }).safeDetails?.status)
+      : Number.NaN;
+
+  if (status === 401) return 'AUTHENTICATION_FAILED';
+  if (status === 403) return 'PERMISSION_DENIED';
+  if (status === 429) return 'RATE_LIMITED';
+  if (Number.isFinite(status) && status >= 500) return 'UPSTREAM_UNAVAILABLE';
+
+  // Fall back to the message only where the status was not carried. A vendor
+  // that returns 200 with an error body is exactly why this exists.
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  if (/\b(403|forbidden|insufficient privileges|access denied|scope)\b/.test(message)) {
+    return 'PERMISSION_DENIED';
+  }
+  if (/\b(401|unauthori[sz]ed|invalid_client|invalid_grant)\b/.test(message)) {
+    return 'AUTHENTICATION_FAILED';
+  }
+  if (/\b(429|rate limit|throttl)/.test(message)) return 'RATE_LIMITED';
+  return 'UPSTREAM_UNAVAILABLE';
+}
+
+/**
+ * Build a capability report, keeping the manifest's declared permission on it.
+ *
+ * The permission is echoed here rather than looked up at render time so the
+ * message an administrator reads names what to grant even if the connector is
+ * later rewritten.
+ */
+export function capabilityReport(
+  manifest: ConnectorManifest,
+  capability: string,
+  outcome: CapabilityOutcome,
+  detail: string,
+  counts: { records?: number; observations?: number; missingFields?: readonly string[] } = {},
+): CapabilityReport {
+  const declared = manifest.collect.find((entry) => entry.key === capability);
+  return {
+    capability,
+    outcome,
+    detail,
+    recordsCollected: counts.records ?? 0,
+    observationsProduced: counts.observations ?? 0,
+    requiredPermission: declared?.requiredPermission ?? '',
+    ...(counts.missingFields && counts.missingFields.length > 0
+      ? { missingFields: [...counts.missingFields] }
+      : {}),
+  };
+}
+
+/**
+ * Turn a failure into a report that names what to do about it.
+ *
+ * A PERMISSION_DENIED with the vendor's own permission string in it is the
+ * difference between an integration that stays broken for a fortnight and one
+ * an administrator fixes before lunch.
+ */
+export function reportFromError(
+  manifest: ConnectorManifest,
+  capability: string,
+  error: unknown,
+): CapabilityReport {
+  const outcome = classifyCollectionError(error);
+  const declared = manifest.collect.find((entry) => entry.key === capability);
+  const cause = error instanceof Error ? error.message : String(error);
+  const remedy =
+    outcome === 'PERMISSION_DENIED' && declared?.requiredPermission
+      ? ` Grant ${declared.requiredPermission} to restore it.`
+      : '';
+  return capabilityReport(
+    manifest,
+    capability,
+    outcome,
+    `${declared?.title ?? capability} could not be collected: ${cause}.${remedy}`,
+  );
+}
