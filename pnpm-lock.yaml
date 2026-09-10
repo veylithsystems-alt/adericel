@@ -18,6 +18,9 @@ importers:
       '@adericel/api':
         specifier: workspace:*
         version: link:apps/api
+      '@adericel/autonomy':
+        specifier: workspace:*
+        version: link:packages/autonomy
       '@adericel/domain':
         specifier: workspace:*
         version: link:packages/domain
@@ -42,6 +45,9 @@ importers:
       '@adericel/truth-engine':
         specifier: workspace:*
         version: link:packages/truth-engine
+      '@adericel/vaol':
+        specifier: workspace:*
+        version: link:packages/vaol
       '@adericel/worker':
         specifier: workspace:*
         version: link:apps/worker
@@ -250,6 +256,15 @@ importers:
         specifier: ^4.1.11
         version: 4.5.4
 
+  packages/autonomy:
+    dependencies:
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
   packages/billing:
     dependencies:
       '@adericel/domain':
@@ -355,6 +370,21 @@ importers:
       '@adericel/domain':
         specifier: workspace:*
         version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
+  packages/vaol:
+    dependencies:
+      '@adericel/autonomy':
+        specifier: workspace:*
+        version: link:../autonomy
+      '@adericel/graph':
+        specifier: workspace:*
+        version: link:../graph
       '@adericel/shared':
         specifier: workspace:*
         version: link:../shared

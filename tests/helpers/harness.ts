@@ -85,9 +85,19 @@ export async function ensureMigrated(): Promise<void> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
-    await client.query('DROP SCHEMA IF EXISTS public CASCADE');
+    // Every non-system schema, enumerated from the catalogue rather than
+    // listed here. A hard-coded list silently stops being complete the moment a
+    // migration introduces a schema, and the symptom is a migration replaying
+    // against objects that survived the reset — which is exactly what happened
+    // when `veylith` was added.
+    const schemas = await client.query<{ nspname: string }>(
+      `SELECT nspname FROM pg_namespace
+       WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'`,
+    );
+    for (const { nspname } of schemas.rows) {
+      await client.query(`DROP SCHEMA IF EXISTS "${nspname}" CASCADE`);
+    }
     await client.query('CREATE SCHEMA public');
-    await client.query('DROP SCHEMA IF EXISTS adericel CASCADE');
     await migrateUp(client, () => undefined);
     migrated = true;
   } finally {
@@ -237,6 +247,16 @@ export async function createHarness(
             subscriptions, msp_baseline_controls, msp_baselines, sessions, api_keys, grants,
             onboarding_tasks, invitations, signups,
             user_credentials, users, organisations, msps, requirements, frameworks
+          RESTART IDENTITY CASCADE`);
+
+        // Company operating state. Separate statement because these tables are
+        // outside the tenant cascade by design, and company_processes is
+        // deliberately NOT truncated: it is seeded reference data describing
+        // what the company does, not test fixture state.
+        await ctx.query(`
+          TRUNCATE TABLE
+            veylith.exception_transitions, veylith.operational_exceptions,
+            veylith.business_events, veylith.policy_decisions, veylith.autonomy_policies
           RESTART IDENTITY CASCADE`);
       });
     },
