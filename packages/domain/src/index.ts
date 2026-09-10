@@ -13,3 +13,4 @@ export * from './events.js';
 export * from './tenancy.js';
 export * from './billing.js';
 export * from './conflict.js';
+export * from './surface.js';

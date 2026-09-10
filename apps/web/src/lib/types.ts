@@ -17,6 +17,20 @@ export interface Me {
     expiresAt: string | null;
   }[];
   permissions: string[];
+  /**
+   * The information boundaries this session occupies, and what each one lets it
+   * see. A session usually occupies exactly one. The API decides this; the app
+   * only renders it, and rendering more than the API will serve produces a
+   * button that leads to a refusal.
+   */
+  surfaces: {
+    surface: 'VEYLITH_INTERNAL' | 'ADERICEL_MSP' | 'ADERICEL_CLIENT';
+    product: 'VEYLITH' | 'ADERICEL';
+    breadth: 'COMPANY' | 'PORTFOLIO' | 'SINGLE_ORGANISATION';
+    summary: string;
+    scopeIds: string[];
+    permissions: string[];
+  }[];
   organisations: { id: string; name: string; slug: string; mspId: string | null }[];
   msps: { id: string; name: string; slug: string }[];
   serverTime: string;

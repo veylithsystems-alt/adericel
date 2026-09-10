@@ -41,6 +41,7 @@ implications.
 | [0028](./ADR-0028-connector-manifests-and-capability-resolution.md) | Connectors declare capability in canonical predicates | Accepted |
 | [0029](./ADR-0029-source-conflict.md)                               | When two systems disagree, Adericel does not choose   | Accepted |
 | [0030](./ADR-0030-offboarding.md)                                   | A customer leaves with their record                   | Accepted |
+| [0031](./ADR-0031-three-surfaces.md)                                | Three surfaces, and no standing route between them    | Accepted |
 
 ## Writing a new ADR
 

@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { Wordmark } from './Mark.js';
 import { signOut } from '../lib/api.js';
+import { isClientOnly, occupies, surfaceLabel } from '../lib/surface.js';
 import type { Me } from '../lib/types.js';
 
 /**
@@ -19,6 +20,12 @@ import type { Me } from '../lib/types.js';
 export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactElement {
   const { organisationId } = useParams();
   const base = organisationId ? `/organisations/${organisationId}` : null;
+  // Which of the three information boundaries this session is inside. Named in
+  // the masthead because an operator who holds authority in more than one must
+  // never be unsure which room they are acting in.
+  const label = surfaceLabel(me);
+  const clientOnly = isClientOnly(me);
+  const ownOrganisation = me.organisations[0]?.id ?? null;
 
   return (
     <div className="app">
@@ -27,6 +34,13 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactE
           <Wordmark size={22} inverse />
         </NavLink>
         <div className="masthead__context">
+          {label ? (
+            <span className="masthead__surface" title={me.surfaces[0]?.summary}>
+              {label.product}
+              <span aria-hidden="true"> · </span>
+              {label.room}
+            </span>
+          ) : null}
           <NavLink to="/account" style={{ color: 'inherit' }}>
             {me.principal.displayName}
           </NavLink>
@@ -42,17 +56,29 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactE
       </header>
 
       <nav className="nav" aria-label="Primary">
-        <NavLink
-          to="/"
-          end
-          className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
-        >
-          Portfolio
-        </NavLink>
+        {/* A client sees one organisation, so "Portfolio" would be a word for
+            something that does not exist for them. An MSP genuinely has one. */}
+        {clientOnly && ownOrganisation ? (
+          <NavLink
+            to={`/organisations/${ownOrganisation}`}
+            end
+            className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+          >
+            Assurance
+          </NavLink>
+        ) : (
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+          >
+            Portfolio
+          </NavLink>
+        )}
         {/* Veylith's own operations. Shown only to a platform operator — the API
             refuses it to anyone else regardless, so this is about not offering a
             door that will not open rather than about access control. */}
-        {me.permissions.includes('platform:read') ? (
+        {occupies(me, 'VEYLITH_INTERNAL') ? (
           <NavLink
             to="/control-room"
             className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
@@ -62,13 +88,15 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactE
         ) : null}
         {base ? (
           <>
-            <NavLink
-              to={base}
-              end
-              className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
-            >
-              Assurance
-            </NavLink>
+            {clientOnly ? null : (
+              <NavLink
+                to={base}
+                end
+                className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+              >
+                Assurance
+              </NavLink>
+            )}
             <NavLink
               to={`${base}/fix`}
               className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}

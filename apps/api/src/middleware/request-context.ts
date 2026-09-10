@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { MFA_DENIAL_PREFIX, type Permission, type Principal } from '@adericel/domain';
+import { MFA_DENIAL_PREFIX, type Permission, type Principal, type Surface } from '@adericel/domain';
 import type { TenantContext } from '@adericel/graph';
 import { recordAudit } from '@adericel/graph';
 import { AdericelError, newCorrelationId, type Logger } from '@adericel/shared';
@@ -10,6 +10,7 @@ import {
   principalFromAccessToken,
   principalFromApiKey,
 } from '../auth/principal.js';
+import { surfacesForRoute } from '../surfaces.js';
 
 /**
  * Per-request state.
@@ -35,6 +36,14 @@ export interface RequestContext {
   deniedAudited: boolean;
   /** The organisation the request named, even if access to it was refused. */
   candidateOrganisationId: string | null;
+  /**
+   * The surfaces this route may be served on, resolved from the route table
+   * before the handler runs. Empty means the route was never classified, and
+   * every authorisation question on it is refused.
+   */
+  surfaces: readonly Surface[];
+  /** The surface the request was actually served on, once authority is proven. */
+  servedSurface: Surface | null;
 }
 
 declare module 'fastify' {
@@ -66,6 +75,11 @@ export function attachRequestContext(app: AppContext) {
       auditResourceId: null,
       deniedAudited: false,
       candidateOrganisationId: null,
+      // Resolved here rather than in each handler, so a route cannot be added
+      // without a boundary: an unclassified path resolves to no surface, and
+      // `decide` refuses every question asked with no surface.
+      surfaces: surfacesForRoute(request.method, request.routeOptions?.url ?? request.url),
+      servedSurface: null,
     };
 
     reply.header('x-correlation-id', correlationId);
@@ -141,7 +155,12 @@ export async function requireOrganisation(
 
   const answer = decide(
     principal,
-    { permission, organisationId: candidateOrganisationId, organisationMspId: owner.mspId },
+    {
+      permission,
+      organisationId: candidateOrganisationId,
+      organisationMspId: owner.mspId,
+      surfaces: request.adericel.surfaces,
+    },
     app.clock,
   );
 
@@ -171,6 +190,10 @@ export async function requireOrganisation(
 
   request.adericel.organisationId = candidateOrganisationId;
   request.adericel.organisationMspId = owner.mspId;
+  // Recorded so the audit trail says which boundary the request was served
+  // through, not merely that it was allowed.
+  request.adericel.servedSurface =
+    answer.viaScope === 'ORGANISATION' ? 'ADERICEL_CLIENT' : 'ADERICEL_MSP';
   return candidateOrganisationId;
 }
 
@@ -181,13 +204,18 @@ export async function requireMsp(
   permission: Permission,
 ): Promise<string> {
   const principal = requirePrincipal(request);
-  const answer = decide(principal, { permission, mspId }, app.clock);
+  const answer = decide(
+    principal,
+    { permission, mspId, surfaces: request.adericel.surfaces },
+    app.clock,
+  );
   if (!answer.allowed) {
     await writeDenial(app, request, permission, mspId, answer.reason);
     throw new AdericelError('FORBIDDEN', 'No access to the requested MSP', {
       safeDetails: { permission },
     });
   }
+  request.adericel.servedSurface = 'ADERICEL_MSP';
   return mspId;
 }
 
@@ -197,13 +225,14 @@ export async function requirePlatform(
   permission: Permission,
 ): Promise<void> {
   const principal = requirePrincipal(request);
-  const answer = decide(principal, { permission }, app.clock);
+  const answer = decide(principal, { permission, surfaces: request.adericel.surfaces }, app.clock);
   if (!answer.allowed) {
     await writeDenial(app, request, permission, null, answer.reason);
     throw new AdericelError('FORBIDDEN', 'Platform permission required', {
       safeDetails: { permission },
     });
   }
+  request.adericel.servedSurface = 'VEYLITH_INTERNAL';
 }
 
 /**
@@ -330,7 +359,14 @@ export async function audit(
     sourceIp: request.ip,
     userAgent:
       typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
-    metadata: entry.metadata ?? {},
+    metadata: {
+      ...(entry.metadata ?? {}),
+      // Which information boundary served this request. An investigation into a
+      // compromised account needs to know whether a read arrived through the
+      // MSP's delegated authority or through the organisation's own staff, and
+      // that is not recoverable from the actor alone.
+      surface: request.adericel.servedSurface,
+    },
   };
 
   // When the caller is already inside a tenant transaction the audit entry

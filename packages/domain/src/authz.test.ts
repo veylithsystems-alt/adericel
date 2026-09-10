@@ -3,6 +3,7 @@ import {
   HUMAN_ONLY_PERMISSIONS,
   PRINCIPAL_TYPES,
   ROLE_PERMISSIONS,
+  SURFACE_DENIAL_PREFIX,
   accessibleOrganisationIds,
   authorise,
   permissionsForRoles,
@@ -32,7 +33,7 @@ describe('authorise', () => {
     const answer = authorise(
       principal(),
       { permission: 'org:read', organisationId: 'org-1' },
-      { atIso: AT },
+      { atIso: AT, surface: 'ADERICEL_CLIENT' },
     );
     expect(answer.allowed).toBe(false);
   });
@@ -44,7 +45,11 @@ describe('authorise', () => {
       ],
     });
     expect(
-      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: 'org-1' },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
     ).toBe(true);
   });
 
@@ -55,7 +60,11 @@ describe('authorise', () => {
       ],
     });
     expect(
-      authorise(p, { permission: 'org:read', organisationId: 'org-2' }, { atIso: AT }).allowed,
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: 'org-2' },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
     ).toBe(false);
   });
 
@@ -68,14 +77,14 @@ describe('authorise', () => {
       authorise(
         p,
         { permission: 'org:read', organisationId: 'org-1' },
-        { atIso: AT, organisationMspId: 'msp-1' },
+        { atIso: AT, surface: 'ADERICEL_MSP', organisationMspId: 'msp-1' },
       ).allowed,
     ).toBe(true);
     expect(
       authorise(
         p,
         { permission: 'org:read', organisationId: 'org-1' },
-        { atIso: AT, organisationMspId: 'msp-2' },
+        { atIso: AT, surface: 'ADERICEL_MSP', organisationMspId: 'msp-2' },
       ).allowed,
     ).toBe(false);
   });
@@ -85,7 +94,11 @@ describe('authorise', () => {
       grants: [{ scopeType: 'MSP', scopeId: 'msp-1', roles: ['MSP_ADMIN'], expiresAt: null }],
     });
     expect(
-      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: 'org-1' },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
     ).toBe(false);
   });
 
@@ -101,7 +114,11 @@ describe('authorise', () => {
       ],
     });
     expect(
-      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: 'org-1' },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
     ).toBe(false);
   });
 
@@ -117,20 +134,74 @@ describe('authorise', () => {
       ],
     });
     expect(
-      authorise(p, { permission: 'org:read', organisationId: 'org-1' }, { atIso: AT }).allowed,
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: 'org-1' },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
     ).toBe(true);
   });
 
-  it('grants platform scope across every organisation', () => {
+  it('gives a platform grant no standing reach into any customer organisation', () => {
+    // This is the boundary between Veylith Systems and Adericel's customers,
+    // and it replaces an earlier rule under which a platform administrator
+    // could act inside any organisation. Operating the platform is not a
+    // reason to read or change a customer's estate. Support that genuinely
+    // needs it is given an expiring MSP or organisation grant, which is a
+    // recorded act with a name against it.
+    const p = principal({
+      grants: [
+        { scopeType: 'PLATFORM', scopeId: null, roles: ['PLATFORM_ADMIN'], expiresAt: null },
+      ],
+    });
+    for (const surface of ['ADERICEL_CLIENT', 'ADERICEL_MSP'] as const) {
+      const answer = authorise(
+        p,
+        { permission: 'org:action:execute', organisationId: 'any' },
+        { atIso: AT, surface, organisationMspId: 'msp-1' },
+      );
+      expect(answer.allowed, `platform grant reached an organisation via ${surface}`).toBe(false);
+    }
+
+    // And on its own surface it cannot ask the question at all, because tenant
+    // assurance is not disclosed in the internal control room.
+    const internal = authorise(
+      p,
+      { permission: 'org:action:execute', organisationId: 'any' },
+      { atIso: AT, surface: 'VEYLITH_INTERNAL' },
+    );
+    expect(internal.allowed).toBe(false);
+    expect(internal.reason).toContain(SURFACE_DENIAL_PREFIX);
+  });
+
+  it('lets a platform grant do the company work it exists for', () => {
     const p = principal({
       grants: [
         { scopeType: 'PLATFORM', scopeId: null, roles: ['PLATFORM_ADMIN'], expiresAt: null },
       ],
     });
     expect(
-      authorise(p, { permission: 'org:action:execute', organisationId: 'any' }, { atIso: AT })
+      authorise(p, { permission: 'platform:read' }, { atIso: AT, surface: 'VEYLITH_INTERNAL' })
         .allowed,
     ).toBe(true);
+  });
+
+  it('ignores roles written against a scope in which they mean nothing', () => {
+    // A grant row naming PLATFORM_ADMIN against one organisation would
+    // otherwise hand out every organisation permission there is, because
+    // PLATFORM_ADMIN holds all of them.
+    const p = principal({
+      grants: [
+        { scopeType: 'ORGANISATION', scopeId: 'org-1', roles: ['PLATFORM_ADMIN'], expiresAt: null },
+      ],
+    });
+    expect(
+      authorise(
+        p,
+        { permission: 'org:evidence:revoke', organisationId: 'org-1' },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
+    ).toBe(false);
   });
 });
 
@@ -192,7 +263,7 @@ describe('permissions only a human may hold', () => {
       const answer = authorise(
         p,
         { permission: 'org:action:approve', organisationId: ORG },
-        { atIso: AT },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
       );
       expect(answer.allowed, `${principalType} was allowed to approve`).toBe(false);
       expect(answer.reason).toContain('requires a human principal');
@@ -215,7 +286,7 @@ describe('permissions only a human may hold', () => {
       const answer = authorise(
         p,
         { permission: 'org:exception:approve', organisationId: ORG },
-        { atIso: AT },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
       );
       expect(answer.allowed, `${principalType} was allowed to approve an exception`).toBe(false);
       expect(answer.reason).toContain('requires a human principal');
@@ -238,8 +309,11 @@ describe('permissions only a human may hold', () => {
       ],
     });
     expect(
-      authorise(p, { permission: 'org:action:approve', organisationId: ORG }, { atIso: AT })
-        .allowed,
+      authorise(
+        p,
+        { permission: 'org:action:approve', organisationId: ORG },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
     ).toBe(true);
   });
 
@@ -264,7 +338,7 @@ describe('permissions that require a second factor', () => {
     const answer = authorise(
       approver(false),
       { permission: 'org:action:approve', organisationId: ORG },
-      { atIso: AT },
+      { atIso: AT, surface: 'ADERICEL_CLIENT' },
     );
     expect(answer.allowed).toBe(false);
     expect(answer.reason).toContain('requires a second factor');
@@ -275,7 +349,7 @@ describe('permissions that require a second factor', () => {
       authorise(
         approver(true),
         { permission: 'org:action:approve', organisationId: ORG },
-        { atIso: AT },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
       ).allowed,
     ).toBe(true);
   });
@@ -289,7 +363,11 @@ describe('permissions that require a second factor', () => {
     });
     for (const permission of ['org:read', 'org:evidence:write', 'org:action:propose'] as const) {
       expect(
-        authorise(analyst, { permission, organisationId: ORG }, { atIso: AT }).allowed,
+        authorise(
+          analyst,
+          { permission, organisationId: ORG },
+          { atIso: AT, surface: 'ADERICEL_CLIENT' },
+        ).allowed,
         `${permission} should not require MFA`,
       ).toBe(true);
     }
@@ -308,7 +386,7 @@ describe('permissions that require a second factor', () => {
     const answer = authorise(
       workflow,
       { permission: 'org:action:approve', organisationId: ORG },
-      { atIso: AT },
+      { atIso: AT, surface: 'ADERICEL_CLIENT' },
     );
     expect(answer.allowed).toBe(false);
     expect(answer.reason).toContain('requires a human principal');

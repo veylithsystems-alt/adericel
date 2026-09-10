@@ -111,6 +111,24 @@ code,
   opacity: 0.85;
 }
 
+/*
+ * Which of the three control rooms this session is in.
+ *
+ * Deliberately typographic rather than coloured: colour in this product means
+ * an assurance state, and a surface is not a state. It reads as a label on the
+ * room, not as a verdict about anything in it.
+ */
+.masthead__surface {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px var(--space-3);
+  border: var(--border-width) solid rgb(255 255 255 / 30%);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
 .nav {
   display: flex;
   gap: var(--space-5);

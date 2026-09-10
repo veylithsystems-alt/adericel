@@ -1,10 +1,13 @@
 import {
   authorise,
+  MFA_DENIAL_PREFIX,
+  SURFACE_DENIAL_PREFIX,
   type AuthorisationAnswer,
   type Grant,
   type Permission,
   type Principal,
   type Role,
+  type Surface,
 } from '@adericel/domain';
 import type { PlatformContext } from '@adericel/graph';
 import { AdericelError, parseApiKey, type Clock } from '@adericel/shared';
@@ -173,25 +176,70 @@ export interface AuthorisationRequest {
   readonly organisationId?: string | null;
   readonly mspId?: string | null;
   readonly organisationMspId?: string | null;
+  /**
+   * The surfaces this route may be served on, fixed by the route table.
+   * An empty list means the route was never classified, which is refused.
+   */
+  readonly surfaces: readonly Surface[];
 }
 
+/**
+ * How informative a refusal is, so the caller keeps the most useful one.
+ *
+ * A request may be legal on more than one surface — an organisation route is
+ * reachable both by the MSP that runs the organisation and by the
+ * organisation's own staff. When every candidate refuses, the reason worth
+ * keeping is the one that tells the operator something: "you need your second
+ * factor" beats "you have no grant", which beats "this is not disclosed here".
+ */
+function denialRank(answer: AuthorisationAnswer): number {
+  if (answer.reason.startsWith(MFA_DENIAL_PREFIX)) return 3;
+  if (answer.reason.startsWith(SURFACE_DENIAL_PREFIX)) return 1;
+  return 2;
+}
+
+/**
+ * Ask the authorisation question on each surface the route may be served on,
+ * and take the first surface that allows it.
+ *
+ * Each surface is evaluated in full isolation: the grants considered are only
+ * those of that surface's scope. Trying two surfaces therefore cannot combine
+ * authority from both — it asks two separate questions and takes an answer, it
+ * does not merge them.
+ */
 export function decide(
   principal: Principal,
   request: AuthorisationRequest,
   clock: Clock,
 ): AuthorisationAnswer {
-  return authorise(
-    principal,
-    {
-      permission: request.permission,
-      ...(request.organisationId === undefined ? {} : { organisationId: request.organisationId }),
-      ...(request.mspId === undefined ? {} : { mspId: request.mspId }),
-    },
-    {
-      atIso: clock.nowIso(),
+  const atIso = clock.nowIso();
+  const question = {
+    permission: request.permission,
+    ...(request.organisationId === undefined ? {} : { organisationId: request.organisationId }),
+    ...(request.mspId === undefined ? {} : { mspId: request.mspId }),
+  };
+
+  if (request.surfaces.length === 0) {
+    // Fail closed. A route nobody classified is a boundary nobody decided.
+    return {
+      allowed: false,
+      reason: `${SURFACE_DENIAL_PREFIX}route is not assigned to any surface`,
+      viaScope: null,
+      viaScopeId: null,
+    };
+  }
+
+  let worst: AuthorisationAnswer | null = null;
+  for (const surface of request.surfaces) {
+    const answer = authorise(principal, question, {
+      atIso,
+      surface,
       ...(request.organisationMspId === undefined
         ? {}
         : { organisationMspId: request.organisationMspId }),
-    },
-  );
+    });
+    if (answer.allowed) return answer;
+    if (worst === null || denialRank(answer) > denialRank(worst)) worst = answer;
+  }
+  return worst as AuthorisationAnswer;
 }

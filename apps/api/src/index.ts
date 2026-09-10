@@ -5,3 +5,4 @@ export * from './auth/tokens.js';
 export * from './services/onboarding.js';
 export * from './services/export.js';
 export * from './services/health.js';
+export * from './surfaces.js';

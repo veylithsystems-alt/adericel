@@ -12,8 +12,11 @@ import {
 import {
   MFA_REQUIRED_PERMISSIONS,
   ROLE_PERMISSIONS,
+  SURFACES,
+  SURFACE_DEFINITIONS,
+  effectiveRoles,
   permissionsForRoles,
-  type Role,
+  surfaceAdmits,
 } from '@adericel/domain';
 import type { AppContext } from '../context.js';
 import { hashRefreshToken, issueAccessToken } from '../auth/tokens.js';
@@ -839,7 +842,36 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
       return { organisations, msps };
     });
 
-    const roles = [...new Set(principal.grants.flatMap((g) => g.roles))] as Role[];
+    /**
+     * What this session can actually do, surface by surface.
+     *
+     * Flattening every role on every grant into one list overstates authority:
+     * a role written against a scope in which it means nothing would appear to
+     * convey its permissions, and a permission that its surface never discloses
+     * would appear reachable. The web app decides what to render from this, so
+     * an overstatement here is a button that leads to a refusal.
+     */
+    const occupied = SURFACES.map((surface) => {
+      const scope = SURFACE_DEFINITIONS[surface].scope;
+      const grants = principal.grants.filter(
+        (grant) =>
+          grant.scopeType === scope &&
+          (grant.expiresAt === null || Date.parse(grant.expiresAt) > Date.parse(nowIso)),
+      );
+      if (grants.length === 0) return null;
+      const granted = permissionsForRoles(grants.flatMap((grant) => effectiveRoles(grant)));
+      const permissions = [...granted].filter((permission) => surfaceAdmits(surface, permission));
+      if (permissions.length === 0) return null;
+      const definition = SURFACE_DEFINITIONS[surface];
+      return {
+        surface,
+        product: definition.product,
+        breadth: definition.breadth,
+        summary: definition.summary,
+        scopeIds: grants.map((grant) => grant.scopeId).filter((id): id is string => id !== null),
+        permissions: permissions.sort(),
+      };
+    }).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
     return reply.status(200).send({
       principal: {
@@ -855,7 +887,10 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
         roles: grant.roles,
         expiresAt: grant.expiresAt,
       })),
-      permissions: [...permissionsForRoles(roles)].sort(),
+      // The union across the surfaces this session occupies. Never wider than
+      // the sum of its surfaces, which is the point.
+      permissions: [...new Set(occupied.flatMap((entry) => entry.permissions))].sort(),
+      surfaces: occupied,
       organisations: scopes.organisations.map((o) => ({
         id: o.id,
         name: o.name,

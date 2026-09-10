@@ -4,7 +4,7 @@ import { EVENT_TYPES } from '@adericel/domain';
 import { listAudit, listEvents, outboxStats } from '@adericel/graph';
 import { pageRequestSchema } from '@adericel/shared';
 import type { AppContext } from '../context.js';
-import { requireOrganisation } from '../middleware/request-context.js';
+import { requireOrganisation, requirePlatform } from '../middleware/request-context.js';
 import { parseParams, parseQuery, organisationParam } from '../middleware/validation.js';
 import { collectHealth } from '../services/health.js';
 
@@ -237,16 +237,26 @@ export function registerObservabilityRoutes(server: FastifyInstance, app: AppCon
   /**
    * Full system health.
    *
-   * Requires authentication because component detail is operationally
-   * sensitive, and reports Adericel's own state separately from customers'.
+   * Component detail is a fact about how Veylith runs Adericel, not a fact
+   * about any customer's assurance, so it belongs to the internal control room
+   * and is refused on both Adericel surfaces. `/health/ready` remains public
+   * and answers the only question a customer needs: is the service up.
    */
-  server.get('/v1/system/health', { preHandler: server.authenticate }, async (_request, reply) => {
+  server.get('/v1/system/health', { preHandler: server.authenticate }, async (request, reply) => {
+    await requirePlatform(app, request, 'platform:read');
     const health = await collectHealth(app, { deep: true });
     return reply.status(200).send(health);
   });
 
-  /** Dead-letter visibility. Events are never dropped, so this must be watched. */
-  server.get('/v1/system/outbox', { preHandler: server.authenticate }, async (_request, reply) => {
+  /**
+   * Dead-letter visibility. Events are never dropped, so this must be watched.
+   *
+   * Queue depth is the company's operational state. A customer session learns
+   * nothing it is entitled to from it, and an attacker learns how loaded the
+   * platform is, so it is internal.
+   */
+  server.get('/v1/system/outbox', { preHandler: server.authenticate }, async (request, reply) => {
+    await requirePlatform(app, request, 'platform:read');
     const stats = await app.db.withPlatform(async (ctx) => outboxStats(ctx));
     return reply.status(200).send({
       ...stats,

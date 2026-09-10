@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { roleValidInScope, scopeForSurface, surfaceAdmits, type Surface } from './surface.js';
 
 /**
  * Identity, authority and scope.
@@ -301,6 +302,14 @@ export const HUMAN_ONLY_PERMISSIONS: ReadonlySet<Permission> = new Set<Permissio
  */
 export const MFA_DENIAL_PREFIX = 'mfa-required: ';
 
+/**
+ * Marks a refusal made by the information boundary rather than by a missing
+ * grant. Kept distinguishable internally — in logs, audit records and tests —
+ * because the two failures have completely different remedies. It is never
+ * shown to the caller: the API edge answers every refusal identically.
+ */
+export const SURFACE_DENIAL_PREFIX = 'surface-boundary: ';
+
 export const MFA_REQUIRED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
   'org:action:approve',
   'org:exception:approve',
@@ -311,22 +320,55 @@ function grantIsLive(grant: Grant, atIso: string): boolean {
 }
 
 /**
+ * The roles on a grant that actually mean something in that grant's scope.
+ *
+ * A grant naming a role from another scope is not an error to be thrown — the
+ * row may be historic, or written by an operator who misunderstood — but the
+ * out-of-scope role conveys nothing. `PLATFORM_ADMIN` written against an
+ * organisation grants no organisation permission.
+ */
+export function effectiveRoles(grant: Grant): readonly Role[] {
+  return grant.roles.filter((role) => roleValidInScope(role, grant.scopeType));
+}
+
+function conveys(grant: Grant, permission: Permission): boolean {
+  return permissionsForRoles(effectiveRoles(grant)).has(permission);
+}
+
+/**
  * The single authorisation decision function.
  *
- * Resolution order is platform, then MSP, then organisation. An MSP grant
- * authorises action inside a customer organisation only when the organisation
- * is passed in `organisationsByMsp` — membership is proven, never assumed from
- * the request.
+ * Every question is asked on exactly one surface, and the surface is fixed by
+ * the route rather than chosen by the caller. Two independent refusals happen
+ * before a grant is examined:
+ *
+ *   - the permission must belong to a class of information the surface may
+ *     disclose at all, and
+ *   - only grants of the surface's own scope type are considered.
+ *
+ * So a platform administrator asking for `org:read` on the client or MSP
+ * surface is refused for want of a grant of that scope, and asking for it on
+ * the Veylith surface is refused because tenant assurance is not disclosed
+ * there. There is no third route.
+ *
+ * An MSP grant authorises action inside a customer organisation only when the
+ * organisation is proved to belong to that MSP by `organisationMspId`, which
+ * the caller loads from the database. Membership is never assumed from the
+ * request.
  */
 export function authorise(
   principal: Principal,
   question: AuthorisationQuestion,
   context: {
     readonly atIso: string;
+    /** The surface this request arrived on. Fixed by the route. */
+    readonly surface: Surface;
     /** organisationId -> owning mspId. Supplied by the caller from the database. */
     readonly organisationMspId?: string | null;
   },
 ): AuthorisationAnswer {
+  const { surface } = context;
+
   // Checked before any grant is examined, so there is no scope — platform
   // included — through which a non-human principal can acquire one of these.
   if (HUMAN_ONLY_PERMISSIONS.has(question.permission) && principal.principalType !== 'USER') {
@@ -356,39 +398,61 @@ export function authorise(
     };
   }
 
-  const live = principal.grants.filter((grant) => grantIsLive(grant, context.atIso));
+  // The information boundary. Independent of, and evaluated before, any grant.
+  if (!surfaceAdmits(surface, question.permission)) {
+    return {
+      allowed: false,
+      reason: `${SURFACE_DENIAL_PREFIX}${question.permission} is not disclosed on the ${surface} surface`,
+      viaScope: null,
+      viaScopeId: null,
+    };
+  }
 
-  for (const grant of live) {
-    if (grant.scopeType !== 'PLATFORM') continue;
-    if (permissionsForRoles(grant.roles).has(question.permission)) {
-      return { allowed: true, reason: 'Platform grant', viaScope: 'PLATFORM', viaScopeId: null };
+  const scope = scopeForSurface(surface);
+  const live = principal.grants.filter(
+    (grant) => grant.scopeType === scope && grantIsLive(grant, context.atIso),
+  );
+
+  if (scope === 'PLATFORM') {
+    for (const grant of live) {
+      if (conveys(grant, question.permission)) {
+        return { allowed: true, reason: 'Platform grant', viaScope: 'PLATFORM', viaScopeId: null };
+      }
     }
+    return {
+      allowed: false,
+      reason: `No live platform grant conveys ${question.permission}`,
+      viaScope: null,
+      viaScopeId: null,
+    };
   }
 
   if (question.organisationId) {
-    for (const grant of live) {
-      if (grant.scopeType !== 'ORGANISATION' || grant.scopeId !== question.organisationId) continue;
-      if (permissionsForRoles(grant.roles).has(question.permission)) {
-        return {
-          allowed: true,
-          reason: 'Direct organisation grant',
-          viaScope: 'ORGANISATION',
-          viaScopeId: grant.scopeId,
-        };
-      }
-    }
-
-    const owningMsp = context.organisationMspId ?? null;
-    if (owningMsp !== null) {
+    if (scope === 'ORGANISATION') {
       for (const grant of live) {
-        if (grant.scopeType !== 'MSP' || grant.scopeId !== owningMsp) continue;
-        if (permissionsForRoles(grant.roles).has(question.permission)) {
+        if (grant.scopeId !== question.organisationId) continue;
+        if (conveys(grant, question.permission)) {
           return {
             allowed: true,
-            reason: 'Delegated MSP grant over the owning MSP',
-            viaScope: 'MSP',
+            reason: 'Direct organisation grant',
+            viaScope: 'ORGANISATION',
             viaScopeId: grant.scopeId,
           };
+        }
+      }
+    } else {
+      const owningMsp = context.organisationMspId ?? null;
+      if (owningMsp !== null) {
+        for (const grant of live) {
+          if (grant.scopeId !== owningMsp) continue;
+          if (conveys(grant, question.permission)) {
+            return {
+              allowed: true,
+              reason: 'Delegated MSP grant over the owning MSP',
+              viaScope: 'MSP',
+              viaScopeId: grant.scopeId,
+            };
+          }
         }
       }
     }
@@ -403,8 +467,8 @@ export function authorise(
 
   if (question.mspId) {
     for (const grant of live) {
-      if (grant.scopeType !== 'MSP' || grant.scopeId !== question.mspId) continue;
-      if (permissionsForRoles(grant.roles).has(question.permission)) {
+      if (grant.scopeId !== question.mspId) continue;
+      if (conveys(grant, question.permission)) {
         return { allowed: true, reason: 'MSP grant', viaScope: 'MSP', viaScopeId: grant.scopeId };
       }
     }
