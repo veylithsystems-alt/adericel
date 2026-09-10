@@ -1,168 +1,225 @@
 # Adericel brand
 
-**Brand Pack v1.1 — 08 Sep 2026.** The authoritative sheet is
-[`adericel-brand-pack-v1.1.png`](./adericel-brand-pack-v1.1.png). This document
-records what the product implements and why several of these are architectural
-constraints rather than styling preferences.
+**Brand Pack v1.2 — asset-production and source-of-truth specification.**
+Supersedes v1.1 where stated. The v1.1 raster sheet is retained at
+[`adericel-brand-pack-v1.1.png`](./adericel-brand-pack-v1.1.png) as the visual
+reference; v1.2 is a text specification and is the authority on tokens, asset
+requirements and provenance.
 
 `TRUTH / EVIDENCE / ASSURANCE`
 
-## What changed from v1.0
+v1.2 does not redesign anything. The direction from v1.1 stands —
+**ink + paper + precision** — and the distinctive idea stays intact:
 
-Two values moved, and both are in the code:
+```
+PROVEN  →  UNKNOWN  →  PROVEN
+████       ░░░░        ████
+```
 
-| Token     | v1.0      | v1.1      |
-| --------- | --------- | --------- |
-| Rule      | `#DCDDD8` | `#DCDBD8` |
-| Exception | `#D08B2F` | `#96601A` |
+Adericel should not look like a cybersecurity company. It should look like an
+authoritative system.
 
-Exception is the substantive one. The v1.0 value was a light amber that sat
-close enough to a warning yellow to be read as one; `#96601A` is a dark ochre
-that reads as a deliberate, authorised deviation rather than an alert. That
-matters because the pack separately forbids turning Unknown into warning yellow,
-and an Exception that looked like a warning would have reintroduced the same
-confusion one state along.
+## The source-of-truth rule
+
+v1.2 §2 separates three things that are routinely conflated, and the separation
+is the point of the whole document:
+
+|                   | What it governs                                                          | Where it lives                  |
+| ----------------- | ------------------------------------------------------------------------ | ------------------------------- |
+| **Specification** | Colour, type, semantics, spacing, usage, asset requirements              | This document and the v1.2 text |
+| **Vector master** | Mark geometry, outlined wordmark geometry, proportions, path coordinates | **Not yet supplied**            |
+| **Derivatives**   | Every application, favicon, app-icon and distribution asset              | `brand/`, generated             |
+
+> ### Geometry status: PROVISIONAL
+>
+> The official vector master has not been supplied. The bar coordinates in
+> [`scripts/build-brand-assets.ts`](../../../scripts/build-brand-assets.ts) are
+> **reconstructed from the v1.1 raster sheet**. Per §29 they are provisional and
+> reference only, and are not described anywhere as official, final, canonical
+> or source artwork.
+>
+> When the master arrives: replace `MARK_BARS` and `FAVICON_BARS`, flip
+> `geometry_status` in [`brand/brand-source.yml`](../../../brand/brand-source.yml)
+> to `authoritative`, regenerate, validate, commit. **Nothing else changes** —
+> §5 calls it a geometry substitution rather than a second redesign, and the
+> pipeline is built so that is literally true.
 
 ## Colour
 
-Defined once in [`apps/web/src/styles/tokens.css`](../../../apps/web/src/styles/tokens.css)
-as the `--c-*` block, copied verbatim from the pack so it can be checked against
-the sheet line by line. Nothing in the interface reads a raw hex.
+The canonical token block is v1.2 §22, copied verbatim into
+[`tokens.css`](../../../apps/web/src/styles/tokens.css). Nothing in the
+interface reads a raw hex.
 
-| Token     | Hex                   | Use                                       |
-| --------- | --------------------- | ----------------------------------------- |
-| Ink       | `#14181F`             | Text, headings, controls, dark surfaces   |
-| Paper     | `#FBFBF9`             | Application background, documents         |
-| Slate     | `#5A6270`             | Secondary text, metadata, rules           |
-| Rule      | `#DCDBD8`             | Borders, dividers                         |
-| Proven    | `#1E5540`             | State: evidence establishes the state     |
-| Failing   | `#A33326`             | State: evidence does not satisfy          |
-| Exception | `#96601A`             | State: authorised, time-bounded deviation |
-| Unknown   | diagonal hatch in Ink | State: insufficient evidence to say       |
+### Brand colours — the identity
 
-**The ratio is a rule, not a guideline.** 80–90% of any surface is the brand
-system — ink, paper, slate. 10–20% is state colour, and state colour is used for
-nothing but state. Spend the state palette on a button, a chart series or a
-decorative accent and the one place it carries meaning stops carrying it.
+| Token | Value     | RGB             |
+| ----- | --------- | --------------- |
+| Ink   | `#14181F` | 20 / 24 / 31    |
+| Paper | `#FBFBF9` | 251 / 251 / 249 |
+| Slate | `#5A6270` | 90 / 98 / 112   |
 
-The pack lists using green as a brand colour, and building a green app icon, as
-explicit DON'Ts. Green means _proven_. A green brand is a brand that has spent
-its most meaningful colour on saying nothing.
+### Assurance state colours — not brand colours
 
-> **Note on the pack's token block.** The design-token panel on the sheet shows
-> `--c-exception: #966601A`, which is seven hex digits and cannot be a colour.
-> The swatch beside it gives `RGB 150 96 26`, which is `#96601A`, and that is
-> what the code uses. Worth correcting on the sheet at v1.2.
+| State     | Token           | Value             | RGB           |
+| --------- | --------------- | ----------------- | ------------- |
+| Proven    | `--c-proven`    | `#1E5540`         | 30 / 85 / 64  |
+| Failing   | `--c-failing`   | `#A33326`         | 163 / 51 / 38 |
+| Exception | `--c-exception` | `#96601A`         | 150 / 96 / 26 |
+| Unknown   | —               | ink/paper + hatch | —             |
+
+Structural: `--c-rule` is `#DCDDD8`.
+
+**Green is not Adericel's brand colour. Green means PROVEN.** State colour
+communicates actual assurance state and nothing else — not navigation, not
+buttons, not headings, not decoration, not the app icon. Spend it elsewhere and
+the one place it carries meaning stops carrying it.
+
+### Corrected in v1.2
+
+The v1.1 design-token panel printed an eight-character string for
+`--c-exception` that is not a valid hex colour. The authoritative value is
+`#96601A`, matching the swatch's RGB 150 96 26. The malformed string is banned
+from the repository and a test enforces its absence — which is why it is
+described here rather than quoted.
+
+`--c-rule` also returns to `#DCDDD8`, the value in the v1.2 canonical block.
 
 ## Unknown has no colour
 
-Every other assurance state gets a fill. Unknown gets a **diagonal hatch** — a
-texture, not a hue.
+Every other state gets a fill. Unknown gets a hatch — a texture, not a hue.
 
-This is not a stylistic choice and it is not negotiable. A hue would place
-Unknown somewhere on the good-to-bad axis, and Unknown is not on that axis: it
-means Adericel does not hold enough trustworthy evidence to say. Amber would
-read as "nearly fine". Red would read as "failing". Grey would read as
-"unimportant". The hatch reads as _no reading here_, which is the truth.
+This is semantic, not stylistic. Unknown means _the system cannot currently
+establish the state from sufficient authoritative evidence_. A hue would place
+it on the good-to-bad axis, and it is not on that axis. Amber reads "nearly
+fine"; red reads "failing"; grey reads "unimportant". The hatch reads _no
+reading here_, which is the truth.
 
-The pack's DON'T list makes the same point from the other direction: **do not
-turn unknown into warning yellow.** Every other product in this category does,
-and it is the single decision that separates a system of record from a
+v1.2 §10 forbids replacing it with a yellow warning, a red failure, a warning
+icon, or a traffic-light reading. Every other product in this category does one
+of those, and it is the single decision separating a system of record from a
 dashboard.
 
-The hatch is defined once — angle, line width and pitch as tokens — and reused
-by the state tag, the count bar, the mark and the favicon, so those four cannot
-drift apart.
+The hatch is defined once — angle, line width, pitch — and reused by the state
+tag, the count bar and the mark, so the three cannot drift apart.
 
 ## Typography
 
-| Role    | Face          | Weights     | Use                                         |
-| ------- | ------------- | ----------- | ------------------------------------------- |
-| Primary | Inter         | 400/500/600 | Headings, body, UI, navigation              |
-| Data    | IBM Plex Mono | 400/500     | Hashes, ids, timestamps, technical metadata |
+| Role | Face          | Weights         | Use                                                                   |
+| ---- | ------------- | --------------- | --------------------------------------------------------------------- |
+| UI   | Inter         | 400 / 500 / 600 | Interface, headings, body, navigation, ordinary numbers               |
+| Data | IBM Plex Mono | 400 / 500       | Evidence ids, hashes, correlation ids, provenance, technical metadata |
 
-**Both faces are bundled, not fetched.** This is a correctness fix, not a
-preference. The production Content-Security-Policy sets `font-src 'self'`, so
-the previous Google Fonts link meant the whole interface rendered in a system
-fallback and said nothing about it — the brand was silently not applied in the
-only deployment that matters.
+Plex Mono is **not** the general application font. It is for data that gets
+compared character by character.
 
-There are two further reasons it stays that way. A request to `fonts.gstatic.com`
-from a customer's browser tells a third party who is using their security
-tooling and when, which is a telemetry leak a security-conscious MSP will find.
-And a self-hosted deployment behind a restrictive proxy has no route to an
-external font host at all.
+**Both faces are bundled, not fetched.** This was a correctness fix, not a
+preference: the production CSP sets `font-src 'self'`, so the previous Google
+Fonts link meant every deployed instance rendered in a system fallback and said
+nothing about it. It also removes a request to a third party that would tell
+them who is using their security tooling and when, and it means a self-hosted
+instance behind a restrictive proxy renders correctly.
 
-Plex Mono is for data that must be compared character by character: a content
-hash, a control key, a correlation id. Prose never uses it.
+## Application assets vs distribution assets
+
+v1.2 §25 makes this distinction mandatory, and it decides how the wordmark is
+drawn.
+
+**Application.** The app bundles Inter, so the in-product lockup composes the
+mark and live text. It stays selectable, scales with the interface, and needs no
+special handling.
+
+**Distribution.** Anything going into a deck, a PDF, a partner's design tool or
+a marketing asset must be self-contained. A recipient without Inter would
+otherwise get the wordmark silently re-set in Arial. So the generated lockups in
+`brand/logo/` carry the wordmark as **outlined vector path geometry**, extracted
+from the Inter SemiBold binary — real glyph outlines, not a trace of a picture
+of them. No `<text>` element, no font dependency, and a test enforces it.
 
 ## The mark
 
-Three ascending slanted bars. Two solid; the middle one hatched with the same
-diagonal as the Unknown state.
+Three ascending slanted bars: solid, hatched, solid.
 
-The mark says what the product says — some of what we know is established, some
-of it honestly is not, and the second part is drawn rather than hidden. It is
-the only logo in this category that admits to a gap.
-
-Four variants ship, matching the pack:
+Four variants, all from the same geometry:
 
 | Asset          | Ground | Mark  | Middle bar |
 | -------------- | ------ | ----- | ---------- |
 | `*-light`      | paper  | ink   | hatched    |
 | `*-dark`       | ink    | paper | hatched    |
 | `*-mono-dark`  | any    | ink   | solid      |
-| `*-mono-light` | any    | slate | solid      |
+| `*-mono-light` | any    | paper | solid      |
 
-The mono variants draw the middle bar **solid**. At one colour and small sizes
-the hatch fills in and reads as a muddy block, which is worse than an honest
-solid — which is why the pack ships separate mono assets rather than leaving it
-to chance.
+The mono variants draw the middle bar **solid**. At one colour the hatch fills
+in and reads as a muddy block, which is why separate mono assets exist rather
+than leaving it to chance.
 
-Minimum sizes: 120px full lockup, 24px mark, 16px favicon. Minimum clear space
-is one mark-height on every side.
+## The favicon is a designed derivative
 
-## Building the assets
+v1.2 §14: the three-element master is too complex at very small sizes, and the
+favicon must be a dedicated simplified derivative rather than the master scaled
+down.
+
+The derivative is **two solid bars with a deliberate gap**. At 16 pixels a
+5-unit hatch pitch is finer than the pixel grid — it aliases into a grey smear
+that reads as a rendering fault rather than as texture, and the three-bar
+silhouette closes into a block. The simplification moves the semantic from
+texture to negative space: two bars with a gap still say established / gap /
+established at a size where no texture survives.
+
+Verified legible at 16, 32 and 48.
+
+## Minimum sizes
+
+Full lockup 120px · mark 24px · favicon 16px. Below these, use the appropriate
+derivative rather than shrinking the master. Minimum clear space is 1X, where X
+is the height of the mark's primary geometric unit — to be derived exactly from
+the vector master when it arrives.
+
+## Building
 
 ```bash
-pnpm brand:build
+pnpm brand:build      # regenerate every derivative
+pnpm test:unit        # brand validation
 ```
 
-Generates [`brand/`](../../../brand) (the distributable structure) and
-`apps/web/public/brand/` (what the application serves) from one set of
-coordinates and one set of tokens, in
-[`scripts/build-brand-assets.ts`](../../../scripts/build-brand-assets.ts).
+The pipeline is:
 
-They are generated rather than hand-exported and committed for the reason the
-hatch tokens are shared: the moment the mark's hatch, the Unknown chip's hatch
-and the favicon's hatch are maintained separately, they drift, and the thing
-that should read as one idea reads as three.
+```
+geometry + tokens → vectors → small-scale derivatives → raster exports
+                  → manifest with SHA-256 per asset → commit
+```
 
-**Two honest limits.** The bar geometry is reconstructed from the v1.1 sheet,
-which is a raster; when the official vector exists it replaces five path strings
-and nothing else in the pipeline depends on the reconstruction. And the full
-lockup SVG references Inter by name rather than embedding outlines — correct for
-the application, which bundles the face, and **not** correct for an asset going
-into somebody else's deck or email signature. Outline the text for those.
+SVG is the canonical production representation. **PNG is an export and never a
+source of truth.** The builder is deterministic: identical inputs produce
+byte-identical output, and a test proves it by running the build twice and
+comparing hashes.
 
-## No score, anywhere
+Provenance is recorded in
+[`brand/brand-source.yml`](../../../brand/brand-source.yml) — geometry source,
+geometry status, every token, and a SHA-256 for each generated asset.
 
-The pack lists percentage security scores as a DON'T, and the product has no
-function that could produce one. Coverage and satisfaction are reported as
-separate figures with their denominators visible, and there is no code path that
-combines them. See [ADR-0017](../../adr/ADR-0017-no-single-score.md).
+## Automated validation
 
-## What the interface does not do
+Per v1.2 §28, enforced in
+[`tests/unit/brand-tokens.test.ts`](../../../tests/unit/brand-tokens.test.ts):
 
-Straight from the pack's DON'T column, and each is enforced by the absence of
-the mechanism rather than by review:
+- Every canonical colour matches the specification; the malformed exception
+  string appears nowhere in the repository.
+- Green is absent from the mark and from every non-state context.
+- Unknown carries no hue.
+- SVGs are genuine vectors: valid XML, explicit `viewBox`, no embedded raster,
+  no base64 payloads, no external references.
+- Distribution lockups contain no `<text>`.
+- Every required file in the §17 structure exists, under canonical names —
+  `logo-black`, `logo-white`, `logo-green`, `logo-final` are rejected.
+- The build is deterministic across runs.
+- No shadows; no gradients other than the hatch.
 
-- **No shadows and no gradients.** Rules separate; nothing is raised. A shadow
-  implies a card floating above the page, which is the generic SaaS card system
-  the pack rules out.
-- **No state colour as decoration.** No coloured buttons, no coloured chart
-  series that do not encode state.
-- **No oversized badges.** A tag that dominates its row competes with the thing
-  it describes.
-- **No decorative icons duplicating the state system.** State is the state tag,
-  not a tick and a warning triangle beside it.
+## Do not
+
+Straight from §24, each enforced by the absence of the mechanism rather than by
+review: no green as a brand colour, no green app icon, no state colour as
+decoration, no gradients, no gloss, no generic SaaS card styling, no
+cybersecurity clichés — shields, locks, circuit boards — no AI sparkles, no
+warning-state Unknown, no decorative ticks beside Proven or warning triangles
+beside Failing. The state tag is the state; an icon repeating it adds nothing
+and invites the traffic-light reading the whole system rejects.

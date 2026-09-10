@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 
 /**
- * The Adericel mark — Brand Pack v1.1.
+ * The Adericel mark — Brand Pack v1.2.
  *
  * Three ascending slanted bars. Two are solid; the middle one is hatched with
  * the same diagonal used for the Unknown state everywhere else in the product.
@@ -16,12 +16,16 @@ import type { ReactElement } from 'react';
  * building a green app icon, as explicit DON'Ts. A green mark would spend the
  * one colour that carries meaning on something that carries none.
  *
- * Geometry note: these paths are reconstructed from the v1.1 brand sheet, which
- * is a raster. When the official vector is available it should replace the
- * paths here and the SVG files under `apps/web/public/brand/`, which are drawn
- * from the same coordinates. Everything else — colours, the hatch, the
- * variants — comes from the published tokens and does not depend on the
- * reconstruction.
+ * GEOMETRY STATUS: PROVISIONAL (v1.2 §29).
+ *
+ * These paths are reconstructed from the v1.1 raster brand sheet. They are
+ * reference only. They are not the official vector master and are not described
+ * as official, final, canonical or source artwork anywhere in this repository.
+ *
+ * They are deliberately identical to `MARK_BARS` in
+ * `scripts/build-brand-assets.ts`, and a test asserts it — otherwise the mark in
+ * the product and the mark in a customer's deck stop being the same mark. When
+ * the official master arrives, both change together and nothing else does.
  */
 
 export type MarkVariant = 'light' | 'dark' | 'mono';

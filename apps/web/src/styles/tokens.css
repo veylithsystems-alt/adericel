@@ -1,9 +1,10 @@
 /*
- * Adericel design tokens — Brand Pack v1.1.
+ * Adericel design tokens — Brand Pack v1.2.
  *
- * The `--c-*` block below is the brand pack's published token block, copied
- * value for value so it can be checked against the brand sheet line by line.
- * Everything after it is derived. Nothing in the interface reads a raw hex.
+ * The `--c-*` block below is the specification's canonical token block (v1.2
+ * §22), copied value for value so it can be checked against the document line
+ * by line. Everything after it is derived. Nothing in the interface reads a raw
+ * hex.
  *
  * Two rules from the pack shape the whole system and are worth restating where
  * someone editing this file will see them:
@@ -17,7 +18,7 @@
  */
 
 :root {
-  /* ---------------------------------------------- brand pack v1.1, verbatim */
+  /* ------------------------------------------- brand pack v1.2 §22, verbatim */
   --c-ink: #14181f;
   --c-paper: #fbfbf9;
   --c-slate: #5a6270;
@@ -26,7 +27,7 @@
   --c-failing: #a33326;
   --c-exception: #96601a;
 
-  --c-rule: #dcdbd8;
+  --c-rule: #dcddd8;
 
   --font-ui: 'Inter', sans-serif;
   --font-data: 'IBM Plex Mono', monospace;
