@@ -5,7 +5,9 @@ import {
   createExceptionQueue,
   createMetricsService,
   createOperator,
+  findUnboundEvents,
   loadActivePolicy,
+  operationDigest,
 } from '@adericel/vaol';
 import { nullLogger } from '@adericel/shared';
 import {
@@ -523,5 +525,125 @@ describe.skipIf(!available)('the VAOL authority boundary', () => {
         ),
       ).rejects.toThrow();
     });
+  });
+});
+
+describe.skipIf(!available)('decision binding', () => {
+  let harness: Harness;
+
+  beforeAll(async () => {
+    harness = await createHarness();
+    await harness.truncate();
+    await harness.db.withPlatform(async (ctx) => {
+      await ctx.query(
+        `UPDATE veylith.company_processes SET current_maturity = 3
+         WHERE key = 'market.prospect_discovery'`,
+        [],
+      );
+    });
+  });
+
+  afterAll(async () => {
+    await harness.close();
+  });
+
+  const run = (payload: Record<string, unknown>, subjectId = 'lead-bound') =>
+    harness.db.withPlatform(async (ctx) =>
+      createOperator({
+        ctx,
+        clock: harness.clock,
+        logger: nullLogger,
+        policy,
+        actor: 'test-automation',
+      }).operate({
+        processKey: 'market.prospect_discovery',
+        operation: 'market.prospect_discovery.enrich',
+        riskClass: 'INTERNAL',
+        eventType: 'LEAD_ENRICHED',
+        subjectKind: 'Lead',
+        subjectId,
+        payload,
+        intent: 'Enrich a lead',
+        effect: async () => 'done',
+      }),
+    );
+
+  it('distinguishes two operations that differ only in their payload', async () => {
+    // Before the binding these were indistinguishable in the record: same
+    // process, same operation, same subject. An audit could not tell which of
+    // the two a decision had authorised.
+    await run({ source: 'companies-house' });
+    await run({ source: 'a-third-party-list' }, 'lead-bound-2');
+
+    const digests = await harness.db.withPlatform(async (ctx) =>
+      ctx.many<{ operation_digest: string }>(
+        `SELECT operation_digest FROM veylith.policy_decisions
+         WHERE operation = 'market.prospect_discovery.enrich'`,
+        [],
+      ),
+    );
+    expect(new Set(digests.map((d) => d.operation_digest)).size).toBe(2);
+  });
+
+  it('does not change the digest when the payload is written in a different key order', async () => {
+    const a = operationDigest({
+      processKey: 'p',
+      operation: 'p.op',
+      riskClass: 'INTERNAL',
+      subjectKind: 'Lead',
+      subjectId: 'l1',
+      payload: { alpha: 1, beta: 2 },
+    });
+    const b = operationDigest({
+      processKey: 'p',
+      operation: 'p.op',
+      riskClass: 'INTERNAL',
+      subjectKind: 'Lead',
+      subjectId: 'l1',
+      payload: { beta: 2, alpha: 1 },
+    });
+    expect(a).toBe(b);
+  });
+
+  it('changes the digest when the risk class changes', async () => {
+    const internal = operationDigest({
+      processKey: 'p',
+      operation: 'p.op',
+      riskClass: 'INTERNAL',
+      subjectKind: 'Lead',
+      subjectId: 'l1',
+    });
+    const irreversible = operationDigest({
+      processKey: 'p',
+      operation: 'p.op',
+      riskClass: 'IRREVERSIBLE',
+      subjectKind: 'Lead',
+      subjectId: 'l1',
+    });
+    // Otherwise a decision made about a low-risk operation could be presented
+    // as authorising the irreversible version of it.
+    expect(internal).not.toBe(irreversible);
+  });
+
+  it('finds no event whose decision authorised something else', async () => {
+    const unbound = await harness.db.withPlatform(async (ctx) => findUnboundEvents(ctx));
+    expect(unbound).toEqual([]);
+  });
+
+  it('detects one when the record is tampered with', async () => {
+    // The check has to be able to fail, or it is decoration. Simulating the
+    // thing it exists to catch: an event pointing at a decision for a different
+    // operation.
+    await harness.db.withPlatform(async (ctx) => {
+      await ctx.query(
+        `UPDATE veylith.business_events
+         SET operation_digest = 'sha256:0000000000000000000000000000000000000000000000000000000000000000'
+         WHERE event_type = 'LEAD_ENRICHED' AND policy_decision_id IS NOT NULL`,
+        [],
+      );
+    });
+    const unbound = await harness.db.withPlatform(async (ctx) => findUnboundEvents(ctx));
+    expect(unbound.length).toBeGreaterThan(0);
+    expect(unbound[0]!.operation).toBe('market.prospect_discovery.enrich');
   });
 });

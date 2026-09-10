@@ -117,7 +117,10 @@ export interface BusinessEventRecord {
 }
 
 export interface BusinessEventLedger {
-  record(input: BusinessEventInput, options?: { policyDecisionId?: string | null }): Promise<BusinessEventRecord>;
+  record(
+    input: BusinessEventInput,
+    options?: { policyDecisionId?: string | null; operationDigest?: string },
+  ): Promise<BusinessEventRecord>;
   recent(options?: { limit?: number; eventTypes?: readonly BusinessEventType[] }): Promise<readonly BusinessEventRecord[]>;
   forSubject(subjectKind: string, subjectId: string): Promise<readonly BusinessEventRecord[]>;
 }
@@ -192,8 +195,8 @@ export function createBusinessEventLedger(
         `INSERT INTO veylith.business_events
            (event_type, process_key, subject_kind, subject_id, payload, actor_kind, actor,
             human_in_loop, policy_decision_id, authority, reason, correlation_id,
-            idempotency_key, result, verification, occurred_at)
-         VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+            idempotency_key, result, verification, occurred_at, operation_digest)
+         VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          RETURNING ${SELECT}`,
         [
           input.eventType,
@@ -212,6 +215,7 @@ export function createBusinessEventLedger(
           input.result,
           input.verification,
           now,
+          options.operationDigest ?? 'unbound:pre-0020',
         ],
         'Business event',
       );

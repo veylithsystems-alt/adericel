@@ -8,7 +8,7 @@ import {
   type OperationRiskClass,
 } from '@adericel/autonomy';
 import type { PlatformContext } from '@adericel/graph';
-import { AdericelError, type Clock, type Logger } from '@adericel/shared';
+import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/shared';
 import { createExceptionQueue, type ExceptionCategory, type OperationalException } from './exceptions.js';
 import { createBusinessEventLedger, type BusinessEventType } from './events.js';
 
@@ -52,6 +52,37 @@ export interface OperationRequest<T> {
   readonly verifiable?: boolean;
   /** The effect. Runs only on PERMIT. */
   readonly effect: () => Promise<T>;
+}
+
+/**
+ * The identity of one operation, as a content hash.
+ *
+ * Binds a decision to what it authorised. Without it a decision permitting
+ * "send template A to prospect P" is indistinguishable in the record from one
+ * permitting "send template B to prospect P", and an audit asking what exactly
+ * was authorised can only be answered from whatever code ran next.
+ *
+ * The payload is included deliberately — it is where the difference between two
+ * otherwise identical operations lives. Canonical hashing means key order does
+ * not change the digest, so a caller that builds the payload differently on a
+ * retry still matches.
+ */
+export function operationDigest(request: {
+  readonly processKey: string;
+  readonly operation: string;
+  readonly riskClass: string;
+  readonly subjectKind: string;
+  readonly subjectId: string;
+  readonly payload?: Record<string, unknown>;
+}): string {
+  return contentHash({
+    processKey: request.processKey,
+    operation: request.operation,
+    riskClass: request.riskClass,
+    subjectKind: request.subjectKind,
+    subjectId: request.subjectId,
+    payload: request.payload ?? {},
+  });
 }
 
 export interface OperationOutcome<T> {
@@ -155,6 +186,7 @@ export function createOperator(deps: OperatorDeps): Operator {
     >,
     decision: AutonomyDecision,
     question: AutonomyQuestion,
+    digest: string,
   ): Promise<string> {
     // Recorded whatever the outcome. A system that logs only what it did cannot
     // answer "what did it decline to do, and why", which is the first question
@@ -162,8 +194,9 @@ export function createOperator(deps: OperatorDeps): Operator {
     const row = await ctx.oneOrFail<{ id: string }>(
       `INSERT INTO veylith.policy_decisions
          (process_key, operation, outcome, reason, matched_rule_id, policy_key, policy_hash,
-          question, evaluation, subject_kind, subject_id, correlation_id, decided_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13)
+          question, evaluation, subject_kind, subject_id, correlation_id, decided_at,
+          operation_digest)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14)
        RETURNING id`,
       [
         request.processKey,
@@ -179,6 +212,7 @@ export function createOperator(deps: OperatorDeps): Operator {
         request.subjectId,
         request.correlationId ?? null,
         clock.nowIso(),
+        digest,
       ],
       'Policy decision',
     );
@@ -193,7 +227,8 @@ export function createOperator(deps: OperatorDeps): Operator {
 
     async operate<T>(request: OperationRequest<T>): Promise<OperationOutcome<T>> {
       const { decision, question } = await decide(request);
-      const policyDecisionId = await recordDecision(request, decision, question);
+      const digest = operationDigest(request);
+      const policyDecisionId = await recordDecision(request, decision, question, digest);
 
       if (!mayProceedUnattended(decision.outcome)) {
         const exception = await exceptions.raise(
@@ -252,7 +287,7 @@ export function createOperator(deps: OperatorDeps): Operator {
             correlationId: request.correlationId ?? null,
             result: 'RECORDED',
           },
-          { policyDecisionId },
+          { policyDecisionId, operationDigest: digest },
         );
 
         logger.info(
@@ -283,7 +318,7 @@ export function createOperator(deps: OperatorDeps): Operator {
           result: 'RECORDED',
           verification: request.verifiable === true ? 'PENDING' : 'NOT_REQUIRED',
         },
-        { policyDecisionId },
+        { policyDecisionId, operationDigest: digest },
       );
 
       if (!claim.recorded) {
@@ -396,4 +431,58 @@ export async function ensureAutonomyPolicy(
     [compiled.key, compiled.hash, JSON.stringify(compiled), actor, now],
   );
   return { installed: true, hash: compiled.hash };
+}
+
+/**
+ * Every event whose authorising decision does not match it.
+ *
+ * A binding nobody checks is a column, not a control. This is the check: it
+ * walks the ledger and returns any event whose recorded decision authorised a
+ * different operation — which, if the gate is the only path, should never
+ * happen, and is therefore exactly the thing worth alarming on.
+ *
+ * Events predating the binding are excluded rather than reported. They are not
+ * evidence of anything; nothing was recording a digest when they were written,
+ * and reporting them would bury a real finding under history.
+ */
+export async function findUnboundEvents(
+  ctx: PlatformContext,
+  options: { readonly limit?: number } = {},
+): Promise<
+  readonly {
+    readonly eventId: string;
+    readonly eventType: string;
+    readonly eventDigest: string;
+    readonly decisionDigest: string;
+    readonly operation: string;
+    readonly occurredAt: string;
+  }[]
+> {
+  const rows = await ctx.many<{
+    id: string;
+    event_type: string;
+    event_digest: string;
+    decision_digest: string;
+    operation: string;
+    occurred_at: Date;
+  }>(
+    `SELECT e.id, e.event_type, e.operation_digest AS event_digest,
+            d.operation_digest AS decision_digest, d.operation, e.occurred_at
+     FROM veylith.business_events e
+     JOIN veylith.policy_decisions d ON d.id = e.policy_decision_id
+     WHERE e.operation_digest <> 'unbound:pre-0020'
+       AND d.operation_digest <> 'unbound:pre-0020'
+       AND e.operation_digest <> d.operation_digest
+     ORDER BY e.occurred_at DESC
+     LIMIT $1`,
+    [options.limit ?? 100],
+  );
+  return rows.map((row) => ({
+    eventId: row.id,
+    eventType: row.event_type,
+    eventDigest: row.event_digest,
+    decisionDigest: row.decision_digest,
+    operation: row.operation,
+    occurredAt: row.occurred_at.toISOString(),
+  }));
 }
