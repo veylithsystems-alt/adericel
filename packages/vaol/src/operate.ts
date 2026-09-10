@@ -364,3 +364,36 @@ export async function loadActivePolicy(
   }
   return compileAutonomyPolicy(row.definition);
 }
+
+/**
+ * Ensure the company has an authority model loaded.
+ *
+ * Idempotent, and deliberately conservative: it installs the built-in policy
+ * only when no version of that key exists at all. Once a policy is in the
+ * database it is the company's, possibly edited, possibly deliberately
+ * narrowed — and a deployment silently overwriting it with the shipped default
+ * would be a privilege escalation performed by an upgrade.
+ */
+export async function ensureAutonomyPolicy(
+  ctx: PlatformContext,
+  definition: Parameters<typeof compileAutonomyPolicy>[0],
+  actor: string,
+  clock: Clock,
+): Promise<{ installed: boolean; hash: string }> {
+  const compiled = compileAutonomyPolicy(definition);
+  const existing = await ctx.one<{ id: string; policy_hash: string }>(
+    `SELECT id, policy_hash FROM veylith.autonomy_policies WHERE key = $1
+     ORDER BY version DESC LIMIT 1`,
+    [compiled.key],
+  );
+  if (existing) return { installed: false, hash: existing.policy_hash };
+
+  const now = clock.nowIso();
+  await ctx.query(
+    `INSERT INTO veylith.autonomy_policies
+       (key, version, policy_hash, definition, active, created_by_actor, created_at, activated_at)
+     VALUES ($1, 1, $2, $3::jsonb, true, $4, $5, $5)`,
+    [compiled.key, compiled.hash, JSON.stringify(compiled), actor, now],
+  );
+  return { installed: true, hash: compiled.hash };
+}

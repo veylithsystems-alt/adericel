@@ -22,6 +22,8 @@ COPY packages/graph/package.json         packages/graph/
 COPY packages/evidence/package.json      packages/evidence/
 COPY packages/truth-engine/package.json  packages/truth-engine/
 COPY packages/policy/package.json        packages/policy/
+COPY packages/autonomy/package.json      packages/autonomy/
+COPY packages/vaol/package.json          packages/vaol/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
 COPY packages/billing/package.json       packages/billing/

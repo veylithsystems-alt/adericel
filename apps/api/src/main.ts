@@ -1,5 +1,7 @@
 import { loadConfig, errorFields } from '@adericel/shared';
 import { assertTenantIsolationEnforced } from '@adericel/graph';
+import { DEFAULT_COMPANY_POLICY } from '@adericel/autonomy';
+import { ensureAutonomyPolicy } from '@adericel/vaol';
 import { createAppContext } from './context.js';
 import { buildServer } from './app.js';
 
@@ -37,6 +39,20 @@ async function main(): Promise<void> {
     logger: app.logger,
     isProduction: config.nodeEnv === 'production',
   });
+
+  // The company's authority model. Installed only when no version exists —
+  // once a policy is in the database it is the company's, possibly deliberately
+  // narrowed, and an upgrade overwriting it with the shipped default would be a
+  // privilege escalation performed by a deployment.
+  const policy = await app.db.withPlatform(async (ctx) =>
+    ensureAutonomyPolicy(ctx, DEFAULT_COMPANY_POLICY, 'bootstrap', app.clock),
+  );
+  app.logger.info(
+    { installed: policy.installed, policyHash: policy.hash },
+    policy.installed
+      ? 'installed the default company autonomy policy'
+      : 'company autonomy policy already present; left unchanged',
+  );
 
   const server = await buildServer(app);
 

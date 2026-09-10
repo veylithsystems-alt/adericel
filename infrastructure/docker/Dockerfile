@@ -27,6 +27,8 @@ COPY packages/graph/package.json         packages/graph/
 COPY packages/evidence/package.json      packages/evidence/
 COPY packages/truth-engine/package.json  packages/truth-engine/
 COPY packages/policy/package.json        packages/policy/
+COPY packages/autonomy/package.json      packages/autonomy/
+COPY packages/vaol/package.json          packages/vaol/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
 COPY packages/billing/package.json       packages/billing/
@@ -74,6 +76,8 @@ COPY --from=build /app/packages/graph/dist         packages/graph/dist/
 COPY --from=build /app/packages/evidence/dist      packages/evidence/dist/
 COPY --from=build /app/packages/truth-engine/dist  packages/truth-engine/dist/
 COPY --from=build /app/packages/policy/dist        packages/policy/dist/
+COPY --from=build /app/packages/autonomy/dist      packages/autonomy/dist/
+COPY --from=build /app/packages/vaol/dist          packages/vaol/dist/
 COPY --from=build /app/packages/actions/dist       packages/actions/dist/
 COPY --from=build /app/packages/integrations/dist  packages/integrations/dist/
 COPY --from=build /app/packages/billing/dist       packages/billing/dist/

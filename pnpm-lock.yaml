@@ -99,6 +99,9 @@ importers:
       '@adericel/actions':
         specifier: workspace:*
         version: link:../../packages/actions
+      '@adericel/autonomy':
+        specifier: workspace:*
+        version: link:../../packages/autonomy
       '@adericel/billing':
         specifier: workspace:*
         version: link:../../packages/billing
@@ -126,6 +129,9 @@ importers:
       '@adericel/truth-engine':
         specifier: workspace:*
         version: link:../../packages/truth-engine
+      '@adericel/vaol':
+        specifier: workspace:*
+        version: link:../../packages/vaol
       '@fastify/cors':
         specifier: ^11.1.0
         version: 11.3.0

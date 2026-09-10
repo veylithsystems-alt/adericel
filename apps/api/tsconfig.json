@@ -14,6 +14,8 @@
     { "path": "../../packages/evidence" },
     { "path": "../../packages/truth-engine" },
     { "path": "../../packages/policy" },
+    { "path": "../../packages/autonomy" },
+    { "path": "../../packages/vaol" },
     { "path": "../../packages/actions" },
     { "path": "../../packages/integrations" },
     { "path": "../../packages/notifications" },

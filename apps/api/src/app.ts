@@ -19,6 +19,7 @@ import { registerBillingRoutes } from './routes/billing.js';
 import { registerFindingRoutes } from './routes/findings.js';
 import { registerGraphRoutes } from './routes/graph.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
+import { registerVeylithRoutes } from './routes/veylith.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
 import { registerObservabilityRoutes } from './routes/observability.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
@@ -146,6 +147,7 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   registerFindingRoutes(server, app);
   registerGraphRoutes(server, app);
   registerIntegrationRoutes(server, app);
+  registerVeylithRoutes(server, app);
   registerPortfolioRoutes(server, app);
   registerObservabilityRoutes(server, app);
   registerWebhookRoutes(server, app);
