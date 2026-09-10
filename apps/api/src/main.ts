@@ -1,7 +1,6 @@
 import { loadConfig, errorFields } from '@adericel/shared';
 import { assertTenantIsolationEnforced } from '@adericel/graph';
-import { DEFAULT_COMPANY_POLICY } from '@adericel/autonomy';
-import { ensureAutonomyPolicy } from '@adericel/vaol';
+import { DEFAULT_COMPANY_POLICY, ensureAutonomyPolicy } from '@adericel/vaol';
 import { createAppContext } from './context.js';
 import { buildServer } from './app.js';
 

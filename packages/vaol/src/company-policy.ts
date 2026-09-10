@@ -1,7 +1,14 @@
-import type { AutonomyPolicyDefinition } from './policy.js';
+import type { AutonomyPolicyDefinition } from '@adericel/autonomy';
 
 /**
- * The company's default autonomy policy.
+ * Veylith's default autonomy policy.
+ *
+ * Lives here rather than in `@adericel/autonomy` because that package is the
+ * engine and this is one company's answer. An engine shipping a policy named
+ * after a particular company is an engine that has quietly stopped being
+ * general — and the whole point of separating them is that a customer running
+ * Adericel on their own infrastructure gets the mechanism without inheriting
+ * Veylith's commercial judgement.
  *
  * Written as the answer to one question, asked of every operation: what is the
  * worst thing that happens if this runs unattended and is wrong?

@@ -1,460 +1,161 @@
 import { describe, expect, it } from 'vitest';
-import {
-  compileAutonomyPolicy,
-  evaluateAutonomy,
-  operationMatches,
-  type AutonomyQuestion,
-} from './policy.js';
-import { DEFAULT_COMPANY_POLICY } from './default-policy.js';
+import { compileAutonomyPolicy, evaluateAutonomy, operationMatches } from './policy.js';
 import {
   AUTONOMY_OUTCOMES,
   mayProceedUnattended,
   mostRestrictive,
   requiresHuman,
-  type AutonomyOutcome,
 } from './decision.js';
 
 /**
- * The company's authority model, attacked.
+ * The engine, tested without any particular company's policy.
  *
- * These tests are written from the position of someone trying to make the
- * autonomous layer do something nobody authorised. Most of them assert that
- * something does NOT happen, which is the only useful shape of test for an
- * authority boundary: a boundary that has only ever been tested by well-formed
- * requests has not been tested.
+ * These are the mechanics: what the outcomes mean, how results combine, how
+ * patterns match. Veylith's own policy is tested where it lives, in
+ * `@adericel/vaol` — a general engine whose test suite depends on one company's
+ * rules is a general engine only by accident.
  */
 
-const policy = compileAutonomyPolicy(DEFAULT_COMPANY_POLICY);
+const minimal = compileAutonomyPolicy({
+  key: 'test.engine',
+  name: 'Engine mechanics',
+  fallback: 'UNKNOWN',
+  rules: [
+    {
+      id: 'permit-internal',
+      operations: ['thing.*'],
+      riskClasses: ['INTERNAL'],
+      maxUnattendedRisk: 'INTERNAL',
+      minMaturity: 2,
+      outcome: 'PERMIT',
+      requiresFacts: ['ready'],
+    },
+  ],
+});
 
-function ask(over: Partial<AutonomyQuestion> = {}): AutonomyQuestion {
-  return {
-    processKey: 'market.prospect_discovery',
-    operation: 'market.prospect_discovery.enrich',
-    riskClass: 'INTERNAL',
-    processMaturity: 3,
-    recentOperations: 0,
-    utcHour: 10,
-    facts: {},
-    ...over,
-  };
-}
+const ask = (over: Record<string, unknown> = {}) => ({
+  processKey: 'thing',
+  operation: 'thing.do',
+  riskClass: 'INTERNAL' as const,
+  processMaturity: 3,
+  recentOperations: 0,
+  utcHour: 12,
+  facts: { ready: true },
+  ...over,
+});
 
-describe('UNKNOWN never becomes permission', () => {
-  it('is one of the outcomes at all, unlike the action policy', () => {
-    expect(AUTONOMY_OUTCOMES).toContain('UNKNOWN');
-  });
-
-  it('does not permit unattended action', () => {
-    expect(mayProceedUnattended('UNKNOWN')).toBe(false);
-  });
-
-  it('requires a human', () => {
-    expect(requiresHuman('UNKNOWN')).toBe(true);
-  });
-
-  it('is the only outcome besides PERMIT that could be mistaken for one', () => {
-    // Exhaustive, so a new outcome added later cannot quietly default to
+describe('outcome semantics', () => {
+  it('permits unattended action for exactly one outcome', () => {
+    // Exhaustive, so an outcome added later cannot quietly default to
     // permitting.
-    const permitting = AUTONOMY_OUTCOMES.filter(mayProceedUnattended);
-    expect(permitting).toEqual(['PERMIT']);
+    expect(AUTONOMY_OUTCOMES.filter(mayProceedUnattended)).toEqual(['PERMIT']);
   });
 
-  it('beats REQUIRE_APPROVAL and ESCALATE when results combine', () => {
-    // Not knowing is more restrictive than knowing a person is needed: we do
-    // not even know which person, or whether it should happen at all.
-    expect(mostRestrictive(['PERMIT', 'UNKNOWN'])).toBe('UNKNOWN');
-    expect(mostRestrictive(['REQUIRE_APPROVAL', 'UNKNOWN'])).toBe('UNKNOWN');
+  it('needs a human for everything that is not a permit or a refusal', () => {
+    expect(AUTONOMY_OUTCOMES.filter(requiresHuman).sort()).toEqual([
+      'ESCALATE',
+      'REQUIRE_APPROVAL',
+      'UNKNOWN',
+    ]);
+  });
+
+  it('combines results to the most restrictive', () => {
+    expect(mostRestrictive(['PERMIT', 'REQUIRE_APPROVAL'])).toBe('REQUIRE_APPROVAL');
+    expect(mostRestrictive(['REQUIRE_APPROVAL', 'ESCALATE'])).toBe('ESCALATE');
     expect(mostRestrictive(['ESCALATE', 'UNKNOWN'])).toBe('UNKNOWN');
-    // DENY is still stronger: an explicit refusal is a decision.
     expect(mostRestrictive(['UNKNOWN', 'DENY'])).toBe('DENY');
   });
 
-  it('is what an empty set of results means', () => {
+  it('treats an empty set of results as UNKNOWN', () => {
     // "Nothing objected" is not "everything agreed".
     expect(mostRestrictive([])).toBe('UNKNOWN');
   });
 });
 
-describe('an operation nobody wrote a rule for', () => {
-  it('is not permitted by omission', () => {
-    const decision = evaluateAutonomy(policy, ask({ operation: 'something.nobody.anticipated' }));
-    expect(decision.outcome).toBe('UNKNOWN');
-    expect(mayProceedUnattended(decision.outcome)).toBe(false);
-    expect(decision.reason).toContain('not thereby permitted');
-  });
-
-  it('cannot be permitted by configuring a permissive fallback', () => {
-    // The schema does not admit PERMIT as a fallback, so a policy that
-    // auto-allows the unanticipated is not expressible.
-    expect(() =>
-      compileAutonomyPolicy({ ...DEFAULT_COMPANY_POLICY, fallback: 'PERMIT' }),
-    ).toThrow();
-  });
-});
-
-describe('an unregistered process', () => {
-  it('yields UNKNOWN rather than being treated as manual', () => {
-    // Treating "not registered" as maturity 0 would let it inherit whatever a
-    // permissive rule allows at low maturity. It is not a low-autonomy
-    // process; it is one nobody has thought about.
-    const decision = evaluateAutonomy(policy, ask({ processMaturity: null }));
-    expect(decision.outcome).toBe('UNKNOWN');
-    expect(decision.requiredAuthority).toContain('Register the process');
-  });
-
-  it('is not rescued by an otherwise permitting rule', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'market.prospect_discovery',
-        operation: 'market.prospect_discovery.enrich',
-        riskClass: 'INTERNAL',
-        processMaturity: null,
-      }),
-    );
-    expect(decision.outcome).toBe('UNKNOWN');
-  });
-});
-
-describe('facts that were never established', () => {
-  it('block permission rather than being read as false', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        facts: {},
-      }),
-    );
-    expect(decision.outcome).toBe('UNKNOWN');
-    expect(decision.evaluation.some((c) => c.detail.includes('Not established is not false'))).toBe(
-      true,
-    );
-  });
-
-  it('are distinguished from facts that are established and false', () => {
-    // A false fact is a decision — DENY. An absent one is not.
-    const denied = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        facts: { lawful_basis_recorded: false, not_suppressed: true, content_approved: true },
-      }),
-    );
-    expect(denied.outcome).toBe('DENY');
-  });
-
-  it('permit only when every required fact holds', () => {
-    const permitted = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        facts: { lawful_basis_recorded: true, not_suppressed: true, content_approved: true },
-      }),
-    );
-    expect(permitted.outcome).toBe('PERMIT');
-  });
-
-  it('cannot be satisfied by a differently named fact', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        facts: { consent: true, lawfulBasisRecorded: true, approved: true },
-      }),
-    );
-    expect(decision.outcome).toBe('UNKNOWN');
-  });
-});
-
-describe('money', () => {
-  it('is refused outright, at every maturity', () => {
-    for (const maturity of [0, 1, 2, 3, 4, 5]) {
-      const decision = evaluateAutonomy(
-        policy,
-        ask({
-          processKey: 'finance.payments',
-          operation: 'finance.payments.send',
-          riskClass: 'FINANCIAL',
-          processMaturity: maturity,
-          facts: {},
-        }),
-      );
-      expect(decision.outcome, `maturity L${maturity}`).toBe('DENY');
-    }
-  });
-
-  it('is still refused when every fact is asserted true', () => {
-    // Supplying facts must not be a route around a DENY.
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'finance.payments',
-        operation: 'finance.payments.send',
-        riskClass: 'FINANCIAL',
-        facts: {
-          approved: true,
-          authorised: true,
-          subscription_active: true,
-          amount_matches_agreement: true,
-        },
-      }),
-    );
-    expect(decision.outcome).toBe('DENY');
-  });
-
-  it('refuses even when a permitting rule also matches', () => {
-    // `billing.routine` permits invoicing. It must not extend to moving money,
-    // and the most-restrictive combination is what guarantees that.
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'finance.payments',
-        operation: 'finance.payments.settle_invoice',
-        riskClass: 'FINANCIAL',
-        facts: { subscription_active: true, amount_matches_agreement: true },
-      }),
-    );
-    expect(decision.outcome).toBe('DENY');
-  });
-});
-
-describe('legal position', () => {
-  it('cannot be taken autonomously', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'legal.contract',
-        operation: 'legal.contract.accept_terms',
-        riskClass: 'CONTRACTUAL',
-        facts: { template_is_approved_standard: true, no_terms_varied: true },
-      }),
-    );
-    expect(decision.outcome).toBe('DENY');
-  });
-
-  it('still permits the administrative half', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'legal.contract',
-        operation: 'legal.contract.generate',
-        riskClass: 'INTERNAL',
-        facts: { template_is_approved_standard: true, no_terms_varied: true },
-      }),
-    );
-    expect(decision.outcome).toBe('PERMIT');
-  });
-
-  it('refuses generation the moment terms are varied', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'legal.contract',
-        operation: 'legal.contract.generate',
-        riskClass: 'INTERNAL',
-        facts: { template_is_approved_standard: true, no_terms_varied: false },
-      }),
-    );
-    expect(decision.outcome).toBe('DENY');
-  });
-});
-
-describe('the irreversible backstop', () => {
-  it('catches an irreversible operation whatever else permits it', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'market.prospect_discovery',
-        operation: 'market.prospect_discovery.enrich',
-        riskClass: 'IRREVERSIBLE',
-        processMaturity: 5,
-      }),
-    );
-    expect(mayProceedUnattended(decision.outcome)).toBe(false);
-  });
-
-  it('cannot be overridden by adding a permitting rule', () => {
-    // Rules combine to the most restrictive result, so a new rule can narrow
-    // authority and never widen it. This is the property that lets the policy
-    // be extended without re-auditing everything already in it.
-    const widened = compileAutonomyPolicy({
-      ...DEFAULT_COMPANY_POLICY,
-      rules: [
-        ...DEFAULT_COMPANY_POLICY.rules,
-        {
-          id: 'attacker.permit-everything',
-          description: 'A rule added in an attempt to widen authority.',
-          operations: ['*'],
-          riskClasses: [],
-          maxUnattendedRisk: 'IRREVERSIBLE',
-          minMaturity: 0,
-          outcome: 'PERMIT',
-          requiredApprovals: 0,
-          requiredAuthority: '',
-          rateLimitPerHour: null,
-          allowedUtcHours: [],
-          requiresFacts: [],
-        },
-      ],
-    });
-
-    for (const operation of [
-      'finance.payments.send',
-      'legal.contract.accept_terms',
-      'strategy.direction.set',
-      'engineering.deployment.production',
-    ]) {
-      const decision = evaluateAutonomy(
-        widened,
-        ask({ operation, riskClass: 'IRREVERSIBLE', processMaturity: 5 }),
-      );
-      expect(mayProceedUnattended(decision.outcome), operation).toBe(false);
-    }
-  });
-});
-
-describe('risk ceilings and maturity', () => {
-  it('does not let a rule permit beyond its own risk ceiling', () => {
-    // `internal.record-keeping` permits `market.*` — but only at INTERNAL risk.
-    const decision = evaluateAutonomy(
-      policy,
-      ask({ operation: 'market.prospect_discovery.publish', riskClass: 'OUTWARD_FACING' }),
-    );
-    expect(decision.outcome).not.toBe('PERMIT');
-  });
-
-  it('will not run unattended below the maturity the rule requires', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        processMaturity: 1,
-        facts: { lawful_basis_recorded: true, not_suppressed: true, content_approved: true },
-      }),
-    );
-    expect(decision.outcome).toBe('REQUIRE_APPROVAL');
-  });
-});
-
-describe('rate limits', () => {
-  it('escalate rather than ask for approval', () => {
-    // Hitting a cap usually means something is malfunctioning. Asking a person
-    // to rubber-stamp the four thousandth email is the wrong question.
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        recentOperations: 120,
-        facts: { lawful_basis_recorded: true, not_suppressed: true, content_approved: true },
-      }),
-    );
-    expect(decision.outcome).toBe('ESCALATE');
-    expect(decision.reason).toContain('something is wrong');
-  });
-
-  it('applies at the cap, not one past it', () => {
-    const atCap = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        recentOperations: 119,
-        facts: { lawful_basis_recorded: true, not_suppressed: true, content_approved: true },
-      }),
-    );
-    expect(atCap.outcome).toBe('PERMIT');
-  });
-});
-
-describe('determinism', () => {
-  it('produces the same decision for the same question', () => {
-    const question = ask({
-      processKey: 'sales.outreach',
-      operation: 'sales.outreach.send_email',
-      riskClass: 'OUTWARD_FACING',
-      facts: { lawful_basis_recorded: true, not_suppressed: true, content_approved: true },
-    });
-    expect(evaluateAutonomy(policy, question)).toEqual(evaluateAutonomy(policy, question));
-  });
-
-  it('records every check, so a decision can be shown rather than asserted', () => {
-    const decision = evaluateAutonomy(
-      policy,
-      ask({
-        processKey: 'sales.outreach',
-        operation: 'sales.outreach.send_email',
-        riskClass: 'OUTWARD_FACING',
-        facts: { lawful_basis_recorded: true, not_suppressed: false, content_approved: true },
-      }),
-    );
-    expect(decision.evaluation.length).toBeGreaterThan(1);
-    expect(decision.evaluation.every((c) => c.detail.length > 0)).toBe(true);
-  });
-
-  it('hashes the policy so a decision names the rules it ran under', () => {
-    expect(policy.hash).toMatch(/^sha256:/);
-    const same = compileAutonomyPolicy(DEFAULT_COMPANY_POLICY);
-    expect(same.hash).toBe(policy.hash);
-    const changed = compileAutonomyPolicy({ ...DEFAULT_COMPANY_POLICY, fallback: 'DENY' });
-    expect(changed.hash).not.toBe(policy.hash);
-  });
-});
-
 describe('pattern matching', () => {
-  it('matches a namespace prefix but not a sibling with a shared prefix', () => {
-    expect(operationMatches('sales.*', 'sales.outreach.send')).toBe(true);
-    expect(operationMatches('sales.*', 'sales')).toBe(false);
-    // The trap: `finance.*` must not match `financeadmin.something`.
+  it('matches a namespace prefix', () => {
+    expect(operationMatches('a.*', 'a.b.c')).toBe(true);
+    expect(operationMatches('*', 'anything')).toBe(true);
+  });
+
+  it('does not match a sibling that merely shares a prefix', () => {
+    // The trap this exists to avoid: `finance.*` matching `financeadmin.pay`.
     expect(operationMatches('finance.*', 'financeadmin.transfer')).toBe(false);
+    expect(operationMatches('a.*', 'a')).toBe(false);
   });
 
   it('treats an exact pattern as exact', () => {
-    expect(operationMatches('legal.contract.generate', 'legal.contract.generate')).toBe(true);
-    expect(operationMatches('legal.contract.generate', 'legal.contract.generate_and_sign')).toBe(
-      false,
-    );
+    expect(operationMatches('a.b', 'a.b')).toBe(true);
+    expect(operationMatches('a.b', 'a.bc')).toBe(false);
   });
 });
 
-describe('the policy is well formed', () => {
+describe('compilation', () => {
   it('refuses duplicate rule ids', () => {
+    const rule = {
+      id: 'same',
+      operations: ['x.*'],
+      outcome: 'DENY' as const,
+    };
     expect(() =>
-      compileAutonomyPolicy({
-        ...DEFAULT_COMPANY_POLICY,
-        rules: [DEFAULT_COMPANY_POLICY.rules[0]!, DEFAULT_COMPANY_POLICY.rules[0]!],
-      }),
+      compileAutonomyPolicy({ key: 'k', name: 'n', rules: [rule, rule] }),
     ).toThrow(/Duplicate/);
   });
 
-  it('never permits any strategy operation', () => {
-    for (const operation of ['strategy.direction.set', 'strategy.pricing.change']) {
-      const decision = evaluateAutonomy(policy, ask({ operation, processMaturity: 5 }));
-      expect(decision.outcome, operation).toBe('DENY');
-    }
+  it('will not accept a fallback that permits', () => {
+    // A policy whose unanticipated case is automatically allowed is the exact
+    // failure this design exists to prevent, so it is not expressible.
+    expect(() =>
+      compileAutonomyPolicy({ key: 'k', name: 'n', fallback: 'PERMIT', rules: [] }),
+    ).toThrow();
   });
 
-  it('permits nothing outward-facing without an established lawful basis', () => {
-    const outward: AutonomyOutcome[] = [];
-    for (const operation of [
-      'sales.outreach.send_email',
-      'marketing.publish_post',
-      'customer_ops.reporting.send',
-    ]) {
-      outward.push(evaluateAutonomy(policy, ask({ operation, riskClass: 'OUTWARD_FACING' })).outcome);
-    }
-    expect(outward.some(mayProceedUnattended)).toBe(false);
+  it('hashes over meaning, not formatting', () => {
+    const a = compileAutonomyPolicy({ key: 'k', name: 'n', rules: [] });
+    const b = compileAutonomyPolicy({ key: 'k', name: 'n', description: '', rules: [] });
+    expect(a.hash).toBe(b.hash);
+    const c = compileAutonomyPolicy({ key: 'k', name: 'n', fallback: 'DENY', rules: [] });
+    expect(c.hash).not.toBe(a.hash);
+  });
+});
+
+describe('evaluation', () => {
+  it('permits when every condition holds', () => {
+    expect(evaluateAutonomy(minimal, ask()).outcome).toBe('PERMIT');
+  });
+
+  it('is UNKNOWN when the process is not registered', () => {
+    expect(evaluateAutonomy(minimal, ask({ processMaturity: null })).outcome).toBe('UNKNOWN');
+  });
+
+  it('is UNKNOWN when no rule covers the operation', () => {
+    expect(evaluateAutonomy(minimal, ask({ operation: 'other.do' })).outcome).toBe('UNKNOWN');
+  });
+
+  it('distinguishes an absent fact from a false one', () => {
+    // The distinction the whole model rests on.
+    expect(evaluateAutonomy(minimal, ask({ facts: {} })).outcome).toBe('UNKNOWN');
+    expect(evaluateAutonomy(minimal, ask({ facts: { ready: false } })).outcome).toBe('DENY');
+  });
+
+  it('will not permit above the rule’s own risk ceiling', () => {
+    expect(
+      mayProceedUnattended(evaluateAutonomy(minimal, ask({ riskClass: 'IRREVERSIBLE' })).outcome),
+    ).toBe(false);
+  });
+
+  it('will not permit below the rule’s maturity requirement', () => {
+    expect(evaluateAutonomy(minimal, ask({ processMaturity: 1 })).outcome).toBe('REQUIRE_APPROVAL');
+  });
+
+  it('is deterministic', () => {
+    const question = ask();
+    expect(evaluateAutonomy(minimal, question)).toEqual(evaluateAutonomy(minimal, question));
+  });
+
+  it('records every check, so a decision can be shown rather than asserted', () => {
+    const decision = evaluateAutonomy(minimal, ask({ facts: {} }));
+    expect(decision.evaluation.length).toBeGreaterThan(0);
+    expect(decision.evaluation.every((check) => check.detail.length > 0)).toBe(true);
   });
 });

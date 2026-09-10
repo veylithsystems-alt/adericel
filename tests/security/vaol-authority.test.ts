@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { compileAutonomyPolicy, DEFAULT_COMPANY_POLICY } from '@adericel/autonomy';
+import { compileAutonomyPolicy } from '@adericel/autonomy';
 import {
   createBusinessEventLedger,
   createExceptionQueue,
@@ -8,6 +8,7 @@ import {
   findUnboundEvents,
   loadActivePolicy,
   operationDigest,
+  DEFAULT_COMPANY_POLICY,
 } from '@adericel/vaol';
 import { nullLogger } from '@adericel/shared';
 import {

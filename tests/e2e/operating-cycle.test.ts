@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { compileAutonomyPolicy, DEFAULT_COMPANY_POLICY } from '@adericel/autonomy';
+import { compileAutonomyPolicy } from '@adericel/autonomy';
 import {
   createExceptionQueue,
   createMetricsService,
@@ -8,6 +8,7 @@ import {
   qualifyProspect,
   QUALIFICATION_THRESHOLD,
   type PipelineService,
+  DEFAULT_COMPANY_POLICY,
 } from '@adericel/vaol';
 import { nullLogger } from '@adericel/shared';
 import { createHarness, databaseAvailable, type Harness } from '../helpers/harness.js';

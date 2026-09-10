@@ -2,7 +2,6 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   compileAutonomyPolicy,
-  DEFAULT_COMPANY_POLICY,
   type OperationRiskClass,
 } from '@adericel/autonomy';
 import {
@@ -10,6 +9,7 @@ import {
   createExceptionQueue,
   createMetricsService,
   createOperator,
+  DEFAULT_COMPANY_POLICY,
 } from '@adericel/vaol';
 import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
