@@ -36,6 +36,7 @@ implications.
 | [0023](./ADR-0023-recorded-assessment-inputs.md)             | Assessments record the facts they ran on              | Accepted |
 | [0024](./ADR-0024-approval-binds-to-the-request.md)          | An approval authorises one specific request           | Accepted |
 | [0025](./ADR-0025-self-serve-onboarding.md)                  | Self-serve onboarding, honest on the first screen     | Accepted |
+| [0026](./ADR-0026-assurance-passport.md)                     | The Assurance Passport                                | Accepted |
 
 ## Writing a new ADR
 
