@@ -233,7 +233,10 @@ describe.skipIf(!available)('the control room', () => {
 
   it('does not leak company data into a customer organisation response', async () => {
     // A blunt check that the two worlds have not been wired together anywhere.
-    const response = await get(`/v1/organisations/${tenant.organisationId}/assurance`, customerToken);
+    const response = await get(
+      `/v1/organisations/${tenant.organisationId}/assurance`,
+      customerToken,
+    );
     expect(response.statusCode).toBe(200);
     expect(response.body).not.toContain('veylith');
     expect(response.body).not.toContain('finance.payments');

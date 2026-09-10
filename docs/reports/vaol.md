@@ -125,15 +125,15 @@ boundary and target maturity.
 
 ## AUTONOMY LIMITATIONS — where humans remain necessary, and why
 
-| Boundary | Why it is not a gap to close |
-| --- | --- |
-| Banking authority | No autonomous system should hold it. The rule is written to be unremovable, and a test asserts it holds at every maturity, with every fact asserted true, even when a permitting rule also matches. |
-| Accepting contractual liability | Legal judgement. The system prepares and routes. |
-| Strategy | The company decides what it does. |
-| First-contact wording | Reputational. Approved once per template, not per send. |
-| Security containment | ESCALATE, not approval — the right response is a person taking charge, not a rubber stamp on a decision they have not understood. |
-| Production deployment | Approval, always. |
-| Suspending a paying customer | Disproportionate to the most common billing event there is. |
+| Boundary                        | Why it is not a gap to close                                                                                                                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Banking authority               | No autonomous system should hold it. The rule is written to be unremovable, and a test asserts it holds at every maturity, with every fact asserted true, even when a permitting rule also matches. |
+| Accepting contractual liability | Legal judgement. The system prepares and routes.                                                                                                                                                    |
+| Strategy                        | The company decides what it does.                                                                                                                                                                   |
+| First-contact wording           | Reputational. Approved once per template, not per send.                                                                                                                                             |
+| Security containment            | ESCALATE, not approval — the right response is a person taking charge, not a rubber stamp on a decision they have not understood.                                                                   |
+| Production deployment           | Approval, always.                                                                                                                                                                                   |
+| Suspending a paying customer    | Disproportionate to the most common billing event there is.                                                                                                                                         |
 
 ## COMMERCIAL LIMITATIONS — what cannot yet be claimed
 
@@ -169,29 +169,29 @@ Current maturity is **L0 for every process** because nothing is running in
 production. This is measured, not assumed: the registry is seeded at zero and
 only the acceptance test raises anything.
 
-| Process | Current | Target | Boundary | Intervention rate | Known failure modes | Next step |
-| --- | --- | --- | --- | --- | --- | --- |
-| market.prospect_discovery | L0 (L3 in test) | L4 | Which markets to enter | 0% in test | No data source; enrichment is supplied | Integrate a company data source |
-| sales.qualification | L0 (L3 in test) | L4 | Strategic accounts | 0% in test | Refuses incomplete records — correct, but nothing fills them | Automate enrichment first |
-| sales.outreach | L0 (L3 in test) | L3 | First-contact wording | 0% in test | No sender; no bounce or reply handling | Integrate an email provider |
-| sales.proposal | L0 | L3 | Pricing and commitments | — | Not implemented | Templates and an approval route |
-| legal.contract | L0 | L2 | All legal judgement | — | Prepare only, by design | Signature integration |
-| onboarding.tenant | L0 | L5 | Exceptions only | — | Adericel's own signup does this; not driven through VAOL | Route signup through the gate |
-| onboarding.integrations | L0 | L4 | Customer consent | — | Not implemented | Microsoft consent flow |
-| customer_ops.health | L0 | L5 | Exceptions only | — | Not implemented | Consume integration health |
-| customer_ops.reporting | L0 | L4 | Unsupported claims | — | Not implemented | Passport already exists |
-| support.triage | L0 | L5 | Exceptions only | — | Not implemented | Needs an inbound channel |
-| support.resolution | L0 | L4 | Customer environments | — | Not implemented | — |
-| billing.subscription | L0 | L4 | Disputes and refunds | — | Adericel bills; not through the gate | Route billing through the gate |
-| billing.dunning | L0 | L4 | Suspension, write-off | — | Grace period exists in Adericel | Wire to the gate |
-| finance.payments | L0 | **L0** | All of it | — | **Refused by design** | None. Ever. |
-| security.monitoring | L0 | L4 | Critical events | — | Not implemented | Adericel can assess Veylith |
-| security.response | L0 | L3 | Containment | — | ESCALATE only, by design | Define escalation contacts |
-| engineering.ci | L0 | L5 | Exceptions only | — | Not implemented | — |
-| engineering.dependencies | L0 | L4 | Authority-path changes | — | Not implemented | — |
-| engineering.deployment | L0 | L2 | All deployment authority | — | Approval only, by design | — |
-| product.feedback | L0 | L4 | Prioritisation | — | Not implemented | — |
-| strategy.direction | L0 | **L1** | All of it | — | **Refused by design** | None. |
+| Process                   | Current         | Target | Boundary                 | Intervention rate | Known failure modes                                          | Next step                       |
+| ------------------------- | --------------- | ------ | ------------------------ | ----------------- | ------------------------------------------------------------ | ------------------------------- |
+| market.prospect_discovery | L0 (L3 in test) | L4     | Which markets to enter   | 0% in test        | No data source; enrichment is supplied                       | Integrate a company data source |
+| sales.qualification       | L0 (L3 in test) | L4     | Strategic accounts       | 0% in test        | Refuses incomplete records — correct, but nothing fills them | Automate enrichment first       |
+| sales.outreach            | L0 (L3 in test) | L3     | First-contact wording    | 0% in test        | No sender; no bounce or reply handling                       | Integrate an email provider     |
+| sales.proposal            | L0              | L3     | Pricing and commitments  | —                 | Not implemented                                              | Templates and an approval route |
+| legal.contract            | L0              | L2     | All legal judgement      | —                 | Prepare only, by design                                      | Signature integration           |
+| onboarding.tenant         | L0              | L5     | Exceptions only          | —                 | Adericel's own signup does this; not driven through VAOL     | Route signup through the gate   |
+| onboarding.integrations   | L0              | L4     | Customer consent         | —                 | Not implemented                                              | Microsoft consent flow          |
+| customer_ops.health       | L0              | L5     | Exceptions only          | —                 | Not implemented                                              | Consume integration health      |
+| customer_ops.reporting    | L0              | L4     | Unsupported claims       | —                 | Not implemented                                              | Passport already exists         |
+| support.triage            | L0              | L5     | Exceptions only          | —                 | Not implemented                                              | Needs an inbound channel        |
+| support.resolution        | L0              | L4     | Customer environments    | —                 | Not implemented                                              | —                               |
+| billing.subscription      | L0              | L4     | Disputes and refunds     | —                 | Adericel bills; not through the gate                         | Route billing through the gate  |
+| billing.dunning           | L0              | L4     | Suspension, write-off    | —                 | Grace period exists in Adericel                              | Wire to the gate                |
+| finance.payments          | L0              | **L0** | All of it                | —                 | **Refused by design**                                        | None. Ever.                     |
+| security.monitoring       | L0              | L4     | Critical events          | —                 | Not implemented                                              | Adericel can assess Veylith     |
+| security.response         | L0              | L3     | Containment              | —                 | ESCALATE only, by design                                     | Define escalation contacts      |
+| engineering.ci            | L0              | L5     | Exceptions only          | —                 | Not implemented                                              | —                               |
+| engineering.dependencies  | L0              | L4     | Authority-path changes   | —                 | Not implemented                                              | —                               |
+| engineering.deployment    | L0              | L2     | All deployment authority | —                 | Approval only, by design                                     | —                               |
+| product.feedback          | L0              | L4     | Prioritisation           | —                 | Not implemented                                              | —                               |
+| strategy.direction        | L0              | **L1** | All of it                | —                 | **Refused by design**                                        | None.                           |
 
 Two processes have a target at or below their current level on purpose.
 `finance.payments` and `strategy.direction` are marked as not automation
@@ -200,37 +200,37 @@ outright.
 
 ## DEFINITION OF DONE — against the brief's twenty criteria
 
-| # | Criterion | State |
-| --- | --- | --- |
-| 1 | Operating model explicitly represented | Yes — 21 processes, as data |
-| 2 | Autonomous workflows for routine processes | **Partial** — the pipeline only |
-| 3 | Human authority enforced technically | Yes, and adversarially tested |
-| 4 | Exceptions surfaced automatically | Yes |
-| 5 | Material actions auditable | Yes |
-| 6 | Automation idempotent | Yes, claim-before-effect |
-| 7 | Failure recovery exists | **Partial** — detection and escalation; no automatic recovery |
-| 8 | Security boundaries tested | Yes |
-| 9 | Adericel's invariants intact | Yes — 779 tests, none changed in meaning |
-| 10 | n8n remains orchestration | Yes — untouched, and VAOL does not depend on it |
-| 11 | AI cannot bypass deterministic authority | **Untested** — no AI is wired in |
-| 12 | Control room exposes company state | Yes |
-| 13 | Human intervention measurable | Yes |
-| 14 | Automation effectiveness measurable | Yes |
-| 15 | Manual processes identified | Yes — the scorecard above |
-| 16 | Repository builds and tests | Yes |
-| 17 | Existing tests still pass | Yes |
-| 18 | New security tests pass | Yes |
-| 19 | End-to-end autonomous workflows demonstrated | Yes — the acceptance test |
-| 20 | Claims backed by tests or labelled unimplemented | Yes — that is this document |
+| #   | Criterion                                        | State                                                         |
+| --- | ------------------------------------------------ | ------------------------------------------------------------- |
+| 1   | Operating model explicitly represented           | Yes — 21 processes, as data                                   |
+| 2   | Autonomous workflows for routine processes       | **Partial** — the pipeline only                               |
+| 3   | Human authority enforced technically             | Yes, and adversarially tested                                 |
+| 4   | Exceptions surfaced automatically                | Yes                                                           |
+| 5   | Material actions auditable                       | Yes                                                           |
+| 6   | Automation idempotent                            | Yes, claim-before-effect                                      |
+| 7   | Failure recovery exists                          | **Partial** — detection and escalation; no automatic recovery |
+| 8   | Security boundaries tested                       | Yes                                                           |
+| 9   | Adericel's invariants intact                     | Yes — 779 tests, none changed in meaning                      |
+| 10  | n8n remains orchestration                        | Yes — untouched, and VAOL does not depend on it               |
+| 11  | AI cannot bypass deterministic authority         | **Untested** — no AI is wired in                              |
+| 12  | Control room exposes company state               | Yes                                                           |
+| 13  | Human intervention measurable                    | Yes                                                           |
+| 14  | Automation effectiveness measurable              | Yes                                                           |
+| 15  | Manual processes identified                      | Yes — the scorecard above                                     |
+| 16  | Repository builds and tests                      | Yes                                                           |
+| 17  | Existing tests still pass                        | Yes                                                           |
+| 18  | New security tests pass                          | Yes                                                           |
+| 19  | End-to-end autonomous workflows demonstrated     | Yes — the acceptance test                                     |
+| 20  | Claims backed by tests or labelled unimplemented | Yes — that is this document                                   |
 
 ## GAP REGISTER — every remaining manual dependency
 
 1. Finding prospects. 2. Researching them. 3. Writing outreach content.
-4. Approving it. 5. Replying to responses. 6. Running discovery calls.
-7. Demonstrations. 8. Pricing. 9. Contracts and signature. 10. Connecting a
-customer's Microsoft tenant. 11. Everything in support. 12. Invoicing decisions.
-13. All payments. 14. Veylith's own security monitoring. 15. All deployment.
-16. Product prioritisation. 17. Strategy.
+2. Approving it. 5. Replying to responses. 6. Running discovery calls.
+3. Demonstrations. 8. Pricing. 9. Contracts and signature. 10. Connecting a
+   customer's Microsoft tenant. 11. Everything in support. 12. Invoicing decisions.
+4. All payments. 14. Veylith's own security monitoring. 15. All deployment.
+5. Product prioritisation. 17. Strategy.
 
 Items 13, 15 and 17 are intended to stay manual. The rest are the backlog.
 

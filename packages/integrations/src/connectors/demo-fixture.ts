@@ -351,7 +351,10 @@ export function demoFixtureManifestFor(config: {
   }
 
   const collect = [...byKind.entries()]
-    .map(([kind, keys]) => ({ kind, predicates: predicatesForPayloadKeys(kind as never, [...keys]) }))
+    .map(([kind, keys]) => ({
+      kind,
+      predicates: predicatesForPayloadKeys(kind as never, [...keys]),
+    }))
     .filter((entry) => entry.predicates.length > 0)
     .map((entry) => ({
       key: `collect.fixture_${entry.kind.toLowerCase()}`,

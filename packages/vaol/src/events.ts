@@ -121,7 +121,10 @@ export interface BusinessEventLedger {
     input: BusinessEventInput,
     options?: { policyDecisionId?: string | null; operationDigest?: string },
   ): Promise<BusinessEventRecord>;
-  recent(options?: { limit?: number; eventTypes?: readonly BusinessEventType[] }): Promise<readonly BusinessEventRecord[]>;
+  recent(options?: {
+    limit?: number;
+    eventTypes?: readonly BusinessEventType[];
+  }): Promise<readonly BusinessEventRecord[]>;
   forSubject(subjectKind: string, subjectId: string): Promise<readonly BusinessEventRecord[]>;
 }
 
@@ -168,10 +171,7 @@ function toRecord(row: EventRow, recorded: boolean): BusinessEventRecord {
   };
 }
 
-export function createBusinessEventLedger(
-  ctx: PlatformContext,
-  clock: Clock,
-): BusinessEventLedger {
+export function createBusinessEventLedger(ctx: PlatformContext, clock: Clock): BusinessEventLedger {
   return {
     async record(rawInput, options = {}): Promise<BusinessEventRecord> {
       const input = businessEventSchema.parse(rawInput);

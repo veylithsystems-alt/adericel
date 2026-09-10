@@ -107,7 +107,11 @@ describe('Microsoft Entra', () => {
       ],
       [
         /userRegistrationDetails/,
-        { value: [{ id: 'u1', isMfaRegistered: true, methodsRegistered: ['microsoftAuthenticator'] }] },
+        {
+          value: [
+            { id: 'u1', isMfaRegistered: true, methodsRegistered: ['microsoftAuthenticator'] },
+          ],
+        },
       ],
       [/directoryRoles\/[^/]+\/members/, { value: [{ id: 'u1' }] }],
       [/directoryRoles/, { value: [{ id: 'r1', displayName: 'Global Administrator' }] }],

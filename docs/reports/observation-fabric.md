@@ -40,17 +40,17 @@ unchanged:
 
 The gaps were about **reasoning**, not plumbing:
 
-| Missing | Consequence |
-| --- | --- |
-| Machine-readable manifest | Connector metadata readable by TypeScript and nothing else |
-| Collect-capability model | `capabilities` meant executable actions only; collection was unrepresented |
-| Predicate → source resolution | Could not answer "what can this customer's integrations tell us?" |
-| Source conflict representation | **A second source silently superseded the first** |
-| Per-capability outcomes | "Degraded" — accurate, useless |
-| Schema drift detection | A vendor moving a field looks identical to a customer having no data |
-| Collection planning | Every integration ran everything, every time |
-| LIVE/DEMONSTRATION distinction | Not surfaced anywhere |
-| Conformance suite | Adapter uniformity was an aspiration, not a fact |
+| Missing                        | Consequence                                                                |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| Machine-readable manifest      | Connector metadata readable by TypeScript and nothing else                 |
+| Collect-capability model       | `capabilities` meant executable actions only; collection was unrepresented |
+| Predicate → source resolution  | Could not answer "what can this customer's integrations tell us?"          |
+| Source conflict representation | **A second source silently superseded the first**                          |
+| Per-capability outcomes        | "Degraded" — accurate, useless                                             |
+| Schema drift detection         | A vendor moving a field looks identical to a customer having no data       |
+| Collection planning            | Every integration ran everything, every time                               |
+| LIVE/DEMONSTRATION distinction | Not surfaced anywhere                                                      |
+| Conformance suite              | Adapter uniformity was an aspiration, not a fact                           |
 
 ## C. What was built
 
@@ -58,7 +58,7 @@ The gaps were about **reasoning**, not plumbing:
 predicates each collection capability supplies, what permission it needs, what
 it produces and whether it talks to a real system. `predicates` is the
 load-bearing field: it is how a required predicate resolves to a connector, how
-a plan is built, and how *cannot be assessed* is told apart from *failed*.
+a plan is built, and how _cannot be assessed_ is told apart from _failed_.
 
 **Canonical predicates as the only vocabulary.** `identity.mfa.enforced`, never
 `entra_strongAuthenticationRequirements`. Vendor language stops at the adapter.
@@ -101,13 +101,13 @@ declares a predicate it does not actually produce.
 
 Not asserted — run.
 
-| | |
-| --- | --- |
-| Tests | **691 passing, 6 skipped** (was 516 at the start of this work) |
-| New suites | conformance (105), manifest honesty (5), fabric units (30), verification (10), source conflict (13), observation coverage (13) |
-| Build | `tsc -b` clean across 12 packages |
-| Migration | 0017 applied to a database at 0016 and to a virgin one |
-| Live | Signed up, connected two contradicting sources, collected, assessed, and read the coverage report and control explanation through a running API and browser |
+|            |                                                                                                                                                             |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tests      | **691 passing, 6 skipped** (was 516 at the start of this work)                                                                                              |
+| New suites | conformance (105), manifest honesty (5), fabric units (30), verification (10), source conflict (13), observation coverage (13)                              |
+| Build      | `tsc -b` clean across 12 packages                                                                                                                           |
+| Migration  | 0017 applied to a database at 0016 and to a virgin one                                                                                                      |
+| Live       | Signed up, connected two contradicting sources, collected, assessed, and read the coverage report and control explanation through a running API and browser |
 
 Three defect classes were **proved caught** by reverting the fix and confirming
 the tests fail: source conflict detection (11 tests), the permanently
@@ -177,19 +177,19 @@ cap reports PARTIAL rather than silently covering part of an estate.
 
 Shipped live connectors (Entra, Intune, Google Workspace) supply:
 
-| Ruleset | Predicates supplied |
-| --- | --- |
-| Cyber Essentials | **8 / 15** |
-| Adericel baseline | 11 / 29 |
-| ISO 27001:2022 | 12 / 36 |
-| **Union** | **13 / 41** |
+| Ruleset           | Predicates supplied |
+| ----------------- | ------------------- |
+| Cyber Essentials  | **8 / 15**          |
+| Adericel baseline | 11 / 29             |
+| ISO 27001:2022    | 12 / 36             |
+| **Union**         | **13 / 41**         |
 
 The remainder split two ways, and the distinction is the product's shape:
 
 - **No connector exists yet**: cloud storage posture, backup state,
   vulnerability state, boundary firewall. Adericel today is a Microsoft-first
   identity and endpoint assurance product. That is the intended wedge — it is
-  now *stated* rather than implied.
+  now _stated_ rather than implied.
 - **Legitimately human-asserted**: policy publication and review, supplier
   assurance, incident-plan publication, training completion. These have a route
   in and are not fabric gaps.
@@ -230,7 +230,7 @@ assurance.
    posture, no admin audit.
 10. **The three previously-unassessable predicates now have a route in and no
     source.** They are supplied by a pushed `CONFIGURATION_SETTING` observation.
-    Nothing in the product yet *asks* a customer for them, so in practice those
+    Nothing in the product yet _asks_ a customer for them, so in practice those
     ISO 27001 controls stay UNKNOWN until someone uses the API.
 11. **`healthFromReports` ignores capability count.** One failing capability out
     of six reports the same health as six out of six.

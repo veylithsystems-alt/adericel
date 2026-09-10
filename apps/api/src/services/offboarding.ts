@@ -140,15 +140,7 @@ export async function beginOffboarding(
            (organisation_id, key, title, description, required, position, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$7)
          ON CONFLICT (organisation_id, key) DO NOTHING`,
-        [
-          organisationId,
-          task.key,
-          task.title,
-          task.description,
-          task.required,
-          task.position,
-          now,
-        ],
+        [organisationId, task.key, task.title, task.description, task.required, task.position, now],
       );
     }
   });

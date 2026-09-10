@@ -178,7 +178,9 @@ describe.skipIf(!available)('a Veylith operating cycle', () => {
     it('prepares the message, because preparing is internal work', async () => {
       expect(outreachId).toBeTruthy();
       const row = await harness.db.withPlatform(async (ctx) =>
-        ctx.one<{ status: string }>(`SELECT status FROM veylith.outreach WHERE id = $1`, [outreachId]),
+        ctx.one<{ status: string }>(`SELECT status FROM veylith.outreach WHERE id = $1`, [
+          outreachId,
+        ]),
       );
       // Prepared and approved, and still not sent: approval of wording is not
       // authority to contact anybody.

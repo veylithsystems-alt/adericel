@@ -46,9 +46,7 @@ describe('connector manifest', () => {
   it('refuses a collection capability that declares no predicates', () => {
     // A capability supplying nothing cannot participate in planning, and would
     // silently never be scheduled.
-    expect(() =>
-      manifest({ collect: [{ ...identityCapability, predicates: [] }] }),
-    ).toThrow();
+    expect(() => manifest({ collect: [{ ...identityCapability, predicates: [] }] })).toThrow();
   });
 
   it('refuses a capability key outside the collect namespace', () => {
@@ -157,15 +155,22 @@ describe('collection planning', () => {
   });
 
   it('is deterministic for a given ruleset and integration set', () => {
-    const a = planCollection(['device.disk.encrypted', 'identity.mfa.enforced'], [rmm, entra, intune]);
-    const b = planCollection(['identity.mfa.enforced', 'device.disk.encrypted'], [intune, entra, rmm]);
+    const a = planCollection(
+      ['device.disk.encrypted', 'identity.mfa.enforced'],
+      [rmm, entra, intune],
+    );
+    const b = planCollection(
+      ['identity.mfa.enforced', 'device.disk.encrypted'],
+      [intune, entra, rmm],
+    );
     expect(a).toEqual(b);
   });
 
   it('excludes a capability disabled by configuration', () => {
-    const plan = planCollection(['device.disk.encrypted'], [
-      { ...intune, disabledCapabilities: ['collect.devices'] },
-    ]);
+    const plan = planCollection(
+      ['device.disk.encrypted'],
+      [{ ...intune, disabledCapabilities: ['collect.devices'] }],
+    );
     expect(plan.unsatisfiable).toEqual(['device.disk.encrypted']);
   });
 
@@ -178,7 +183,10 @@ describe('collection planning', () => {
     const coverage = discoverCoverage([entra], [identityCapability, deviceCapability] as never);
     const endpoint = coverage.find((c) => c.domain === 'ENDPOINT');
     const identity = coverage.find((c) => c.domain === 'IDENTITY');
-    expect(identity?.capabilities[0]).toMatchObject({ available: true, sources: ['Microsoft Entra ID'] });
+    expect(identity?.capabilities[0]).toMatchObject({
+      available: true,
+      sources: ['Microsoft Entra ID'],
+    });
     expect(endpoint?.capabilities[0]).toMatchObject({ available: false, sources: [] });
   });
 });

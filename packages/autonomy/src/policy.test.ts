@@ -97,9 +97,9 @@ describe('compilation', () => {
       operations: ['x.*'],
       outcome: 'DENY' as const,
     };
-    expect(() =>
-      compileAutonomyPolicy({ key: 'k', name: 'n', rules: [rule, rule] }),
-    ).toThrow(/Duplicate/);
+    expect(() => compileAutonomyPolicy({ key: 'k', name: 'n', rules: [rule, rule] })).toThrow(
+      /Duplicate/,
+    );
   });
 
   it('will not accept a fallback that permits', () => {

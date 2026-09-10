@@ -272,9 +272,15 @@ export function createMicrosoftEntraConnector(
         );
         registrationById = new Map(items.map((item) => [item.id, item]));
         capabilityReports.push(
-          capabilityReport(microsoftEntraManifest, 'collect.mfa', 'AVAILABLE', 'MFA registration state collected.', {
-            records: registrationById.size,
-          }),
+          capabilityReport(
+            microsoftEntraManifest,
+            'collect.mfa',
+            'AVAILABLE',
+            'MFA registration state collected.',
+            {
+              records: registrationById.size,
+            },
+          ),
         );
       } catch (error) {
         mfaAvailable = false;
@@ -500,11 +506,7 @@ export const microsoftEntraManifest: ConnectorManifest = connectorManifestSchema
       title: 'User accounts and their sign-in state',
       domain: 'IDENTITY',
       produces: ['IDENTITY_STATE'],
-      predicates: [
-        'identity.account.enabled',
-        'identity.account.type',
-        'identity.last_sign_in_at',
-      ],
+      predicates: ['identity.account.enabled', 'identity.account.type', 'identity.last_sign_in_at'],
       requiredPermission: 'User.Read.All',
       incremental: false,
     },

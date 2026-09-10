@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildAllWorkflows, OUTPUT_PATH } from '../../workflows/n8n/build.js';
 import { resetNodeCounter } from '../../workflows/n8n/lib.js';
@@ -82,7 +81,10 @@ describe('coverage of the current product', () => {
       'Offboarding',
     ];
     for (const fragment of required) {
-      expect(names.some((name) => name.includes(fragment)), fragment).toBe(true);
+      expect(
+        names.some((name) => name.includes(fragment)),
+        fragment,
+      ).toBe(true);
     }
   });
 

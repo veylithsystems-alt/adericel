@@ -9,7 +9,11 @@ import {
 } from '@adericel/autonomy';
 import type { PlatformContext } from '@adericel/graph';
 import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/shared';
-import { createExceptionQueue, type ExceptionCategory, type OperationalException } from './exceptions.js';
+import {
+  createExceptionQueue,
+  type ExceptionCategory,
+  type OperationalException,
+} from './exceptions.js';
 import { createBusinessEventLedger, type BusinessEventType } from './events.js';
 
 /**
@@ -333,10 +337,9 @@ export function createOperator(deps: OperatorDeps): Operator {
 
       try {
         const result = await request.effect();
-        await ctx.query(
-          `UPDATE veylith.business_events SET result = 'SUCCEEDED' WHERE id = $1`,
-          [claim.id],
-        );
+        await ctx.query(`UPDATE veylith.business_events SET result = 'SUCCEEDED' WHERE id = $1`, [
+          claim.id,
+        ]);
         return { permitted: true, decision, result, exception: null, alreadyPerformed: false };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -360,7 +363,11 @@ export function createOperator(deps: OperatorDeps): Operator {
               'Establish whether the effect happened before retrying. The operation was ' +
               'permitted and dispatched, so a failure here does not mean nothing changed.',
             requiredAuthority: 'The owner of this process',
-            evidence: { operation: request.operation, eventId: claim.id, error: message.slice(0, 1000) },
+            evidence: {
+              operation: request.operation,
+              eventId: claim.id,
+              error: message.slice(0, 1000),
+            },
             organisationId: request.organisationId ?? null,
             subjectKind: request.subjectKind,
             subjectId: request.subjectId,

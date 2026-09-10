@@ -6,6 +6,7 @@ import {
   createMetricsService,
   createOperator,
   findUnboundEvents,
+  type Operator,
   loadActivePolicy,
   operationDigest,
   DEFAULT_COMPANY_POLICY,
@@ -45,13 +46,8 @@ describe.skipIf(!available)('the VAOL authority boundary', () => {
     await harness.close();
   });
 
-  const operator = () =>
-    harness.db.withPlatform(async (ctx) =>
-      createOperator({ ctx, clock: harness.clock, logger: nullLogger, policy, actor: 'test-automation' }),
-    );
-
   /** Run one operation through the gate and return everything it produced. */
-  async function operate(request: Parameters<Awaited<ReturnType<typeof operator>>['operate']>[0]) {
+  async function operate(request: Parameters<Operator['operate']>[0]) {
     return harness.db.withPlatform(async (ctx) => {
       const op = createOperator({
         ctx,

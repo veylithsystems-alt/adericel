@@ -122,16 +122,19 @@ export async function exportOrganisation(
     };
 
     return {
-      nodes: await q('nodes',
+      nodes: await q(
+        'nodes',
         `SELECT id, kind, external_id, label, attributes, lifecycle_state,
                 first_observed_at, last_observed_at, created_at, updated_at
          FROM graph_nodes WHERE organisation_id = $1 ORDER BY created_at`,
       ),
-      edges: await q('edges',
+      edges: await q(
+        'edges',
         `SELECT id, kind, from_node_id, to_node_id, attributes, valid_from, valid_until, created_at
          FROM graph_edges WHERE organisation_id = $1 ORDER BY created_at`,
       ),
-      controls: await q('controls',
+      controls: await q(
+        'controls',
         `SELECT id, key, title, description, implementation_type, ruleset_key, rule_key,
                 parameters, source, enabled, created_at
          FROM controls WHERE organisation_id = $1 ORDER BY key`,
@@ -150,12 +153,14 @@ export async function exportOrganisation(
          JOIN organisation_frameworks orgf ON orgf.framework_id = r.framework_id
          WHERE orgf.organisation_id = $1`,
       ),
-      assuranceStates: await q('assuranceStates',
+      assuranceStates: await q(
+        'assuranceStates',
         `SELECT subject_kind, subject_id, state, unknown_reason, assessment_id, previous_state,
                 since, last_assessed_at
          FROM assurance_states WHERE organisation_id = $1`,
       ),
-      assessments: await q('assessments',
+      assessments: await q(
+        'assessments',
         `SELECT id, subject_kind, subject_id, state, unknown_reason, rationale, reasoning, trigger,
                 engine_version, ruleset_key, ruleset_version, ruleset_hash, rule_key, input_digest,
                 evidence_ids, claim_ids, previous_assessment_id, state_changed, assessed_at, correlation_id
@@ -163,7 +168,8 @@ export async function exportOrganisation(
       ),
       // Metadata and hashes, not bytes. The artefacts are downloaded
       // individually so the bundle stays portable.
-      evidence: await q('evidence',
+      evidence: await q(
+        'evidence',
         `SELECT id, source_type, collection_method, integration_id, source_system, source_reference,
                 title, content_hash, content_type, content_size_bytes, storage_key, payload,
                 integrity_level, status, supersedes_evidence_id, revocation_reason, observed_at,
@@ -171,47 +177,55 @@ export async function exportOrganisation(
                 collected_by_actor, metadata, created_at
          FROM evidence WHERE organisation_id = $1 ORDER BY collected_at`,
       ),
-      claims: await q('claims',
+      claims: await q(
+        'claims',
         `SELECT id, predicate, subject_node_id, subject_external_id, value, origin, status,
                 extraction_confidence, supersedes_claim_id, observed_at, asserted_at, valid_until,
                 created_by_actor, created_at
          FROM claims WHERE organisation_id = $1 ORDER BY asserted_at`,
       ),
-      findings: await q('findings',
+      findings: await q(
+        'findings',
         `SELECT id, control_id, requirement_id, subject_node_id, assessment_id, fingerprint,
                 title, description, severity, status, evidence_ids, first_detected_at,
                 last_detected_at, resolved_at, resolution_reason, created_at
          FROM findings WHERE organisation_id = $1 ORDER BY first_detected_at`,
       ),
-      risks: await q('risks',
+      risks: await q(
+        'risks',
         `SELECT id, title, description, likelihood, impact, inherent_severity, residual_severity,
                 status, treatment, review_due_at, created_at
          FROM risks WHERE organisation_id = $1`,
       ),
-      exceptions: await q('exceptions',
+      exceptions: await q(
+        'exceptions',
         `SELECT id, control_id, requirement_id, finding_id, subject_node_id, justification,
                 compensating_controls, status, requested_by_user_id, approved_by_user_id,
                 requested_at, approved_at, effective_from, expires_at, revoked_at
          FROM exceptions WHERE organisation_id = $1`,
       ),
-      actions: await q('actions',
+      actions: await q(
+        'actions',
         `SELECT id, action_type, integration_id, target_node_id, target_external_id, parameters,
                 risk_class, state, finding_id, proposed_by_actor, proposal_rationale,
                 policy_decision, autonomy_level, idempotency_key, external_operation_ref,
                 attempt_count, proposed_at, authorised_at, executed_at, verified_at, correlation_id
          FROM actions WHERE organisation_id = $1 ORDER BY proposed_at`,
       ),
-      verifications: await q('verifications',
+      verifications: await q(
+        'verifications',
         `SELECT id, action_id, claim_id, method, outcome, detail, observation_ids, evidence_id,
                 attempt, verified_at
          FROM verifications WHERE organisation_id = $1 ORDER BY verified_at`,
       ),
-      events: await q('events',
+      events: await q(
+        'events',
         `SELECT id, type, schema_version, subject_type, subject_id, payload, correlation_id,
                 causation_id, actor, occurred_at
          FROM event_log WHERE organisation_id = $1 ORDER BY occurred_at`,
       ),
-      audit: await q('audit',
+      audit: await q(
+        'audit',
         `SELECT id, actor_type, actor_id, actor_display, action, resource_type, resource_id,
                 outcome, reason, correlation_id, occurred_at
          FROM audit_log WHERE organisation_id = $1 ORDER BY occurred_at`,

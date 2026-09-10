@@ -98,9 +98,8 @@ export function Proof(): ReactElement {
           style={{ marginBottom: 'var(--space-6)' }}
         >
           <div className="notice__title">This organisation contains demonstration data</div>
-          At least one source is a demonstration fixture, not a real system. Anything resting on
-          it describes an example estate and must not be relied on, shared, or presented as
-          assurance.
+          At least one source is a demonstration fixture, not a real system. Anything resting on it
+          describes an example estate and must not be relied on, shared, or presented as assurance.
         </div>
       ) : null}
 
@@ -178,7 +177,9 @@ export function Proof(): ReactElement {
                         {integration.status.toLowerCase()}
                       </span>
                       {integration.health !== 'HEALTHY' && integration.health !== 'NEVER_RUN' ? (
-                        <div className="meta">{integration.health.replace(/_/g, ' ').toLowerCase()}</div>
+                        <div className="meta">
+                          {integration.health.replace(/_/g, ' ').toLowerCase()}
+                        </div>
                       ) : null}
                       {integration.health === 'NEVER_RUN' ? (
                         <div className="meta">never run</div>
@@ -206,9 +207,9 @@ export function Proof(): ReactElement {
               {conflicts.data.conflicts.length} fact
               {conflicts.data.conflicts.length === 1 ? '' : 's'} Adericel will not assert
             </div>
-            Two systems contradict each other and nothing tells Adericel which to believe. It
-            will not choose, so every control resting on these reads UNKNOWN until the
-            disagreement is settled.
+            Two systems contradict each other and nothing tells Adericel which to believe. It will
+            not choose, so every control resting on these reads UNKNOWN until the disagreement is
+            settled.
           </div>
           <div className="panel panel--flush table__wrap">
             <table className="table">
@@ -305,9 +306,8 @@ export function Proof(): ReactElement {
                           } connected`}
                     </td>
                     <td className="meta">
-                      {[
-                        ...new Set(domain.capabilities.flatMap((c) => c.sources)),
-                      ].join(', ') || '\u2014'}
+                      {[...new Set(domain.capabilities.flatMap((c) => c.sources))].join(', ') ||
+                        '\u2014'}
                     </td>
                   </tr>
                 ))}

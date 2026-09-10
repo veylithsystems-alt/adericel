@@ -71,9 +71,7 @@ const RESTRICTIVENESS: Record<AutonomyOutcome, number> = {
   PERMIT: 0,
 };
 
-export function mostRestrictive(
-  outcomes: readonly AutonomyOutcome[],
-): AutonomyOutcome {
+export function mostRestrictive(outcomes: readonly AutonomyOutcome[]): AutonomyOutcome {
   // An empty rule set does not mean "anything goes". It means nothing has
   // decided, which is UNKNOWN.
   if (outcomes.length === 0) return 'UNKNOWN';

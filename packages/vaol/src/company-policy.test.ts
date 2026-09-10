@@ -451,7 +451,9 @@ describe('the policy is well formed', () => {
       'marketing.publish_post',
       'customer_ops.reporting.send',
     ]) {
-      outward.push(evaluateAutonomy(policy, ask({ operation, riskClass: 'OUTWARD_FACING' })).outcome);
+      outward.push(
+        evaluateAutonomy(policy, ask({ operation, riskClass: 'OUTWARD_FACING' })).outcome,
+      );
     }
     expect(outward.some(mayProceedUnattended)).toBe(false);
   });

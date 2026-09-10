@@ -262,7 +262,12 @@ export function createMetricsService(ctx: PlatformContext, clock: Clock): Metric
           operations,
           autonomous,
           exceptions,
-          observedMaturity: observedMaturity(row.current_maturity, operations, autonomous, exceptions),
+          observedMaturity: observedMaturity(
+            row.current_maturity,
+            operations,
+            autonomous,
+            exceptions,
+          ),
         };
       });
     },

@@ -27,7 +27,9 @@ describe('the README describes the repository that exists', () => {
   it('lists no package that does not exist', () => {
     const packages = new Set(readdirSync(join(ROOT, 'packages')));
     const listed = [...readme.matchAll(/^ {2}([a-z-]+)\/ {2,}/gm)].map((m) => m[1]!);
-    const phantom = listed.filter((name) => !packages.has(name) && !['api', 'worker', 'web'].includes(name));
+    const phantom = listed.filter(
+      (name) => !packages.has(name) && !['api', 'worker', 'web'].includes(name),
+    );
     expect(phantom).toEqual([]);
   });
 

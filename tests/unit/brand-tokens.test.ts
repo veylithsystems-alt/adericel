@@ -375,7 +375,11 @@ describe('state colour is never decoration', () => {
       if (!selectorPart || !declarations) continue;
       if (!/var\(--state-(proven|failing|exception)/.test(declarations)) continue;
 
-      const selector = selectorPart.split('\n').filter((line) => !line.trim().startsWith('*')).join(' ').trim();
+      const selector = selectorPart
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('*'))
+        .join(' ')
+        .trim();
       if (STATE_CONTEXT.test(selector)) continue;
       if (ALLOWED_NON_STATE[selector] !== undefined) continue;
       offenders.push(selector);

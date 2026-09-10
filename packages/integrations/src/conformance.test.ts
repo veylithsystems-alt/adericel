@@ -27,9 +27,7 @@ const { registry } = buildConnectorRegistry({
 const connectors = registry.list();
 
 /** Predicates every canonical normaliser can produce, for validity checks. */
-const CANONICAL_PREDICATES = new Set(
-  OBSERVATION_KINDS.flatMap((kind) => predicatesForKind(kind)),
-);
+const CANONICAL_PREDICATES = new Set(OBSERVATION_KINDS.flatMap((kind) => predicatesForKind(kind)));
 
 it('registers every connector Adericel ships', () => {
   expect(connectors.map((c) => c.key).sort()).toEqual([
@@ -250,7 +248,9 @@ describe('every ruleset predicate has a way in', () => {
     //
     // Three ISO 27001 controls were in exactly that state. This is the check
     // that would have caught them, and that stops a new rule reintroducing it.
-    const orphans = [...required].filter((predicate) => !CANONICAL_PREDICATES.has(predicate)).sort();
+    const orphans = [...required]
+      .filter((predicate) => !CANONICAL_PREDICATES.has(predicate))
+      .sort();
     expect(orphans, 'required by a ruleset but producible by nothing').toEqual([]);
   });
 

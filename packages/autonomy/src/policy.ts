@@ -178,9 +178,10 @@ export function evaluateAutonomy(
     ),
   );
 
-  const matching = policy.rules.filter((rule) =>
-    rule.operations.some((pattern) => operationMatches(pattern, question.operation)) &&
-    (rule.riskClasses.length === 0 || rule.riskClasses.includes(question.riskClass)),
+  const matching = policy.rules.filter(
+    (rule) =>
+      rule.operations.some((pattern) => operationMatches(pattern, question.operation)) &&
+      (rule.riskClasses.length === 0 || rule.riskClasses.includes(question.riskClass)),
   );
 
   if (matching.length === 0) {
@@ -286,9 +287,7 @@ export function evaluateAutonomy(
           ),
         );
       } else if (!value) {
-        ruleChecks.push(
-          check(`${rule.id}:fact:${fact}`, 'DENY', `${fact} is false.`),
-        );
+        ruleChecks.push(check(`${rule.id}:fact:${fact}`, 'DENY', `${fact} is false.`));
       } else {
         ruleChecks.push(check(`${rule.id}:fact:${fact}`, 'PERMIT', `${fact} holds.`));
       }
@@ -300,14 +299,15 @@ export function evaluateAutonomy(
     ]);
     evaluation.push(...ruleChecks);
     evaluation.push(
-      check(`${rule.id}`, ruleOutcome, rule.description || `Rule ${rule.id} yields ${ruleOutcome}.`),
+      check(
+        `${rule.id}`,
+        ruleOutcome,
+        rule.description || `Rule ${rule.id} yields ${ruleOutcome}.`,
+      ),
     );
     outcomes.push(ruleOutcome);
 
-    if (
-      decidingRule === null ||
-      mostRestrictive([decidingOutcome, ruleOutcome]) === ruleOutcome
-    ) {
+    if (decidingRule === null || mostRestrictive([decidingOutcome, ruleOutcome]) === ruleOutcome) {
       if (decidingRule === null || ruleOutcome !== decidingOutcome) {
         decidingRule = rule;
         decidingOutcome = ruleOutcome;

@@ -97,7 +97,12 @@ describe.skipIf(!available)('source conflict', () => {
 
   async function liveClaims(predicate = 'device.disk.encrypted') {
     return harness.db.withTenant(tenant.organisationId, async (ctx) =>
-      ctx.many<{ id: string; value: unknown; status: string; source_integration_id: string | null }>(
+      ctx.many<{
+        id: string;
+        value: unknown;
+        status: string;
+        source_integration_id: string | null;
+      }>(
         `SELECT id, value, status, source_integration_id FROM claims
          WHERE organisation_id = $1 AND predicate = $2 ORDER BY asserted_at, id`,
         [tenant.organisationId, predicate],
@@ -178,7 +183,10 @@ describe.skipIf(!available)('source conflict', () => {
       expect(conflict.resolution).toBe('UNRESOLVED');
       expect(conflict.resolvedValue).toBeNull();
       expect(conflict.distinctValues).toBe(2);
-      expect(conflict.sources.map((s) => s.displayName).sort()).toEqual(['Our RMM', 'Test fixture']);
+      expect(conflict.sources.map((s) => s.displayName).sort()).toEqual([
+        'Our RMM',
+        'Test fixture',
+      ]);
       expect(conflict.detail).toContain('will not choose');
     });
 

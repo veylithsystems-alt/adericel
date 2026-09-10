@@ -20,7 +20,10 @@ function packageNames(): string[] {
   );
 }
 
-function manifest(pkg: string): { dependencies?: Record<string, string>; devDependencies?: Record<string, string> } {
+function manifest(pkg: string): {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+} {
   return JSON.parse(readFileSync(join(ROOT, 'packages', pkg, 'package.json'), 'utf8')) as never;
 }
 

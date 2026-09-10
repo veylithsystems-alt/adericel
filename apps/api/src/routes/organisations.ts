@@ -387,7 +387,9 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
         metadata: revoked,
       });
 
-      return reply.status(200).send({ revoked, status: await offboardingStatus(app, organisationId) });
+      return reply
+        .status(200)
+        .send({ revoked, status: await offboardingStatus(app, organisationId) });
     },
   );
 

@@ -133,7 +133,6 @@ describe.skipIf(!available)('observation coverage', () => {
     expect(backup, 'a domain with no connector must still be listed').toBeDefined();
     expect(backup!.noConnectorExists).toBe(true);
     expect(backup!.capabilities).toEqual([]);
-
   });
 
   describe('an integration in detail', () => {

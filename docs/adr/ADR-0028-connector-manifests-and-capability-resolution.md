@@ -8,7 +8,7 @@ Adericel had connectors and no way to reason about them.
 
 A connector's metadata lived in TypeScript interface fields — `vendor`,
 `category`, `requiredPermissions`, `capabilities`. TypeScript could read them;
-nothing else could. `capabilities` meant *executable* actions only, so there was
+nothing else could. `capabilities` meant _executable_ actions only, so there was
 no representation at all of the thing a connector spends almost all its time
 doing: collecting.
 
@@ -18,7 +18,7 @@ That left one question unanswerable, and it is the question the product turns on
 
 Without an answer, a control with no evidence reads the same whether nothing is
 connected that could ever see it, or something is connected and was refused a
-permission this morning. Adericel could say `UNKNOWN` but not *why*, and an
+permission this morning. Adericel could say `UNKNOWN` but not _why_, and an
 `UNKNOWN` with no cause is a dead end rather than a finding.
 
 It also meant collection was untargeted. Every integration ran its whole
@@ -61,7 +61,7 @@ ruleset's business, and no connector may encode it.
 ### The mapping is a table, not control flow
 
 The payload-key to predicate mapping used to exist only as a sequence of
-statements inside each normaliser. That runs but cannot be *read* — and a
+statements inside each normaliser. That runs but cannot be _read_ — and a
 declaratively configured connector, whose capability is a property of its
 configuration rather than its code, needs to read it to derive its own manifest.
 `PREDICATE_MAP` is now the single source both use.

@@ -4,19 +4,19 @@
 
 ## What exists and is reusable
 
-| Asset | State | Reuse |
-| --- | --- | --- |
-| PostgreSQL + forced RLS, `withTenant`/`withPlatform` | Solid | Yes — but see the tenancy finding below |
-| Transactional outbox (`FOR UPDATE SKIP LOCKED`) | Solid | Yes, directly |
-| `scheduled_jobs` with cron, locking, last-status | Solid | Yes, directly |
-| Domain event log with actor/correlation/idempotency | Solid | Pattern reused, vocabulary is not |
-| Action lifecycle: propose → authorise → execute → verify | Solid | Pattern reused |
-| Approval + four-eyes + MFA step-up | Solid | Pattern reused |
-| Autonomy levels L0–L5 | Solid | Reused directly |
-| `packages/policy` action policy engine | Solid **for Adericel** | See finding 2 |
-| Envelope encryption, sealed credentials | Solid | Yes, directly |
-| Integration fabric, capability manifests | Solid | Yes — VAOL consumes it |
-| `exceptions` table | **Not reusable** | It is an *assurance* exception (a control deliberately waived), not an operational exception queue. Different thing, same word. |
+| Asset                                                    | State                  | Reuse                                                                                                                           |
+| -------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| PostgreSQL + forced RLS, `withTenant`/`withPlatform`     | Solid                  | Yes — but see the tenancy finding below                                                                                         |
+| Transactional outbox (`FOR UPDATE SKIP LOCKED`)          | Solid                  | Yes, directly                                                                                                                   |
+| `scheduled_jobs` with cron, locking, last-status         | Solid                  | Yes, directly                                                                                                                   |
+| Domain event log with actor/correlation/idempotency      | Solid                  | Pattern reused, vocabulary is not                                                                                               |
+| Action lifecycle: propose → authorise → execute → verify | Solid                  | Pattern reused                                                                                                                  |
+| Approval + four-eyes + MFA step-up                       | Solid                  | Pattern reused                                                                                                                  |
+| Autonomy levels L0–L5                                    | Solid                  | Reused directly                                                                                                                 |
+| `packages/policy` action policy engine                   | Solid **for Adericel** | See finding 2                                                                                                                   |
+| Envelope encryption, sealed credentials                  | Solid                  | Yes, directly                                                                                                                   |
+| Integration fabric, capability manifests                 | Solid                  | Yes — VAOL consumes it                                                                                                          |
+| `exceptions` table                                       | **Not reusable**       | It is an _assurance_ exception (a control deliberately waived), not an operational exception queue. Different thing, same word. |
 
 ## Finding 1 — internal company state is not tenant data
 
@@ -40,8 +40,15 @@ be, adversarially.
 `PolicyQuestion` is:
 
 ```ts
-{ actionType, riskClass, findingSeverity, organisationAutonomyLevel,
-  recentExecutions, utcHour, proposerUserId }
+{
+  (actionType,
+    riskClass,
+    findingSeverity,
+    organisationAutonomyLevel,
+    recentExecutions,
+    utcHour,
+    proposerUserId);
+}
 ```
 
 It is shaped entirely around remediating a finding on a customer estate. It
@@ -52,11 +59,11 @@ class that has nothing to do with `ActionRiskClass`.
 More importantly:
 
 ```ts
-POLICY_OUTCOMES = ['ALLOW', 'REQUIRE_APPROVAL', 'DENY']
+POLICY_OUTCOMES = ['ALLOW', 'REQUIRE_APPROVAL', 'DENY'];
 ```
 
 §18 of the brief requires **PERMIT / DENY / REQUIRE_APPROVAL / ESCALATE /
-UNKNOWN**, and states: *UNKNOWN must never silently become PERMIT.* The current
+UNKNOWN**, and states: _UNKNOWN must never silently become PERMIT._ The current
 engine has no way to say "I could not determine this" — an unanswerable question
 falls through to a default rule and becomes a decision.
 
@@ -78,7 +85,7 @@ and a different home.**
 
 ## Finding 4 — there is no exception queue, and it is the most important system
 
-§19: *humans deal with exceptions, not workflows.* Nothing in the repository
+§19: _humans deal with exceptions, not workflows._ Nothing in the repository
 implements this. Without it, autonomy has no safe failure mode: an automation
 that cannot proceed currently either throws, retries forever, or silently does
 nothing.

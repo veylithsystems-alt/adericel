@@ -126,7 +126,11 @@ export function qualifyProspect(signals: ProspectSignals): Qualification {
 export const QUALIFICATION_THRESHOLD = 55;
 
 export const prospectInputSchema = z.object({
-  domain: z.string().min(3).max(253).regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i, 'A domain name'),
+  domain: z
+    .string()
+    .min(3)
+    .max(253)
+    .regex(/^[a-z0-9.-]+\.[a-z]{2,}$/i, 'A domain name'),
   name: z.string().min(1).max(200),
   country: z.string().length(2).default('GB'),
 });
@@ -174,8 +178,13 @@ function toProspect(row: ProspectRow): Prospect {
 
 export interface PipelineService {
   discover(input: ProspectInput): Promise<{ prospect: Prospect | null; permitted: boolean }>;
-  enrich(id: string, signals: ProspectSignals): Promise<{ prospect: Prospect | null; permitted: boolean }>;
-  qualify(id: string): Promise<{ prospect: Prospect | null; permitted: boolean; incomplete: boolean }>;
+  enrich(
+    id: string,
+    signals: ProspectSignals,
+  ): Promise<{ prospect: Prospect | null; permitted: boolean }>;
+  qualify(
+    id: string,
+  ): Promise<{ prospect: Prospect | null; permitted: boolean; incomplete: boolean }>;
   /** Prepare a message. Never sends: sending is a separate, gated operation. */
   prepareOutreach(
     id: string,
@@ -328,7 +337,8 @@ export function createPipelineService(deps: {
         processKey: 'sales.qualification',
         operation: 'sales.qualification.score',
         riskClass: 'INTERNAL',
-        eventType: qualification.score >= QUALIFICATION_THRESHOLD ? 'LEAD_QUALIFIED' : 'LEAD_DISQUALIFIED',
+        eventType:
+          qualification.score >= QUALIFICATION_THRESHOLD ? 'LEAD_QUALIFIED' : 'LEAD_DISQUALIFIED',
         subjectKind: 'Prospect',
         subjectId: id,
         intent: `Score ${row.name}`,

@@ -36,7 +36,7 @@ outcome is one of four:
 - **AGREED** — they say the same thing. Two independent systems agreeing is
   itself worth recording, and any disagreement previously open is closed.
 - **RESOLVED_BY_AUTHORITY** — the organisation has configured which source is
-  authoritative *for this predicate*. Per-predicate, because the system that
+  authoritative _for this predicate_. Per-predicate, because the system that
   best knows endpoint patch state is rarely the one that best knows identity
   state, and a single global hierarchy would be wrong for one of them.
 - **RESOLVED_BY_FRESHNESS** — one source observed materially more recently than
@@ -62,7 +62,7 @@ through — so there is no path that can bypass it.
 ## Consequences
 
 A contested control becomes UNKNOWN where it previously read as a confident
-PASS or FAIL. That is a *worse-looking* product and a more truthful one, and it
+PASS or FAIL. That is a _worse-looking_ product and a more truthful one, and it
 is the whole point of UNKNOWN being first-class (§8).
 
 Conflicts are closed, never deleted, when sources agree again. That a control

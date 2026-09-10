@@ -372,7 +372,7 @@ export function createMicrosoftIntuneConnector(deps: {
             capped ? 'PARTIAL' : protectionCollected === 0 ? 'EMPTY' : 'AVAILABLE',
             capped
               ? `Protection state read for ${protectionTargets.length} of ${deviceIds.length} devices; ` +
-                'the rest were not read this run and their protection controls stay UNKNOWN.'
+                  'the rest were not read this run and their protection controls stay UNKNOWN.'
               : protectionCollected === 0
                 ? 'No device reported Windows protection state.'
                 : `Protection state collected for ${protectionCollected} device(s).`,

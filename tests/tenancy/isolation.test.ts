@@ -334,7 +334,12 @@ describe.skipIf(!available)('tenant isolation', () => {
 
     it('forces row level security on every table holding credential material', async () => {
       const rows = await harness.db.withPlatform(async (ctx) =>
-        ctx.many<{ table_name: string; rowsecurity: boolean; forcerowsecurity: boolean; policies: string }>(
+        ctx.many<{
+          table_name: string;
+          rowsecurity: boolean;
+          forcerowsecurity: boolean;
+          policies: string;
+        }>(
           `SELECT c.relname AS table_name, c.relrowsecurity AS rowsecurity,
                   c.relforcerowsecurity AS forcerowsecurity,
                   (SELECT count(*)::text FROM pg_policy p WHERE p.polrelid = c.oid) AS policies

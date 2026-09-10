@@ -254,7 +254,9 @@ export interface ExceptionQueue {
     options?: { automatic?: boolean; verification?: OperationalException['verification'] },
   ): Promise<OperationalException>;
   escalate(id: string, reason: string, actor: string): Promise<OperationalException>;
-  transitions(id: string): Promise<readonly { toStatus: string; actor: string; note: string; occurredAt: string }[]>;
+  transitions(
+    id: string,
+  ): Promise<readonly { toStatus: string; actor: string; note: string; occurredAt: string }[]>;
 }
 
 export function createExceptionQueue(ctx: PlatformContext, clock: Clock): ExceptionQueue {

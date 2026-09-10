@@ -423,14 +423,16 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
         // warnings are recorded but do not imply the collection was incomplete.
         // A capability that failed does, because the connector saw it fail.
         const status =
-          result.partial === true || capabilityReports.some((r) => !capabilityInformative(r.outcome))
+          result.partial === true ||
+          capabilityReports.some((r) => !capabilityInformative(r.outcome))
             ? 'PARTIAL'
             : 'SUCCEEDED';
-        const health = capabilityReports.length > 0
-          ? healthFromReports(capabilityReports)
-          : result.partial === true
-            ? 'PARTIAL'
-            : 'HEALTHY';
+        const health =
+          capabilityReports.length > 0
+            ? healthFromReports(capabilityReports)
+            : result.partial === true
+              ? 'PARTIAL'
+              : 'HEALTHY';
 
         await ctx.query(
           `UPDATE integration_runs

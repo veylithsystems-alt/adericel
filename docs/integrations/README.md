@@ -42,7 +42,7 @@ observations.push({
   observedAt: device.lastSyncDateTime ?? context.nowIso,
   payload: {
     externalId: device.id,
-    diskEncrypted: device.isEncrypted,   // canonical key, not `isEncrypted`
+    diskEncrypted: device.isEncrypted, // canonical key, not `isEncrypted`
   },
 });
 ```
@@ -55,19 +55,21 @@ because the vendor returned nothing is how a product invents certainty.
 
 ```ts
 export const myConnectorManifest = connectorManifestSchema.parse({
-  id: 'my-connector',            // must equal the registry key
+  id: 'my-connector', // must equal the registry key
   version: '1.0.0',
   vendor: 'Vendor Name',
   category: 'ENDPOINT',
   authentication: ['OAUTH2_CLIENT_CREDENTIALS'],
-  collect: [{
-    key: 'collect.devices',       // must start with `collect.`
-    title: 'Managed device inventory',
-    domain: 'ENDPOINT',
-    produces: ['DEVICE_STATE'],
-    predicates: ['device.managed', 'device.disk.encrypted'],
-    requiredPermission: 'DeviceManagementManagedDevices.Read.All',
-  }],
+  collect: [
+    {
+      key: 'collect.devices', // must start with `collect.`
+      title: 'Managed device inventory',
+      domain: 'ENDPOINT',
+      produces: ['DEVICE_STATE'],
+      predicates: ['device.managed', 'device.disk.encrypted'],
+      requiredPermission: 'DeviceManagementManagedDevices.Read.All',
+    },
+  ],
   execute: [],
   verify: [],
   fidelity: 'LIVE',
@@ -83,8 +85,13 @@ customer's estate when in fact Adericel never asked for the evidence.
 
 ```ts
 capabilityReports.push(
-  capabilityReport(manifest, 'collect.devices', 'AVAILABLE',
-    `Collected ${devices.length} device(s).`, { records: devices.length }),
+  capabilityReport(
+    manifest,
+    'collect.devices',
+    'AVAILABLE',
+    `Collected ${devices.length} device(s).`,
+    { records: devices.length },
+  ),
 );
 // ...or, when a capability is refused:
 capabilityReports.push(reportFromError(manifest, 'collect.mfa', error));
@@ -158,18 +165,18 @@ dependent controls `UNKNOWN`. That is the safe default and it is correct.
 
 ## Where things live
 
-| Concern | File |
-| --- | --- |
-| Connector contract | `packages/integrations/src/connector.ts` |
-| Manifest, capability outcomes, health | `packages/integrations/src/manifest.ts` |
-| Payload key to predicate map | `packages/integrations/src/normalise.ts` |
-| Collection planning, coverage discovery | `packages/integrations/src/planning.ts` |
-| Conflict adjudication (pure) | `packages/domain/src/conflict.ts` |
-| Conflict persistence | `packages/evidence/src/conflicts.ts` |
-| Schema drift detection | `packages/integrations/src/drift.ts` |
-| Conformance suite | `packages/integrations/src/conformance.test.ts` |
-| Manifest honesty suite | `packages/integrations/src/connectors/manifest-honesty.test.ts` |
-| Coverage and gap explanation | `apps/api/src/services/observation-coverage.ts` |
+| Concern                                 | File                                                            |
+| --------------------------------------- | --------------------------------------------------------------- |
+| Connector contract                      | `packages/integrations/src/connector.ts`                        |
+| Manifest, capability outcomes, health   | `packages/integrations/src/manifest.ts`                         |
+| Payload key to predicate map            | `packages/integrations/src/normalise.ts`                        |
+| Collection planning, coverage discovery | `packages/integrations/src/planning.ts`                         |
+| Conflict adjudication (pure)            | `packages/domain/src/conflict.ts`                               |
+| Conflict persistence                    | `packages/evidence/src/conflicts.ts`                            |
+| Schema drift detection                  | `packages/integrations/src/drift.ts`                            |
+| Conformance suite                       | `packages/integrations/src/conformance.test.ts`                 |
+| Manifest honesty suite                  | `packages/integrations/src/connectors/manifest-honesty.test.ts` |
+| Coverage and gap explanation            | `apps/api/src/services/observation-coverage.ts`                 |
 
 ## Current coverage
 

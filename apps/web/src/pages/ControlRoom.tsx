@@ -92,8 +92,8 @@ export function ControlRoom({ me }: { me: Me }): ReactElement {
         <PageHeader title="Control room" lead="Veylith's own operations." />
         <div className="notice notice--failing" role="alert">
           <div className="notice__title">Not available to this account</div>
-          The control room shows Veylith's internal operations. It is not customer data and is
-          not reachable from a customer account.
+          The control room shows Veylith's internal operations. It is not customer data and is not
+          reachable from a customer account.
         </div>
       </>
     );
@@ -119,9 +119,9 @@ export function ControlRoom({ me }: { me: Me }): ReactElement {
       <Section title="Needs a person">
         {queue.length === 0 ? (
           <Empty>
-            Nothing is waiting. No automation has stopped needing a decision — which is the
-            intended steady state rather than an absence of activity, and the backlog below shows
-            what actually ran.
+            Nothing is waiting. No automation has stopped needing a decision — which is the intended
+            steady state rather than an absence of activity, and the backlog below shows what
+            actually ran.
           </Empty>
         ) : (
           <>
@@ -207,13 +207,12 @@ export function ControlRoom({ me }: { me: Me }): ReactElement {
 
           <div className="notice notice--unknown" style={{ marginTop: 'var(--space-4)' }}>
             <div className="notice__title">What the company declined to do</div>
-            Refused outright {metrics.refusals.DENY ?? 0} ·{' '}
-            needed approval {metrics.refusals.REQUIRE_APPROVAL ?? 0} ·{' '}
-            escalated {metrics.refusals.ESCALATE ?? 0} ·{' '}
+            Refused outright {metrics.refusals.DENY ?? 0} · needed approval{' '}
+            {metrics.refusals.REQUIRE_APPROVAL ?? 0} · escalated {metrics.refusals.ESCALATE ?? 0} ·{' '}
             could not tell {metrics.refusals.UNKNOWN ?? 0}
             <div className="meta" style={{ marginTop: 'var(--space-2)' }}>
-              A rising “could not tell” means operations are reaching the policy that nobody wrote
-              a rule for. That is the number to watch, not the refusals.
+              A rising “could not tell” means operations are reaching the policy that nobody wrote a
+              rule for. That is the number to watch, not the refusals.
             </div>
           </div>
         </Section>
@@ -223,8 +222,8 @@ export function ControlRoom({ me }: { me: Me }): ReactElement {
         <Section title="Processes claiming more autonomy than they have">
           <div className="notice notice--failing" style={{ marginBottom: 'var(--space-4)' }}>
             <div className="notice__title">The plan and the evidence disagree</div>
-            These processes are recorded at a maturity their own execution history does not
-            support. The recorded figure is the plan; the observed one is what the ledger says.
+            These processes are recorded at a maturity their own execution history does not support.
+            The recorded figure is the plan; the observed one is what the ledger says.
           </div>
           <div className="panel panel--flush table__wrap">
             <table className="table">

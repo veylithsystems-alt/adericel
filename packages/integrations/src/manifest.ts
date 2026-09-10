@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { ObservationKind } from '@adericel/domain';
-import type { AuthKind, ConnectorCategory } from './connector.js';
 
 /**
  * The connector manifest.

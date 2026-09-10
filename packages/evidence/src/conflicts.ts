@@ -69,7 +69,11 @@ export interface ConflictRepository {
    * Record a disagreement, or refresh the one already open for this predicate
    * and subject. A disagreement persisting across ten runs is one fact.
    */
-  record(outcome: ConflictOutcome, subjectNodeId: string | null, claimId: string | null): Promise<ConflictRecord>;
+  record(
+    outcome: ConflictOutcome,
+    subjectNodeId: string | null,
+    claimId: string | null,
+  ): Promise<ConflictRecord>;
   /** Close the open conflict for a predicate and subject, if any. */
   close(predicate: string, subjectNodeId: string | null, nowIso: string): Promise<void>;
   open(): Promise<readonly ConflictRecord[]>;

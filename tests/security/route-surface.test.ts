@@ -69,7 +69,8 @@ interface Route {
 function routesIn(file: string): Route[] {
   const source = readFileSync(join(ROUTES, file), 'utf8');
   const found: Route[] = [];
-  const pattern = /server\.(get|post|put|patch|delete)\(\s*([\s\S]{0,400}?)\)\s*,?\s*async|server\.(get|post|put|patch|delete)\(\s*([\s\S]{0,400}?)=>/g;
+  const pattern =
+    /server\.(get|post|put|patch|delete)\(\s*([\s\S]{0,400}?)\)\s*,?\s*async|server\.(get|post|put|patch|delete)\(\s*([\s\S]{0,400}?)=>/g;
 
   // Simpler and more reliable: find each registration and read the next 400
   // characters, which comfortably covers the path and the options object.
@@ -82,7 +83,9 @@ function routesIn(file: string): Route[] {
     found.push({
       method: match[1]!.toUpperCase(),
       path,
-      authenticated: /preHandler:\s*(server\.authenticate|\[[^\]]*server\.authenticate)/.test(window),
+      authenticated: /preHandler:\s*(server\.authenticate|\[[^\]]*server\.authenticate)/.test(
+        window,
+      ),
       file,
     });
   }
@@ -103,7 +106,9 @@ function allRoutes(): Route[] {
     fromApp.push({
       method: match[1]!.toUpperCase(),
       path,
-      authenticated: /preHandler:\s*(server\.authenticate|\[[^\]]*server\.authenticate)/.test(window),
+      authenticated: /preHandler:\s*(server\.authenticate|\[[^\]]*server\.authenticate)/.test(
+        window,
+      ),
       file: 'app.ts',
     });
   }
@@ -154,10 +159,12 @@ describe('the API surface', () => {
       .join('\n');
     for (const route of SIGNATURE_VERIFIED) {
       const path = route.split(' ')[1]!;
-      const escaped = path.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&');
+      const escaped = path.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
       const window = new RegExp(`['"\`]${escaped}['"\`][\\s\\S]{0,900}`).exec(sources)?.[0] ?? '';
-      expect(/verifySignature|stripe-signature|constructEvent|timingSafeEqual/.test(window), route)
-        .toBe(true);
+      expect(
+        /verifySignature|stripe-signature|constructEvent|timingSafeEqual/.test(window),
+        route,
+      ).toBe(true);
     }
   });
 
@@ -226,8 +233,7 @@ describe('tenant-scoped routes', () => {
         // the ownership check is actually there. `requireMsp` alone would let a
         // caller pass any organisation id at all.
         const viaOrganisation = /requireOrganisation\(/.test(body);
-        const viaMspOwnership =
-          /requireMsp\(/.test(body) && /\bmsp_id\s*=\s*\$\d/.test(body);
+        const viaMspOwnership = /requireMsp\(/.test(body) && /\bmsp_id\s*=\s*\$\d/.test(body);
 
         if (!viaOrganisation && !viaMspOwnership) {
           offenders.push(`${match[1]!.toUpperCase()} ${path} (${file})`);
