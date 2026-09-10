@@ -199,6 +199,38 @@ describe('permissions only a human may hold', () => {
     }
   });
 
+  it('refuses exception approval to every non-human principal type', () => {
+    // Approving an exception is the decision that a control may remain
+    // unsatisfied — the same weight of judgement as authorising a change, and
+    // the same reason a workflow must not be able to make it.
+    for (const principalType of PRINCIPAL_TYPES) {
+      if (principalType === 'USER') continue;
+      const p = principal({
+        principalType,
+        grants: [
+          { scopeType: 'PLATFORM', scopeId: null, roles: ['PLATFORM_ADMIN'], expiresAt: null },
+          { scopeType: 'ORGANISATION', scopeId: ORG, roles: ['ORG_APPROVER'], expiresAt: null },
+        ],
+      });
+      const answer = authorise(
+        p,
+        { permission: 'org:exception:approve', organisationId: ORG },
+        { atIso: AT },
+      );
+      expect(answer.allowed, `${principalType} was allowed to approve an exception`).toBe(false);
+      expect(answer.reason).toContain('requires a human principal');
+    }
+  });
+
+  it('names every permission that only a human may hold, so additions are deliberate', () => {
+    // A change to this list changes who can accept risk on a customer's behalf.
+    // It should never happen as a side effect of something else.
+    expect([...HUMAN_ONLY_PERMISSIONS].sort()).toEqual([
+      'org:action:approve',
+      'org:exception:approve',
+    ]);
+  });
+
   it('still allows a human approver', () => {
     const p = principal({
       grants: [

@@ -120,6 +120,13 @@ export interface ActionRecord {
   readonly approvalId: string | null;
   /** Caller-supplied or derived key that makes execution exactly-once. */
   readonly idempotencyKey: string;
+  /**
+   * Digest of the request as proposed: action type, risk class, target,
+   * integration and parameters. Immutable once written. Execution re-derives it
+   * and refuses to dispatch on a mismatch, so an approval authorises one
+   * specific change rather than whatever the row happens to say later.
+   */
+  readonly requestDigest: string;
   /** Identifier returned by the external system, used for reconciliation. */
   readonly externalOperationRef: string | null;
   readonly attemptCount: number;

@@ -129,21 +129,36 @@ describe.skipIf(!available)('migration runner', () => {
   });
 
   it('reverts the most recent migration and re-applies it cleanly', async () => {
+    // Deliberately not pinned to a particular migration: this must keep testing
+    // the newest one as migrations are added, which is exactly the one whose
+    // rollback nobody has tried yet.
+    const before = await status(client);
+    const newest = before.at(-1)!;
+
     expect(await down(client, 1, silent)).toBe(1);
-    const reverted = await client.query(`SELECT to_regclass('adericel.assessment_inputs') AS t`);
-    expect(reverted.rows[0]!.t).toBeNull();
+    const midway = await status(client);
+    expect(midway.filter((row) => !row.applied).map((row) => row.id)).toEqual([newest.id]);
 
     expect(await up(client, silent)).toBe(1);
-    const restored = await client.query<{ forced: boolean; enabled: boolean }>(
-      `SELECT relforcerowsecurity AS forced, relrowsecurity AS enabled
-       FROM pg_class WHERE relname = 'assessment_inputs'`,
+    const after = await status(client);
+    expect(after.every((row) => row.applied && row.checksumMatches === true)).toBe(true);
+  }, 60_000);
+
+  it('leaves every organisation-scoped table protected after a full round trip', async () => {
+    // A rollback that dropped a policy and an "up" that forgot to recreate it
+    // would leave a tenant-scoped table readable across tenants, and everything
+    // would still appear to work.
+    const { rows } = await client.query<{ relname: string }>(
+      `SELECT c.relname
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN information_schema.columns col
+         ON col.table_schema = n.nspname AND col.table_name = c.relname
+        AND col.column_name = 'organisation_id'
+       WHERE n.nspname = 'adericel' AND c.relkind = 'r'
+         AND NOT (c.relrowsecurity AND c.relforcerowsecurity)`,
     );
-    // Re-applying must restore the tenant policy too, not merely the table.
-    expect(restored.rows[0]).toEqual({ forced: true, enabled: true });
-    const policies = await client.query(
-      `SELECT 1 FROM pg_policies WHERE tablename = 'assessment_inputs'`,
-    );
-    expect(policies.rowCount).toBe(1);
+    expect(rows.map((r) => r.relname)).toEqual([]);
   }, 60_000);
 
   it('refuses to apply a migration whose content changed after it was applied', async () => {

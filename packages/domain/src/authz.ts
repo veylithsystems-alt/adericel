@@ -278,6 +278,12 @@ export interface AuthorisationAnswer {
  */
 export const HUMAN_ONLY_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
   'org:action:approve',
+  // Approving an exception is the decision that a control may stay unsatisfied.
+  // It is an assurance judgement with the same weight as authorising a change,
+  // and it was previously defended only at the route. The route check is still
+  // there; this makes the rule hold wherever authorisation is asked, including
+  // from a future caller that forgets.
+  'org:exception:approve',
 ]);
 
 /**

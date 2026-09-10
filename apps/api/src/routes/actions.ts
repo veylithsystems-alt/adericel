@@ -400,12 +400,26 @@ export function registerActionRoutes(server: FastifyInstance, app: AppContext): 
         resourceType: 'Action',
         resourceId: params.id,
         outcome: result.execution.status === 'SUCCEEDED' ? 'SUCCESS' : 'FAILURE',
-        reason: result.execution.detail,
+        reason: result.refused?.reason ?? result.execution.detail,
         metadata: {
           externalOperationRef: result.execution.externalOperationRef,
           alreadyExecuted: result.alreadyExecuted,
+          refused: result.refused?.code ?? null,
         },
       });
+
+      // A refusal is recorded state, not an exception: the action has been
+      // cancelled and the transition written. Raising here would roll that back,
+      // so it is turned into the error response after the fact instead.
+      if (result.refused) {
+        throw new AdericelError('PRECONDITION_FAILED', result.refused.reason, {
+          safeDetails: {
+            actionId: params.id,
+            code: result.refused.code,
+            state: result.action.state,
+          },
+        });
+      }
 
       return reply.status(200).send({
         actionId: params.id,

@@ -32,6 +32,36 @@ import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/s
  *     reaches CONFIRMED only when re-observation supports it.
  */
 
+/** The sentinel carried by actions proposed before digest binding existed. */
+export const UNBOUND_REQUEST_DIGEST = 'unbound:pre-0013';
+
+/**
+ * Digest of what an action will actually do, and to whom.
+ *
+ * Taken at proposal, copied onto the approval, and re-derived at execution.
+ * An approval authorises this exact request; if the live row no longer hashes
+ * to it, something changed between the human saying yes and the dispatch, and
+ * the honest response is to refuse rather than to act on an authority nobody
+ * granted.
+ */
+export function actionRequestDigest(request: {
+  readonly actionType: string;
+  readonly riskClass: string;
+  readonly integrationId: string | null;
+  readonly targetNodeId: string | null;
+  readonly targetExternalId: string | null;
+  readonly parameters: Readonly<Record<string, unknown>>;
+}): string {
+  return contentHash({
+    actionType: request.actionType,
+    riskClass: request.riskClass,
+    integrationId: request.integrationId,
+    targetNodeId: request.targetNodeId,
+    targetExternalId: request.targetExternalId,
+    parameters: request.parameters,
+  });
+}
+
 interface ActionRow {
   id: string;
   organisation_id: string;
@@ -53,6 +83,7 @@ interface ActionRow {
   autonomy_level: number | null;
   approval_id: string | null;
   idempotency_key: string;
+  request_digest: string;
   external_operation_ref: string | null;
   attempt_count: number;
   last_error: string | null;
@@ -71,7 +102,7 @@ const ACTION_COLUMNS = `
   id, organisation_id, node_id, action_type, integration_id, target_node_id, target_external_id,
   parameters, risk_class, state, finding_id, risk_id, proposed_by_actor, proposed_by_user_id,
   proposal_rationale, policy_id, policy_decision, autonomy_level, approval_id, idempotency_key,
-  external_operation_ref, attempt_count, last_error, verification_id, correlation_id,
+  request_digest, external_operation_ref, attempt_count, last_error, verification_id, correlation_id,
   proposed_at, authorised_at, executed_at, verified_at, expires_at, created_at, updated_at`;
 
 function toRecord(row: ActionRow): ActionRecord {
@@ -95,6 +126,7 @@ function toRecord(row: ActionRow): ActionRecord {
     autonomyLevel: row.autonomy_level,
     approvalId: row.approval_id,
     idempotencyKey: row.idempotency_key,
+    requestDigest: row.request_digest,
     externalOperationRef: row.external_operation_ref,
     attemptCount: row.attempt_count,
     lastError: row.last_error,
@@ -145,6 +177,16 @@ export interface ExecuteResult {
   readonly action: ActionRecord;
   readonly execution: ExecutionResult;
   readonly alreadyExecuted: boolean;
+  /**
+   * Set when execution was refused before dispatch and the action cancelled.
+   *
+   * This is returned rather than thrown because the refusal itself is state
+   * that must survive: cancelling the action and recording the transition
+   * happen in the same transaction as the check, and an exception would roll
+   * both back, leaving a tampered or expired action sitting in AUTHORISED for
+   * the next attempt to find.
+   */
+  readonly refused: { readonly code: string; readonly reason: string } | null;
 }
 
 export interface VerifyResult {
@@ -255,11 +297,29 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
           parameters,
         });
 
-      const existing = await ctx.one<ActionRow>(
+      // The derived key exists to stop two schedulers reacting to the same
+      // finding from dispatching the same change twice. It must not become a
+      // permanent lock on ever proposing that remediation again.
+      //
+      // Once the previous attempt has reached a terminal state — rejected,
+      // cancelled, failed, or successfully confirmed — the question is open
+      // again. A monitoring product that could not reopen it would be unable to
+      // remediate a recurrence of anything it had ever fixed, and the finding
+      // would stay open with no route to resolution. So the search covers the
+      // base key and every attempt derived from it, reuses whichever is still
+      // in flight, and otherwise mints the next attempt.
+      const attempts = await ctx.many<ActionRow>(
         `SELECT ${ACTION_COLUMNS} FROM actions
-         WHERE organisation_id = $1 AND idempotency_key = $2`,
+         WHERE organisation_id = $1
+           AND (idempotency_key = $2 OR idempotency_key LIKE $2 || ':%')
+         ORDER BY proposed_at DESC, id DESC`,
         [ctx.organisationId, idempotencyKey],
       );
+      const existing =
+        attempts.find((row) => !isTerminalActionState(row.state as ActionState)) ?? null;
+      const effectiveKey =
+        attempts.length === 0 ? idempotencyKey : `${idempotencyKey}:${attempts.length + 1}`;
+
       if (existing && !isTerminalActionState(existing.state as ActionState)) {
         return {
           action: toRecord(existing),
@@ -306,14 +366,23 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         proposal.expiresAt ??
         new Date(Date.parse(now) + decision.approvalWindowHours * 3_600_000).toISOString();
 
+      const requestDigest = actionRequestDigest({
+        actionType: proposal.actionType,
+        riskClass: capability.riskClass,
+        integrationId: proposal.integrationId ?? null,
+        targetNodeId: proposal.targetNodeId ?? null,
+        targetExternalId: proposal.targetExternalId ?? null,
+        parameters: parameters as Record<string, unknown>,
+      });
+
       const inserted = await ctx.oneOrFail<ActionRow>(
         `INSERT INTO actions
            (organisation_id, node_id, action_type, integration_id, target_node_id, target_external_id,
             parameters, risk_class, state, finding_id, risk_id, proposed_by_actor, proposed_by_user_id,
             proposal_rationale, policy_id, policy_decision, autonomy_level, idempotency_key,
-            correlation_id, proposed_at, expires_at)
+            correlation_id, proposed_at, expires_at, request_digest)
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, 'PROPOSED', $9, $10, $11, $12, $13, $14,
-                 $15::jsonb, $16, $17, $18, $19, $20)
+                 $15::jsonb, $16, $17, $18, $19, $20, $21)
          RETURNING ${ACTION_COLUMNS}`,
         [
           ctx.organisationId,
@@ -332,10 +401,11 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
           deps.policyId,
           JSON.stringify(decision),
           decision.effectiveAutonomyLevel,
-          idempotencyKey,
+          effectiveKey,
           correlationId,
           now,
           expiresAt,
+          requestDigest,
         ],
         'Action',
       );
@@ -392,10 +462,11 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         });
       } else if (decision.outcome === 'REQUIRE_APPROVAL') {
         const approval = await ctx.oneOrFail<{ id: string }>(
-          `INSERT INTO approvals (organisation_id, action_id, required_approvals, expires_at)
-           VALUES ($1, $2, $3, $4)
+          `INSERT INTO approvals
+             (organisation_id, action_id, required_approvals, expires_at, request_digest)
+           VALUES ($1, $2, $3, $4, $5)
            RETURNING id`,
-          [ctx.organisationId, action.id, decision.requiredApprovals, expiresAt],
+          [ctx.organisationId, action.id, decision.requiredApprovals, expiresAt, requestDigest],
           'Approval',
         );
         action = await transition(
@@ -600,6 +671,7 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
             detail: 'Adopted the outcome of a previous successful attempt (idempotent replay).',
           },
           alreadyExecuted: true,
+          refused: null,
         };
       }
       if (priorAttempt && priorAttempt.status === 'UNKNOWN_OUTCOME') {
@@ -622,13 +694,86 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         );
       }
       if (action.expiresAt && Date.parse(action.expiresAt) <= Date.parse(now)) {
-        await transition(
+        const cancelled = await transition(
           actionId,
           'AUTHORISED',
           'CANCELLED',
           'Authorisation expired before execution',
         );
-        throw new AdericelError('PRECONDITION_FAILED', 'Authorisation expired before execution');
+        return {
+          action: cancelled,
+          execution: {
+            status: 'FAILED',
+            externalOperationRef: null,
+            detail: 'Authorisation expired before execution',
+            errorCode: 'AUTHORISATION_EXPIRED',
+            retryable: false,
+          },
+          alreadyExecuted: false,
+          refused: {
+            code: 'AUTHORISATION_EXPIRED',
+            reason:
+              'The authorisation for this action expired before it was dispatched, so it has been ' +
+              'cancelled. Propose the change again if it is still needed.',
+          },
+        };
+      }
+
+      // What was authorised must be what is about to be dispatched.
+      //
+      // The digest is taken at proposal and copied onto the approval; here it
+      // is re-derived from the row as it stands now. A change to the action
+      // type, the target, the integration or the parameters between the human
+      // saying yes and this moment breaks the comparison, and the action is
+      // cancelled rather than executed under an authority nobody granted.
+      if (action.requestDigest !== UNBOUND_REQUEST_DIGEST) {
+        const current = actionRequestDigest(action);
+        const approvalDigest = action.approvalId
+          ? ((
+              await ctx.one<{ request_digest: string }>(
+                `SELECT request_digest FROM approvals WHERE id = $1 AND organisation_id = $2`,
+                [action.approvalId, ctx.organisationId],
+              )
+            )?.request_digest ?? null)
+          : null;
+
+        const mismatch =
+          current !== action.requestDigest ||
+          (approvalDigest !== null &&
+            approvalDigest !== UNBOUND_REQUEST_DIGEST &&
+            approvalDigest !== action.requestDigest);
+
+        if (mismatch) {
+          const cancelled = await transition(
+            actionId,
+            'AUTHORISED',
+            'CANCELLED',
+            `The action changed after it was authorised (authorised ${action.requestDigest}, ` +
+              `now ${current})`,
+          );
+          deps.logger.error(
+            { actionId, authorisedDigest: action.requestDigest, currentDigest: current },
+            'refused to execute an action that changed after authorisation',
+          );
+          return {
+            action: cancelled,
+            execution: {
+              status: 'FAILED',
+              externalOperationRef: null,
+              detail: 'The action no longer matches what was authorised',
+              errorCode: 'AUTHORISATION_MISMATCH',
+              retryable: false,
+            },
+            alreadyExecuted: false,
+            refused: {
+              code: 'AUTHORISATION_MISMATCH',
+              reason:
+                'This action no longer matches what was authorised, so it has been cancelled ' +
+                'rather than executed. Propose the change again so it can be reviewed on its own ' +
+                'terms.',
+            },
+          };
+        }
       }
 
       const executing = await transition(actionId, 'AUTHORISED', 'EXECUTING', 'Dispatching', {
@@ -675,6 +820,7 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
             retryable: false,
           },
           alreadyExecuted: false,
+          refused: null,
         };
       }
 
@@ -812,7 +958,7 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         );
       }
 
-      return { action: finalAction, execution: result, alreadyExecuted: false };
+      return { action: finalAction, execution: result, alreadyExecuted: false, refused: null };
     },
 
     async verify(actionId, observedValue): Promise<VerifyResult> {

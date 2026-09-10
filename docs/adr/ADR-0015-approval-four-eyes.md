@@ -13,6 +13,11 @@ that they are implemented as a check the caller performs, and then a code path
 appears that does not perform it — a bulk operation, an "auto-approve for
 low-risk" setting, a service account created to make the tests easier.
 
+There is a second failure mode this ADR originally missed: the approval is
+genuine, the audit trail is genuine, and the change that executes is not the
+change that was approved, because the record the approval points at is mutable.
+ADR-0024 closes that by binding the approval to a digest of the request.
+
 ## Decision
 
 **Four-eyes is enforced by the shape of the model, not by a check somewhere.**

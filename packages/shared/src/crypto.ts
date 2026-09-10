@@ -177,7 +177,12 @@ export interface ApiKeyMaterial {
 }
 
 export function generateApiKey(hasher: TokenHasher, prefix = 'adk'): ApiKeyMaterial {
-  const keyId = randomBytes(9).toString('base64url');
+  // Hex, not base64url, and deliberately so: the key id sits between two
+  // underscore delimiters, and base64url's alphabet contains an underscore.
+  // A key id that happened to include one made the presented key unparseable,
+  // and roughly three in five issued keys did. The secret may still contain
+  // underscores because it is the final field and is parsed as the remainder.
+  const keyId = randomBytes(9).toString('hex');
   const secret = randomBytes(32).toString('base64url');
   return {
     keyId,
@@ -239,9 +244,19 @@ export function createTokenHasher(rootSecret: string): TokenHasher {
 }
 
 export function parseApiKey(presented: string): { keyId: string; secret: string } | null {
-  const parts = presented.split('_');
-  if (parts.length !== 3) return null;
-  const [prefix, keyId, secret] = parts;
+  // Split on the first two underscores only. The secret is base64url, whose
+  // alphabet includes an underscore, so splitting on every delimiter rejected
+  // most valid keys — a defect that made the majority of issued API keys fail
+  // authentication as "malformed". Every key that ever worked under the old
+  // parser still parses identically here.
+  const firstSeparator = presented.indexOf('_');
+  if (firstSeparator === -1) return null;
+  const secondSeparator = presented.indexOf('_', firstSeparator + 1);
+  if (secondSeparator === -1) return null;
+
+  const prefix = presented.slice(0, firstSeparator);
+  const keyId = presented.slice(firstSeparator + 1, secondSeparator);
+  const secret = presented.slice(secondSeparator + 1);
   if (prefix !== 'adk' || !keyId || !secret) return null;
   return { keyId, secret };
 }

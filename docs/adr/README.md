@@ -34,6 +34,7 @@ implications.
 | [0021](./ADR-0021-observability.md)                          | Observability and correlation                         | Accepted |
 | [0022](./ADR-0022-typescript-monorepo.md)                    | TypeScript monorepo                                   | Accepted |
 | [0023](./ADR-0023-recorded-assessment-inputs.md)             | Assessments record the facts they ran on              | Accepted |
+| [0024](./ADR-0024-approval-binds-to-the-request.md)          | An approval authorises one specific request           | Accepted |
 
 ## Writing a new ADR
 
