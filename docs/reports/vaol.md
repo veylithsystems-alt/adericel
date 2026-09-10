@@ -115,10 +115,10 @@ boundary and target maturity.
    who found several permitted operations could exercise them concurrently.
 4. **Exception evidence is stored unencrypted** and may contain whatever a failing
    automation put in it. No redaction pass exists.
-5. **Nothing binds a policy decision to the operation it authorised.** Adericel's
-   action engine solved this for actions (ADR-0024) with a request digest; VAOL
-   records the decision and the event separately, and a caller could in principle
-   obtain a decision for one operation and perform another.
+5. ~~**Nothing binds a policy decision to the operation it authorised.**~~
+   **Fixed.** Decisions and events now carry an operation digest covering the
+   full identity of what was authorised, including the payload, and
+   `findUnboundEvents` reports any event whose decision covers something else.
 6. **The `veylith` schema is in the same database as customer data.** Separation
    is by RLS policy and grant, which is the same mechanism protecting tenant
    isolation — well tested, but one mechanism rather than two.
@@ -151,13 +151,13 @@ boundary and target maturity.
 
 ```
 Test Files   43 passed (43)
-Tests       779 passed | 6 skipped (785)
+Tests       784 passed | 6 skipped (790)
 Build       tsc -b clean across 14 packages
 Migrations  19 applied to a virgin database and to one at 0017
 Web         builds clean; control room rendered against live data
 ```
 
-New in this work: 34 autonomy policy tests, 22 VAOL authority tests, 13 control
+New in this work: 34 autonomy policy tests, 27 VAOL authority tests, 13 control
 room tests, 20 operating cycle tests.
 
 Three guards were verified by breaking them and confirming the tests fail:
@@ -236,15 +236,13 @@ Items 13, 15 and 17 are intended to stay manual. The rest are the backlog.
 
 ## WHAT I WOULD DO NEXT, IN ORDER
 
-1. **Bind the decision to the operation.** The digest pattern from ADR-0024,
-   applied to VAOL — the most valuable security fix available.
-2. **Route Adericel's own signup and billing through the gate.** Those workflows
-   already exist and already run; putting them behind `operate` would take the
-   automation ratio from a test figure to a real one.
-3. **An email provider**, which unblocks the whole outreach half of the pipeline.
-4. **Veylith as its own Adericel customer** (§35). The dogfooding the brief asks
+1. **Route Adericel's own signup and billing through the gate.** Those workflows
+   Those workflows already exist and already run; putting them behind `operate`
+   would take the automation ratio from a test figure to a real one.
+2. **An email provider**, which unblocks the whole outreach half of the pipeline.
+3. **Veylith as its own Adericel customer** (§35). The dogfooding the brief asks
    for, and the fastest route to security monitoring.
-5. **A database constraint** that a state change carries a policy decision.
+4. **A database constraint** that a state change carries a policy decision.
 
 ---
 
