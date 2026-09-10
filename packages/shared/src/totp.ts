@@ -54,7 +54,12 @@ export function base32Encode(bytes: Buffer): string {
 }
 
 export function base32Decode(encoded: string): Buffer {
-  const normalised = encoded.replace(/=+$/, '').replace(/\s+/g, '').toUpperCase();
+  // The padding is stripped with a loop rather than `/=+$/`: anchored repetition
+  // is polynomial under backtracking, and this takes attacker-supplied text —
+  // a TOTP secret arriving from configuration or an enrolment payload.
+  let end = encoded.length;
+  while (end > 0 && encoded[end - 1] === '=') end -= 1;
+  const normalised = encoded.slice(0, end).replace(/\s+/g, '').toUpperCase();
   let bits = 0;
   let value = 0;
   const output: number[] = [];
@@ -199,8 +204,13 @@ export function totpProvisioningUri(options: {
 export function generateRecoveryCodes(count = 10): string[] {
   const codes: string[] = [];
   for (let i = 0; i < count; i += 1) {
-    const raw = base32Encode(randomBytes(10)).slice(0, 10);
-    codes.push(`${raw.slice(0, 5)}-${raw.slice(5, 10)}`);
+    // Fifteen base32 characters is 75 bits. The previous ten characters was 50,
+    // which is inside reach of an offline attack once the digest is known —
+    // and the digest used to be reproducible by anyone, because it was not
+    // keyed. Both halves of that are now fixed; this is the half that survives
+    // even if the hashing key is disclosed too.
+    const raw = base32Encode(randomBytes(10)).slice(0, 15);
+    codes.push(`${raw.slice(0, 5)}-${raw.slice(5, 10)}-${raw.slice(10, 15)}`);
   }
   return codes;
 }
@@ -210,8 +220,12 @@ export function normaliseRecoveryCode(code: string): string {
   return code.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 }
 
-export function hashRecoveryCode(code: string): string {
-  return createHmac('sha256', 'adericel-recovery-code')
-    .update(normaliseRecoveryCode(code))
-    .digest('hex');
+/**
+ * Recovery codes are hashed with a key derived from the deployment secret —
+ * `TokenHasher` in crypto.ts — rather than here, so that a database disclosure
+ * alone does not permit an offline search. Normalisation happens first so that
+ * how somebody typed the code cannot change its digest.
+ */
+export function recoveryCodeDigestInput(code: string): string {
+  return normaliseRecoveryCode(code);
 }

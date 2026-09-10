@@ -4,7 +4,7 @@ import {
   AdericelError,
   generateRecoveryCodes,
   generateTotpSecret,
-  hashRecoveryCode,
+  recoveryCodeDigestInput,
   newOpaqueToken,
   totpProvisioningUri,
   verifyTotp,
@@ -101,7 +101,7 @@ async function issueSession(
      RETURNING id`,
     [
       user.id,
-      hashRefreshToken(refreshToken),
+      hashRefreshToken(app.tokens, refreshToken),
       typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
       request.ip,
       now,
@@ -137,9 +137,12 @@ function accessTokenFor(
   };
 }
 
-/** Challenge tokens are opaque and stored hashed, like refresh tokens. */
-function hashChallengeToken(token: string): string {
-  return hashRefreshToken(`mfa-challenge:${token}`);
+/**
+ * Challenge tokens are opaque and stored hashed, like refresh tokens, and under
+ * a distinct prefix so a challenge digest can never match a session digest.
+ */
+function hashChallengeToken(app: AppContext, token: string): string {
+  return hashRefreshToken(app.tokens, `mfa-challenge:${token}`);
 }
 
 export function registerAuthRoutes(server: FastifyInstance, app: AppContext): void {
@@ -219,7 +222,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
            VALUES ($1, $2, $3::inet, $4, $5::timestamptz + ($6 || ' seconds')::interval)`,
           [
             user.id,
-            hashChallengeToken(challengeToken),
+            hashChallengeToken(app, challengeToken),
             request.ip,
             typeof request.headers['user-agent'] === 'string'
               ? request.headers['user-agent']
@@ -324,7 +327,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
             AND ch.consumed_at IS NULL
             AND ch.expires_at > $2::timestamptz
           FOR UPDATE OF ch`,
-        [hashChallengeToken(body.challengeToken), now],
+        [hashChallengeToken(app, body.challengeToken), now],
       );
       if (!challenge) return { ok: false as const, reason: 'no-challenge' };
       if (challenge.status !== 'ACTIVE') return { ok: false as const, reason: 'inactive' };
@@ -358,7 +361,11 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
               SET used_at = $3::timestamptz
             WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
             RETURNING id`,
-          [challenge.user_id, hashRecoveryCode(body.recoveryCode), now],
+          [
+            challenge.user_id,
+            app.tokens.hash('recovery-code', recoveryCodeDigestInput(body.recoveryCode)),
+            now,
+          ],
         );
         if (!consumed) return { ok: false as const, reason: 'bad-recovery-code' };
 
@@ -599,7 +606,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
         for (const code of codes) {
           await ctx.query(`INSERT INTO user_recovery_codes (user_id, code_hash) VALUES ($1, $2)`, [
             principal.principalId,
-            hashRecoveryCode(code),
+            app.tokens.hash('recovery-code', recoveryCodeDigestInput(code)),
           ]);
         }
 
@@ -722,7 +729,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
         `SELECT s.id, s.user_id, u.display_name, u.email, u.msp_id, u.status
          FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.refresh_token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > $2::timestamptz`,
-        [hashRefreshToken(body.refreshToken), now],
+        [hashRefreshToken(app.tokens, body.refreshToken), now],
       );
       if (!session || session.status !== 'ACTIVE') return null;
 
@@ -736,7 +743,7 @@ export function registerAuthRoutes(server: FastifyInstance, app: AppContext): vo
          WHERE id = $1`,
         [
           session.id,
-          hashRefreshToken(nextToken),
+          hashRefreshToken(app.tokens, nextToken),
           now,
           String(app.config.auth.refreshTokenTtlSeconds),
         ],

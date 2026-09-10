@@ -4,7 +4,7 @@ import {
   base32Encode,
   generateRecoveryCodes,
   generateTotpSecret,
-  hashRecoveryCode,
+  recoveryCodeDigestInput,
   normaliseRecoveryCode,
   totpCodeForStep,
   totpProvisioningUri,
@@ -164,24 +164,33 @@ describe('provisioning URI', () => {
 });
 
 describe('recovery codes', () => {
-  it('generates ten distinct grouped codes', () => {
+  it('generates ten distinct codes of 75 bits each', () => {
     const codes = generateRecoveryCodes();
     expect(codes).toHaveLength(10);
     expect(new Set(codes).size).toBe(10);
-    for (const code of codes) expect(code).toMatch(/^[A-Z2-7]{5}-[A-Z2-7]{5}$/);
+    // Fifteen base32 characters. Ten was 50 bits, which is inside reach of an
+    // offline search once a digest is known — and the digest was reproducible
+    // by anyone, because the hash was keyed with a public label. This is the
+    // half of that fix which holds even if the hashing key is disclosed too.
+    for (const code of codes) {
+      expect(code).toMatch(/^[A-Z2-7]{5}-[A-Z2-7]{5}-[A-Z2-7]{5}$/);
+      expect(normaliseRecoveryCode(code)).toHaveLength(15);
+    }
   });
 
-  it('hashes independently of how the user typed it', () => {
+  it('normalises independently of how the user typed it', () => {
     const [code] = generateRecoveryCodes(1) as [string];
-    const typedBadly = ` ${code.toLowerCase().replace('-', ' ')} `;
-    expect(hashRecoveryCode(typedBadly)).toBe(hashRecoveryCode(code));
+    const typedBadly = ` ${code.toLowerCase().replaceAll('-', ' ')} `;
+    expect(recoveryCodeDigestInput(typedBadly)).toBe(recoveryCodeDigestInput(code));
     expect(normaliseRecoveryCode(typedBadly)).toBe(normaliseRecoveryCode(code));
   });
 
-  it('does not store the code itself', () => {
+  it('exposes only a normalised digest input, never a digest of its own', () => {
+    // Hashing lives in crypto.ts, keyed from the deployment secret. If this
+    // module grew its own hash again it would necessarily be unkeyed, because
+    // this module has no access to the secret — which is exactly how the
+    // original defect happened.
     const [code] = generateRecoveryCodes(1) as [string];
-    const hash = hashRecoveryCode(code);
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(hash).not.toContain(normaliseRecoveryCode(code));
+    expect(recoveryCodeDigestInput(code)).toBe(normaliseRecoveryCode(code));
   });
 });

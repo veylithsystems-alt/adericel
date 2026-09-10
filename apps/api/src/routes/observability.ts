@@ -208,12 +208,24 @@ export function registerObservabilityRoutes(server: FastifyInstance, app: AppCon
   );
 
   /** Liveness: is the process running? Deliberately dependency-free. */
-  server.get('/health/live', async (_request, reply) =>
+  /**
+   * Liveness and readiness are exempt from rate limiting.
+   *
+   * An orchestrator polls these on a fixed interval and interprets a non-200 as
+   * a dead container. Throttling them means a burst of ordinary traffic
+   * exhausts the budget, the health probe starts failing, and the orchestrator
+   * restarts a process that was working — turning a load spike into an outage
+   * and then into a restart loop. They are also the cheapest routes on the
+   * server and reveal nothing.
+   */
+  const noRateLimit = { config: { rateLimit: false } };
+
+  server.get('/health/live', noRateLimit, async (_request, reply) =>
     reply.status(200).send({ status: 'ok', uptimeSeconds: Math.round(process.uptime()) }),
   );
 
   /** Readiness: can this instance serve traffic? Checks dependencies. */
-  server.get('/health/ready', async (_request, reply) => {
+  server.get('/health/ready', noRateLimit, async (_request, reply) => {
     const health = await collectHealth(app, { deep: false });
     const ready = health.components.every((c) => c.status === 'HEALTHY' || c.status === 'DEGRADED');
     return reply.status(ready ? 200 : 503).send({

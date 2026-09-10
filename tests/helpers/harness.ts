@@ -24,7 +24,7 @@ import {
   type AdericelConfig,
   type Clock,
 } from '@adericel/shared';
-import { databaseFromConfig, type Database } from '@adericel/graph';
+import { createDatabase, databaseFromConfig, type Database } from '@adericel/graph';
 import {
   buildConnectorRegistry,
   createFixtureState,
@@ -110,7 +110,14 @@ export interface Harness {
   truncate(): Promise<void>;
 }
 
-export async function createHarness(options: { instant?: string } = {}): Promise<Harness> {
+export async function createHarness(
+  options: {
+    instant?: string;
+    rateLimitMax?: number;
+    /** Extra environment for suites that need a differently configured server. */
+    env?: Record<string, string>;
+  } = {},
+): Promise<Harness> {
   await ensureMigrated();
 
   const config = loadConfig({
@@ -122,11 +129,22 @@ export async function createHarness(options: { instant?: string } = {}): Promise
     STORAGE_DRIVER: 'filesystem',
     STORAGE_FILESYSTEM_ROOT: `./var/test-storage/${randomUUID()}`,
     LOG_LEVEL: 'fatal',
-    API_RATE_LIMIT_MAX: '100000',
+    // Effectively unlimited by default so ordinary suites are not throttled;
+    // the webhook hardening suite lowers it to exercise the limiter itself.
+    API_RATE_LIMIT_MAX: String(options.rateLimitMax ?? 100000),
+    ...options.env,
   });
 
   const clock = manualClock(options.instant ?? TEST_INSTANT);
   const db = databaseFromConfig(config, nullLogger);
+  // A second handle for fixture setup and teardown, connected as the owner
+  // rather than assuming `adericel_app`. Everything the tests actually assert
+  // runs through `db`, which behaves exactly as production does.
+  const admin = createDatabase({
+    connectionString: testDatabaseUrl(),
+    applicationRole: null,
+    logger: nullLogger,
+  });
   const fixtureState = createFixtureState();
   const { registry: connectors } = buildConnectorRegistry({
     egressPolicy: { allowlist: [], blockPrivate: false },
@@ -155,9 +173,15 @@ export async function createHarness(options: { instant?: string } = {}): Promise
     async close() {
       await server.close();
       await db.close();
+      await admin.close();
     },
     async truncate() {
-      await db.withPlatform(async (ctx) => {
+      // Truncation is administrative work, not application work, so it runs on
+      // a connection that does NOT assume the restricted application role. The
+      // app role deliberately has no TRUNCATE privilege — production never
+      // truncates, and granting it so a test fixture is convenient would widen
+      // the role that tenant isolation depends on.
+      await admin.withPlatform(async (ctx) => {
         // Order matters only for the tables outside the cascade; TRUNCATE with
         // CASCADE handles the rest in one statement.
         await ctx.query(`

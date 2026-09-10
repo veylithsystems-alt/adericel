@@ -2,6 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   createHmac,
+  hkdfSync,
   randomBytes,
   scrypt as scryptCb,
   timingSafeEqual,
@@ -93,8 +94,36 @@ export function verifyHmacSha256(
  */
 const AEAD_VERSION = 'v1';
 
+/**
+ * Derive a purpose-bound subkey from the deployment's root secret.
+ *
+ * This replaces a construction that CodeQL flagged as a hard-coded credential
+ * and that was, on inspection, genuinely the wrong shape:
+ * `createHmac('sha256', '<public label>').update(secret)` puts the public label
+ * in the key position and the secret in the message position. HMAC's security
+ * as a key-derivation function rests on the *key* being secret, so that
+ * construction was a domain-separated hash of the secret rather than a keyed
+ * derivation — and where the input was low-entropy, an attacker with the
+ * database could reproduce it without knowing anything.
+ *
+ * HKDF is the primitive this always wanted: the root secret is the input keying
+ * material, and the label is `info`, which is exactly what `info` is for.
+ */
+export function deriveSubkey(rootSecret: string, purpose: string, length = 32): Buffer {
+  return Buffer.from(
+    hkdfSync('sha256', Buffer.from(rootSecret, 'utf8'), ADERICEL_HKDF_SALT, purpose, length),
+  );
+}
+
+/**
+ * A fixed, public salt. HKDF's salt is not required to be secret — its job is
+ * domain separation between applications sharing a secret, and `info` carries
+ * the per-purpose separation within Adericel.
+ */
+const ADERICEL_HKDF_SALT = Buffer.from('adericel/hkdf/v1', 'utf8');
+
 function deriveKey(secret: string): Buffer {
-  return createHmac('sha256', 'adericel-credential-encryption').update(secret).digest();
+  return deriveSubkey(secret, 'credential-encryption');
 }
 
 export interface CredentialCipher {
@@ -136,8 +165,9 @@ export function createCredentialCipher(secret: string): CredentialCipher {
 
 /**
  * API keys are presented as `adk_<keyId>_<secret>`. The database stores only a
- * hash of the secret, keyed by keyId, so a database disclosure does not yield
- * usable credentials and lookup remains a single indexed read.
+ * keyed hash of the secret (see `createTokenHasher`), indexed by keyId, so a
+ * disclosure does not yield usable credentials and lookup remains one indexed
+ * read.
  */
 export interface ApiKeyMaterial {
   readonly keyId: string;
@@ -146,19 +176,66 @@ export interface ApiKeyMaterial {
   readonly secretHash: string;
 }
 
-export function generateApiKey(prefix = 'adk'): ApiKeyMaterial {
+export function generateApiKey(hasher: TokenHasher, prefix = 'adk'): ApiKeyMaterial {
   const keyId = randomBytes(9).toString('base64url');
   const secret = randomBytes(32).toString('base64url');
   return {
     keyId,
     secret,
     presented: `${prefix}_${keyId}_${secret}`,
-    secretHash: hashApiKeySecret(secret),
+    secretHash: hasher.hash('api-key', secret),
   };
 }
 
-export function hashApiKeySecret(secret: string): string {
-  return createHmac('sha256', 'adericel-api-key').update(secret).digest('hex');
+/**
+ * Keyed hashing for bearer tokens held at rest.
+ *
+ * Refresh tokens, API key secrets and MFA recovery codes are all the same
+ * shape: a bearer value the user holds, stored only as a digest so a database
+ * disclosure does not yield usable credentials. That guarantee only holds if
+ * the digest is *keyed* — otherwise anyone with the table can brute-force it
+ * offline, and the cost of doing so is set entirely by the token's entropy.
+ *
+ * The previous construction was not keyed. It passed a public label where HMAC
+ * expects a secret, so the digests were reproducible by anyone. For 32-byte
+ * random tokens that was survivable; for MFA recovery codes, which were 50 bits
+ * so a person can type them, it was not — roughly a day of GPU time to recover
+ * every code in the table and defeat the second factor guarding approvals.
+ *
+ * The key is derived from the deployment's root secret rather than configured
+ * separately: HKDF exists so that one well-guarded secret can safely produce
+ * many purpose-bound subkeys, and a fourth secret for an operator to mismanage
+ * would be a worse outcome than the one it prevents.
+ */
+export const TOKEN_PURPOSES = ['refresh-token', 'api-key', 'recovery-code'] as const;
+export type TokenPurpose = (typeof TOKEN_PURPOSES)[number];
+
+export interface TokenHasher {
+  hash(purpose: TokenPurpose, token: string): string;
+  /** Constant-time comparison against a stored digest. */
+  matches(purpose: TokenPurpose, token: string, storedHex: string): boolean;
+}
+
+export function createTokenHasher(rootSecret: string): TokenHasher {
+  // Derived once. Each purpose gets its own key, so a digest from one table can
+  // never be replayed against another.
+  const keys = new Map<TokenPurpose, Buffer>(
+    TOKEN_PURPOSES.map((purpose) => [purpose, deriveSubkey(rootSecret, `token-hash/${purpose}`)]),
+  );
+
+  return {
+    hash(purpose, token) {
+      const key = keys.get(purpose);
+      if (!key) throw new Error(`Unknown token purpose: ${purpose}`);
+      return createHmac('sha256', key).update(token, 'utf8').digest('hex');
+    },
+    matches(purpose, token, storedHex) {
+      return constantTimeEquals(
+        Buffer.from(this.hash(purpose, token), 'utf8'),
+        Buffer.from(storedHex, 'utf8'),
+      );
+    },
+  };
 }
 
 export function parseApiKey(presented: string): { keyId: string; secret: string } | null {

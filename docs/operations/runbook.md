@@ -42,6 +42,34 @@ changed after it was applied — restore the file to its applied content rather
 than forcing past it, because the schema and the code no longer agree about what
 that migration did.
 
+## The API refuses to start: "tenant isolation is not enforced"
+
+Working as designed, and the most important refusal in the product.
+
+Row level security is bypassed unconditionally by a superuser, and `FORCE ROW
+LEVEL SECURITY` does nothing about that. Every transaction therefore assumes the
+`adericel_app` role, created by migration 0011, and startup verifies that the
+effective role cannot bypass RLS before a single request is served.
+
+If this fires:
+
+```sql
+-- Does the role exist, and is it safe?
+SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'adericel_app';
+
+-- Can the connecting role assume it?
+SELECT pg_has_role(current_user, 'adericel_app', 'MEMBER');
+```
+
+Missing role: re-run migrations. If the migration runner lacks CREATEROLE it
+will have failed with the exact statement for a DBA to run.
+
+Role exists but is a superuser: `ALTER ROLE adericel_app NOSUPERUSER NOBYPASSRLS;`
+
+**Do not work around this by unsetting `DATABASE_APPLICATION_ROLE`.** An
+instance in that state serves every request correctly right up until it serves
+one customer another customer's assurance data, with no signal in between.
+
 ## Everything returns no data, but nothing errors
 
 The classic fail-closed signature: tenant context was not established, so

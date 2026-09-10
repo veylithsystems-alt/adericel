@@ -73,12 +73,32 @@ export function registerWebhookRoutes(server: FastifyInstance, app: AppContext):
   }
 
   /**
+   * Webhook endpoints carry a tighter budget than the authenticated API.
+   *
+   * The global limiter already covers every route, so CodeQL's finding here was
+   * not strictly true — but it pointed at something real. These two endpoints
+   * are the only ones reachable without a principal, so the global key
+   * generator falls back to the source address, and 600 requests a minute is a
+   * generous allowance for an unauthenticated surface. A signature failure
+   * costs one HMAC and no database access, which bounds the damage; this bounds
+   * the noise as well.
+   */
+  const webhookRateLimit = {
+    config: {
+      rateLimit: {
+        max: 60,
+        timeWindow: 60_000,
+      },
+    },
+  };
+
+  /**
    * Observation ingestion by webhook.
    *
    * Used by n8n workflows and by customer-side scripts that push rather than
    * being polled. The observations travel the same pipeline as connector output.
    */
-  server.post('/v1/webhooks/observations', async (request, reply) => {
+  server.post('/v1/webhooks/observations', webhookRateLimit, async (request, reply) => {
     verifySignature(request);
     const body = parseBody(
       request,
@@ -127,7 +147,7 @@ export function registerWebhookRoutes(server: FastifyInstance, app: AppContext):
   });
 
   /** Health ping, so a workflow can confirm signing is configured correctly. */
-  server.post('/v1/webhooks/ping', async (request, reply) => {
+  server.post('/v1/webhooks/ping', webhookRateLimit, async (request, reply) => {
     verifySignature(request);
     return reply.status(200).send({
       ok: true,

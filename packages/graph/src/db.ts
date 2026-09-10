@@ -158,10 +158,31 @@ export interface DatabaseOptions {
   readonly ssl?: boolean;
   readonly logger?: Logger;
   readonly applicationName?: string;
+  /**
+   * Role assumed for the duration of every transaction, so that row level
+   * security is evaluated against a role that cannot bypass it. Null disables
+   * the behaviour, which is only appropriate where no RLS-protected table is
+   * reached — the migration runner, for instance, which must be the owner.
+   */
+  readonly applicationRole?: string | null;
 }
+
+/** A PostgreSQL identifier we are willing to interpolate into `SET LOCAL ROLE`. */
+const ROLE_NAME_RE = /^[a-z_][a-z0-9_$]*$/;
 
 export function createDatabase(options: DatabaseOptions): Database {
   const logger = options.logger ?? nullLogger;
+
+  // Validated once, here, because `SET ROLE` takes an identifier rather than a
+  // parameter and so cannot be bound. Rejecting at construction means a
+  // malformed value fails at startup rather than inside a request.
+  const applicationRole = options.applicationRole ?? null;
+  if (applicationRole !== null && !ROLE_NAME_RE.test(applicationRole)) {
+    throw new AdericelError(
+      'VALIDATION_FAILED',
+      `Invalid database application role: ${applicationRole}`,
+    );
+  }
   const pool = new pg.Pool({
     connectionString: options.connectionString,
     max: options.poolMax ?? 10,
@@ -198,6 +219,38 @@ export function createDatabase(options: DatabaseOptions): Database {
     }
   }
 
+  /**
+   * Become the application role for the rest of this transaction.
+   *
+   * This is what makes row level security actually apply. RLS is evaluated
+   * against `current_user`, and a superuser bypasses it unconditionally —
+   * FORCE ROW LEVEL SECURITY closes the table-owner hole and does nothing about
+   * a superuser. So whether layer 2 of tenant isolation existed at all used to
+   * depend on how the operator provisioned the role in DATABASE_URL, and a
+   * deployment that got it wrong passed every test.
+   *
+   * `SET LOCAL ROLE` binds it to the transaction: it reverts on commit or
+   * rollback, and it cannot leak to the next borrower of a pooled connection.
+   *
+   * The role is asserted at startup to be incapable of bypassing RLS
+   * (`assertTenantIsolationEnforced`), so this is not merely a rename.
+   */
+  async function assumeApplicationRole(client: pg.PoolClient): Promise<void> {
+    if (!applicationRole) return;
+    // The identifier is validated once at construction rather than escaped
+    // here, because SET ROLE takes an identifier and not a parameter.
+    await client.query(`SET LOCAL ROLE ${applicationRole}`);
+    // The default search_path is `"$user", public`, and `$user` resolves to the
+    // CURRENT role. Assuming a different role therefore silently repoints the
+    // schema search at a schema named after that role, which does not exist,
+    // and every unqualified table name stops resolving.
+    //
+    // Pinning the schema explicitly is also the more honest arrangement: the
+    // tables live in `adericel`, and relying on the connection role happening
+    // to share that name was a coincidence rather than a design.
+    await client.query('SET LOCAL search_path TO adericel, public');
+  }
+
   return {
     pool,
 
@@ -212,6 +265,7 @@ export function createDatabase(options: DatabaseOptions): Database {
       }
       return runInTransaction(
         async (client) => {
+          await assumeApplicationRole(client);
           await client.query("SELECT set_config('adericel.scope', 'tenant', true)");
           await client.query('SELECT set_config($1, $2, true)', [
             'adericel.organisation_id',
@@ -225,6 +279,11 @@ export function createDatabase(options: DatabaseOptions): Database {
     async withPlatform<T>(fn: (ctx: PlatformContext) => Promise<T>): Promise<T> {
       return runInTransaction(
         async (client) => {
+          // Platform scope reads across tenants, and it does so because the
+          // policy grants it through the scope GUC — not because the role is
+          // privileged. Assuming the same restricted role here means a bug in
+          // the scope handling still meets a policy rather than a superuser.
+          await assumeApplicationRole(client);
           await client.query("SELECT set_config('adericel.scope', 'platform', true)");
           await client.query("SELECT set_config('adericel.organisation_id', '', true)");
         },
@@ -256,6 +315,7 @@ export function databaseFromConfig(config: AdericelConfig, logger?: Logger): Dat
     statementTimeoutMs: config.database.statementTimeoutMs,
     ssl: config.database.ssl,
     applicationName: config.serviceName,
+    applicationRole: config.database.applicationRole,
     ...(logger ? { logger } : {}),
   });
 }

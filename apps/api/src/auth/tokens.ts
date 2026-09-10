@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { AdericelError, constantTimeEquals } from '@adericel/shared';
+import { AdericelError, constantTimeEquals, type TokenHasher } from '@adericel/shared';
 
 /**
  * Access tokens.
@@ -119,9 +119,15 @@ export function verifyAccessToken(
   return payload;
 }
 
-/** Refresh tokens are opaque; only their hash is stored. */
-export function hashRefreshToken(token: string): string {
-  return createHmac('sha256', 'adericel-refresh-token').update(token).digest('hex');
+/**
+ * Refresh tokens are opaque and only their digest is stored.
+ *
+ * The digest is keyed from the deployment secret rather than computed with a
+ * public label, so a disclosure of the sessions table does not let an attacker
+ * confirm a guessed token offline. See `createTokenHasher` in crypto.ts.
+ */
+export function hashRefreshToken(hasher: TokenHasher, token: string): string {
+  return hasher.hash('refresh-token', token);
 }
 
 export function safeCompare(a: string, b: string): boolean {

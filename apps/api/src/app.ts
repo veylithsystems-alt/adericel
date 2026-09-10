@@ -89,8 +89,17 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
       if (typeof apiKey === 'string') return `key:${apiKey.slice(0, 16)}`;
       return `ip:${request.ip}`;
     },
-    errorResponseBuilder: () => ({
-      error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+    // The status code has to travel on the thrown object. The plugin hands its
+    // built response to the error handler rather than sending it directly, and
+    // a body with no `statusCode` was falling through to the unhandled branch —
+    // so exceeding a rate limit produced 500 INTERNAL_ERROR rather than 429
+    // RATE_LIMITED. A throttled client cannot tell a limit from a fault, and a
+    // 500 is exactly the response a client is most likely to retry hard.
+    errorResponseBuilder: (_request, context) => ({
+      statusCode: 429,
+      code: 'RATE_LIMITED',
+      error: 'Too Many Requests',
+      message: `Too many requests. Retry after ${context.after}.`,
     }),
   });
 

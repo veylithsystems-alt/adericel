@@ -39,12 +39,26 @@ export interface ProvisionedOrganisation {
   readonly nodeId: string;
 }
 
+/**
+ * Derive a URL-safe slug from an organisation name.
+ *
+ * The trim is a loop rather than `/^-+|-+$/g`. That pattern is anchored
+ * alternation over a repeated character class, which CodeQL flags as polynomial
+ * backtracking; V8 happens to optimise it and the caller happens to cap the
+ * name at 200 characters, so it was not exploitable — but both of those are
+ * facts about the current situation rather than properties of this function.
+ * Somebody calling it from an unbounded path later would reintroduce the
+ * problem silently, and a loop simply cannot have it.
+ */
 function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
+  const collapsed = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+  let start = 0;
+  let end = collapsed.length;
+  while (start < end && collapsed[start] === '-') start += 1;
+  while (end > start && collapsed[end - 1] === '-') end -= 1;
+
+  return collapsed.slice(start, end).slice(0, 60);
 }
 
 export async function provisionOrganisation(

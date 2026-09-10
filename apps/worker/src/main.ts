@@ -8,7 +8,11 @@ import {
   sleep,
   systemClock,
 } from '@adericel/shared';
-import { createDataKeyStore, databaseFromConfig } from '@adericel/graph';
+import {
+  assertTenantIsolationEnforced,
+  createDataKeyStore,
+  databaseFromConfig,
+} from '@adericel/graph';
 import { createObjectStore } from '@adericel/evidence';
 import { buildConnectorRegistry } from '@adericel/integrations';
 import { compilePolicy, DEFAULT_ACTION_POLICY } from '@adericel/policy';
@@ -105,6 +109,15 @@ async function main(): Promise<void> {
 
   await db.ping();
   await storage.ping();
+
+  // Same reasoning as the API. The worker writes evidence and executes actions
+  // inside tenant transactions, so an unenforced instance is at least as
+  // dangerous here as it is on the request path.
+  await assertTenantIsolationEnforced({
+    db,
+    logger,
+    isProduction: config.nodeEnv === 'production',
+  });
   logger.info(
     {
       subscribers: subscribers.map((s) => s.name),

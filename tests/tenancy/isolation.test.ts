@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { inspectTenantIsolation } from '@adericel/graph';
 import {
   bearer,
   createHarness,
@@ -140,6 +141,52 @@ describe.skipIf(!available)('tenant isolation', () => {
           (e) => e.organisationId === alpha.organisationId || e.organisationId === null,
         ),
       ).toBe(true);
+    });
+  });
+
+  /**
+   * Before anything else, prove the suite can fail.
+   *
+   * Every test below asserts that row level security prevents something. RLS is
+   * bypassed unconditionally by a superuser, and FORCE ROW LEVEL SECURITY does
+   * nothing about that — so under a superuser connection all of them pass
+   * vacuously while proving the exact opposite of what they claim.
+   *
+   * That is not hypothetical. These tests passed on a developer machine, where
+   * the role happened to be a non-superuser owner, and failed in CI, where the
+   * postgres image creates POSTGRES_USER as a superuser. The tests were right
+   * and the schema was wrong: nothing assumed the restricted role, and the role
+   * the configuration named did not exist.
+   *
+   * This block is the guard against that recurring. If it fails, none of the
+   * others mean anything, whatever they report.
+   */
+  describe('the conditions under which this suite is meaningful', () => {
+    it('runs as a role that cannot bypass row level security', async () => {
+      const report = await inspectTenantIsolation(harness.db);
+      expect(
+        report.isSuperuser,
+        `effective role "${report.effectiveRole}" is a superuser, so RLS is not enforced and ` +
+          'every isolation assertion below would pass without proving anything',
+      ).toBe(false);
+      expect(report.bypassesRls, `effective role "${report.effectiveRole}" has BYPASSRLS`).toBe(
+        false,
+      );
+    });
+
+    it('assumes the dedicated application role rather than the connection role', async () => {
+      // The connection may legitimately be the owner or a superuser — that is
+      // the operator's choice and Adericel cannot control it. What it can
+      // control is which role the transaction runs as.
+      const report = await inspectTenantIsolation(harness.db);
+      expect(report.effectiveRole).toBe('adericel_app');
+    });
+
+    it('reports isolation as enforced overall', async () => {
+      const report = await inspectTenantIsolation(harness.db);
+      expect(report.unprotectedTables).toEqual([]);
+      expect(report.leaksWithoutContext).toBe(false);
+      expect(report.enforced).toBe(true);
     });
   });
 

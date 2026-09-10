@@ -1,5 +1,6 @@
 import {
   createCredentialCipher,
+  createTokenHasher,
   createEnvelopeCipher,
   createLocalRootKeyProvider,
   createLogger,
@@ -8,6 +9,7 @@ import {
   type AdericelConfig,
   type Clock,
   type CredentialCipher,
+  type TokenHasher,
   type EnvelopeCipher,
   type Logger,
   type PasswordHasher,
@@ -47,6 +49,12 @@ export interface AppContext {
    * additional authenticated data.
    */
   readonly secrets: CredentialCipher;
+  /**
+   * Keyed hashing for bearer tokens held at rest — refresh tokens, API key
+   * secrets, MFA recovery codes. Keyed rather than plain, so a database
+   * disclosure does not permit an offline search (see crypto.ts).
+   */
+  readonly tokens: TokenHasher;
   readonly unsealCredentials: CredentialUnsealer;
   readonly startedAtIso: string;
 }
@@ -151,6 +159,7 @@ export function createAppContext(options: CreateContextOptions): AppContext {
     passwords: createPasswordHasher(config.auth.passwordPepper),
     credentials,
     secrets: createCredentialCipher(config.auth.credentialEncryptionKey),
+    tokens: createTokenHasher(config.auth.credentialEncryptionKey),
     unsealCredentials,
     startedAtIso: clock.nowIso(),
   };

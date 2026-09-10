@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCredentialCipher, deriveSubkey } from './crypto.js';
 
 /**
  * Envelope encryption for credentials at rest.
@@ -87,10 +88,6 @@ export interface SealContext {
   readonly aad: string;
 }
 
-function deriveLegacyKey(secret: string): Buffer {
-  return createHmac('sha256', 'adericel-credential-encryption').update(secret).digest();
-}
-
 /**
  * A root key provider backed by a configured secret.
  *
@@ -99,8 +96,12 @@ function deriveLegacyKey(secret: string): Buffer {
  * produces data keys that are visibly wrapped under a different one.
  */
 export function createLocalRootKeyProvider(secret: string): RootKeyProvider {
-  const key = createHmac('sha256', 'adericel-root-key').update(secret).digest();
-  const keyId = `local:${createHmac('sha256', 'adericel-root-key-id').update(secret).digest('hex').slice(0, 16)}`;
+  // HKDF, with the purpose in `info`. The previous construction put the public
+  // label in HMAC's key position and the secret in the message position, which
+  // is the wrong way round and was flagged as a hard-coded credential — with
+  // justification, because a key-derivation whose key is public is not keyed.
+  const key = deriveSubkey(secret, 'root-key-wrapping');
+  const keyId = `local:${deriveSubkey(secret, 'root-key-id').toString('hex').slice(0, 16)}`;
 
   return {
     keyId,
@@ -220,19 +221,12 @@ export function createEnvelopeCipher(options: EnvelopeCipherOptions): EnvelopeCi
             'Value is sealed in the legacy format and no legacy secret is configured',
           );
         }
-        const [, ivB64, tagB64, dataB64] = parts;
-        if (!ivB64 || !tagB64 || dataB64 === undefined) throw new Error('Malformed sealed value');
-        const decipher = createDecipheriv(
-          'aes-256-gcm',
-          deriveLegacyKey(options.legacySecret),
-          Buffer.from(ivB64, 'base64url'),
-        );
-        decipher.setAAD(Buffer.from(context.aad, 'utf8'));
-        decipher.setAuthTag(Buffer.from(tagB64, 'base64url'));
-        return Buffer.concat([
-          decipher.update(Buffer.from(dataB64, 'base64url')),
-          decipher.final(),
-        ]).toString('utf8');
+        // Delegated to the v1 cipher rather than reimplemented. Keeping a
+        // second copy of a key derivation here is how the two silently diverge:
+        // it happened once already, when the derivation in crypto.ts moved to
+        // HKDF and this copy did not, which would have made every legacy value
+        // unopenable with no test able to tell.
+        return createCredentialCipher(options.legacySecret).decrypt(sealed, context.aad);
       }
 
       if (version !== ENVELOPE_VERSION) throw new Error('Unrecognised sealed value format');

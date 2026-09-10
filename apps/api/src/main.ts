@@ -1,4 +1,5 @@
 import { loadConfig, errorFields } from '@adericel/shared';
+import { assertTenantIsolationEnforced } from '@adericel/graph';
 import { createAppContext } from './context.js';
 import { buildServer } from './app.js';
 
@@ -26,6 +27,16 @@ async function main(): Promise<void> {
 
   const latency = await app.db.ping();
   app.logger.info({ latencyMs: latency }, 'database reachable');
+
+  // Before serving a single request, prove that tenant isolation is actually in
+  // force. An instance where row level security is silently bypassed works
+  // perfectly right up until it serves one customer another customer's
+  // assurance data, so this refuses to start rather than reporting unhealthy.
+  await assertTenantIsolationEnforced({
+    db: app.db,
+    logger: app.logger,
+    isProduction: config.nodeEnv === 'production',
+  });
 
   const server = await buildServer(app);
 

@@ -7,7 +7,7 @@ import {
   type Role,
 } from '@adericel/domain';
 import type { PlatformContext } from '@adericel/graph';
-import { AdericelError, hashApiKeySecret, parseApiKey, type Clock } from '@adericel/shared';
+import { AdericelError, parseApiKey, type Clock } from '@adericel/shared';
 import type { AppContext } from '../context.js';
 import { verifyAccessToken } from './tokens.js';
 
@@ -119,7 +119,7 @@ export async function principalFromApiKey(app: AppContext, presented: string): P
 
     // Compute the candidate hash regardless of whether the key id was found, so
     // a valid key id is not distinguishable from an invalid one by timing.
-    const candidate = hashApiKeySecret(parsed.secret);
+    const candidate = app.tokens.hash('api-key', parsed.secret);
     if (!row || row.secret_hash !== candidate) {
       throw new AdericelError('UNAUTHENTICATED', 'Invalid API key');
     }
