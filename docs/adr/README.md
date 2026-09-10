@@ -40,6 +40,7 @@ implications.
 | [0027](./ADR-0027-billing-lapse.md)                          | Billing lapse: stop asserting, keep the record        | Accepted |
 | [0028](./ADR-0028-connector-manifests-and-capability-resolution.md) | Connectors declare capability in canonical predicates | Accepted |
 | [0029](./ADR-0029-source-conflict.md)                        | When two systems disagree, Adericel does not choose   | Accepted |
+| [0030](./ADR-0030-offboarding.md)                            | A customer leaves with their record                   | Accepted |
 
 ## Writing a new ADR
 

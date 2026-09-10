@@ -62,10 +62,16 @@ packages/
   domain/         The Organisational Assurance Graph, claims, authorisation.
   graph/          Graph persistence and traversal.
   evidence/       Provenance, integrity, freshness, supersession, storage.
-  policy/          Frameworks, controls, rulesets, versioning.
+  policy/         Frameworks, controls, rulesets, versioning.
   actions/        The action lifecycle: propose → approve → execute → verify.
   integrations/   One connector contract; SSRF-guarded egress.
+  billing/        Subscriptions, provider events, lapse.
+  notifications/  Everything Adericel needs a person to see.
   shared/         Config, canonical JSON, clock, logging, errors.
+
+  autonomy/       A five-valued authority engine. Pure. UNKNOWN never permits.
+  vaol/           Veylith's own operating layer: the gate, the exception
+                  queue, the business ledger, the commercial pipeline.
 
 apps/
   api/            Fastify HTTP API. Authentication, tenancy, every resource.
@@ -74,10 +80,15 @@ apps/
 
 database/migrations/   Versioned SQL, checksum-verified, RLS included.
 workflows/n8n/         Deliverable B — the single importable export.
-docs/adr/              Twenty-two architecture decision records.
+docs/adr/              Architecture decision records.
 infrastructure/        Dockerfiles, edge proxy, deployment.
 tests/                 unit · integration · tenancy · security · e2e
 ```
+
+The last two packages are the company rather than the product. Adericel does not
+depend on them — a customer running it on their own infrastructure gets the
+assurance platform and none of Veylith's commercial machinery, and a test
+asserts that separation holds.
 
 ## Running it
 
