@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVATION_KINDS } from '@adericel/domain';
+import { createBuiltInRegistry, referencedPredicates } from '@adericel/truth-engine';
 import { buildConnectorRegistry } from './registry.js';
 import { connectorManifestSchema, EVIDENCE_DOMAINS } from './manifest.js';
 import { PREDICATE_MAP, predicatesForKind } from './normalise.js';
@@ -227,5 +228,50 @@ describe('canonical predicate vocabulary', () => {
         `${kind} produces claims but belongs to no evidence domain`,
       ).toBeDefined();
     }
+  });
+});
+
+describe('every ruleset predicate has a way in', () => {
+  const required = new Set<string>();
+  for (const ruleset of createBuiltInRegistry().list()) {
+    for (const rule of ruleset.rules) {
+      for (const predicate of referencedPredicates(rule.expression)) required.add(predicate);
+      if (rule.applicability) {
+        for (const predicate of referencedPredicates(rule.applicability)) required.add(predicate);
+      }
+    }
+  }
+
+  it('leaves no control permanently unassessable', () => {
+    // A predicate no observation kind can carry cannot be supplied by ANY
+    // route: not a connector, not a pushed observation, not a person recording
+    // it by hand. The control reads UNKNOWN forever, the explanation says
+    // "record this manually", the customer does, and nothing changes.
+    //
+    // Three ISO 27001 controls were in exactly that state. This is the check
+    // that would have caught them, and that stops a new rule reintroducing it.
+    const orphans = [...required].filter((predicate) => !CANONICAL_PREDICATES.has(predicate)).sort();
+    expect(orphans, 'required by a ruleset but producible by nothing').toEqual([]);
+  });
+
+  it('supplies more than half of the Cyber Essentials wedge from shipped connectors', () => {
+    // Not a coverage target for its own sake. Cyber Essentials is the wedge the
+    // company enters on, and a wedge where most controls need a person to type
+    // the answer is not autonomous assurance. If this ever drops, the product
+    // claim has drifted from the product.
+    const ce = createBuiltInRegistry().get('cyber-essentials');
+    const cePredicates = new Set(
+      ce.rules.flatMap((rule) => [
+        ...referencedPredicates(rule.expression),
+        ...(rule.applicability ? referencedPredicates(rule.applicability) : []),
+      ]),
+    );
+    const supplied = new Set(
+      connectors
+        .filter((connector) => connector.manifest.fidelity === 'LIVE')
+        .flatMap((connector) => connector.manifest.collect.flatMap((c) => c.predicates)),
+    );
+    const covered = [...cePredicates].filter((predicate) => supplied.has(predicate));
+    expect(covered.length / cePredicates.size).toBeGreaterThan(0.5);
   });
 });

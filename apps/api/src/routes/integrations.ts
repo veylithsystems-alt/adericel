@@ -6,6 +6,7 @@ import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
 import { audit, requireOrganisation } from '../middleware/request-context.js';
 import { parseBody, parseParams, organisationParam } from '../middleware/validation.js';
+import { buildCoverageReport, effectiveManifest } from '../services/observation-coverage.js';
 
 /**
  * Integration management.
@@ -434,6 +435,276 @@ export function registerIntegrationRoutes(server: FastifyInstance, app: AppConte
         action: 'integration:disable',
         resourceType: 'Integration',
         resourceId: params.id,
+      });
+
+      return reply.status(204).send();
+    },
+  );
+
+  /**
+   * What this organisation's integrations can actually tell us.
+   *
+   * The page a customer should see before any control state, because it
+   * reframes every UNKNOWN: one over a domain nothing is connected to is a
+   * missing integration; one over a covered domain is a real gap in their
+   * estate. Presenting those identically is how an assurance product sends a
+   * customer chasing a problem that is ours.
+   */
+  server.get(
+    '/v1/organisations/:organisationId/observation-coverage',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:integration:read');
+
+      const report = await app.db.withTenant(organisationId, async (ctx) =>
+        buildCoverageReport(ctx, app.connectors, app.rulesets),
+      );
+      return reply.status(200).send(report);
+    },
+  );
+
+  /**
+   * One integration in full: health, what each capability did on the last run,
+   * and which predicates it is currently unable to supply.
+   *
+   * "Degraded" is not actionable. "Device compliance returned
+   * PERMISSION_DENIED, grant DeviceManagementConfiguration.Read.All, and these
+   * four controls are UNKNOWN until you do" is.
+   */
+  server.get(
+    '/v1/organisations/:organisationId/integrations/:id',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const params = parseParams(request, orgChild);
+      await requireOrganisation(app, request, params.organisationId, 'org:integration:read');
+
+      const detail = await app.db.withTenant(params.organisationId, async (ctx) => {
+        const row = await ctx.oneOrFail<{
+          id: string;
+          connector_key: string;
+          name: string;
+          status: string;
+          health: string;
+          fidelity: string;
+          configuration: Record<string, unknown>;
+          schedule_cron: string | null;
+          last_run_at: Date | null;
+          last_success_at: Date | null;
+          last_error: string | null;
+          consecutive_failures: number;
+          credential_updated_at: Date | null;
+        }>(
+          `SELECT id, connector_key, name, status, health, fidelity, configuration, schedule_cron,
+                  last_run_at, last_success_at, last_error, consecutive_failures,
+                  credential_updated_at
+           FROM integrations WHERE id = $1 AND organisation_id = $2`,
+          [params.id, params.organisationId],
+          'Integration',
+        );
+
+        const reports = await ctx.many<{
+          capability: string;
+          outcome: string;
+          detail: string;
+          records_collected: number;
+          observations_produced: number;
+          required_permission: string;
+          unavailable_predicates: string[];
+          missing_fields: string[];
+          created_at: Date;
+        }>(
+          `SELECT capability, outcome, detail, records_collected, observations_produced,
+                  required_permission, unavailable_predicates, missing_fields, created_at
+           FROM integration_capability_reports
+           WHERE organisation_id = $1 AND integration_id = $2
+             AND integration_run_id = (
+               SELECT id FROM integration_runs
+               WHERE integration_id = $2 AND organisation_id = $1
+               ORDER BY started_at DESC LIMIT 1
+             )
+           ORDER BY capability`,
+          [params.organisationId, params.id],
+        );
+
+        return { row, reports };
+      });
+
+      const manifest = effectiveManifest(app.connectors, detail.row);
+      const declared = new Map((manifest?.collect ?? []).map((c) => [c.key, c]));
+
+      return reply.status(200).send({
+        id: detail.row.id,
+        connectorKey: detail.row.connector_key,
+        name: detail.row.name,
+        status: detail.row.status,
+        health: detail.row.last_run_at === null ? 'NEVER_RUN' : detail.row.health,
+        // Surfaced explicitly so a demonstration tenant can never be mistaken
+        // for a live one, in the API as well as the interface.
+        fidelity: detail.row.fidelity,
+        configuration: redactConfiguration(detail.row.configuration),
+        scheduleCron: detail.row.schedule_cron,
+        lastRunAt: detail.row.last_run_at?.toISOString() ?? null,
+        lastSuccessAt: detail.row.last_success_at?.toISOString() ?? null,
+        lastError: detail.row.last_error,
+        consecutiveFailures: detail.row.consecutive_failures,
+        credentialsConfigured: detail.row.credential_updated_at !== null,
+        manifest: manifest
+          ? {
+              id: manifest.id,
+              version: manifest.version,
+              vendor: manifest.vendor,
+              products: manifest.products,
+              fidelity: manifest.fidelity,
+              incrementalCollection: manifest.incrementalCollection,
+            }
+          : null,
+        capabilities: [...declared.values()].map((capability) => {
+          const report = detail.reports.find((r) => r.capability === capability.key);
+          return {
+            key: capability.key,
+            title: capability.title,
+            domain: capability.domain,
+            predicates: capability.predicates,
+            requiredPermission: capability.requiredPermission,
+            optional: capability.optional,
+            // Never run is not the same as failing, and neither is the same as
+            // succeeding with nothing to report.
+            lastOutcome: report?.outcome ?? 'NOT_YET_RUN',
+            lastDetail: report?.detail ?? '',
+            recordsCollected: report?.records_collected ?? 0,
+            unavailablePredicates: report?.unavailable_predicates ?? [],
+            missingFields: report?.missing_fields ?? [],
+            observedAt: report?.created_at.toISOString() ?? null,
+          };
+        }),
+      });
+    },
+  );
+
+  /**
+   * Disagreements between sources, open and unresolved.
+   *
+   * Each one is a claim Adericel is withholding, so this list is a statement of
+   * what it has decided it does NOT know — and each entry names both systems,
+   * so the customer can settle it.
+   */
+  server.get(
+    '/v1/organisations/:organisationId/source-conflicts',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:integration:read');
+
+      const rows = await app.db.withTenant(organisationId, async (ctx) =>
+        ctx.many<{
+          id: string;
+          predicate: string;
+          subject_external_id: string | null;
+          resolution: string;
+          sources: { integrationId: string; displayName: string; value: unknown }[];
+          detail: string;
+          first_detected_at: Date;
+          last_detected_at: Date;
+        }>(
+          `SELECT id, predicate, subject_external_id, resolution, sources, detail,
+                  first_detected_at, last_detected_at
+           FROM claim_conflicts
+           WHERE organisation_id = $1 AND resolved_at IS NULL
+           ORDER BY last_detected_at DESC, id`,
+          [organisationId],
+        ),
+      );
+
+      return reply.status(200).send({
+        conflicts: rows.map((row) => ({
+          id: row.id,
+          predicate: row.predicate,
+          subjectExternalId: row.subject_external_id,
+          resolution: row.resolution,
+          blocksAssurance: row.resolution === 'UNRESOLVED',
+          sources: row.sources.map((source) => ({
+            integrationId: source.integrationId,
+            name: source.displayName,
+            value: source.value,
+          })),
+          detail: row.detail,
+          firstDetectedAt: row.first_detected_at.toISOString(),
+          lastDetectedAt: row.last_detected_at.toISOString(),
+        })),
+      });
+    },
+  );
+
+  /**
+   * Which source is authoritative for which predicate.
+   *
+   * Configuration a customer or MSP sets. No connector may assert its own
+   * authority: a connector that could would be deciding assurance truth, which
+   * is the one thing the fabric exists to keep it away from.
+   */
+  server.put(
+    '/v1/organisations/:organisationId/source-authority',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId } = parseParams(request, organisationParam);
+      await requireOrganisation(app, request, organisationId, 'org:integration:manage');
+      const body = parseBody(
+        request,
+        z.object({
+          predicatePattern: z
+            .string()
+            .min(1)
+            .max(200)
+            .regex(
+              /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*\.?$/,
+              'A predicate, or a dotted prefix ending in "." such as "device."',
+            ),
+          integrationIds: z.array(z.string().uuid()).max(20).default([]),
+          freshnessWindowHours: z.number().int().positive().max(8760).nullable().default(null),
+        }),
+      );
+
+      await app.db.withTenant(organisationId, async (ctx) => {
+        // Every named integration must belong to this organisation. A caller
+        // supplying another tenant's id must not be able to learn it exists.
+        if (body.integrationIds.length > 0) {
+          const found = await ctx.many<{ id: string }>(
+            `SELECT id FROM integrations WHERE organisation_id = $1 AND id = ANY($2::uuid[])`,
+            [organisationId, body.integrationIds],
+          );
+          if (found.length !== new Set(body.integrationIds).size) {
+            throw new AdericelError(
+              'VALIDATION_FAILED',
+              'Every authoritative integration must belong to this organisation',
+            );
+          }
+        }
+
+        await ctx.query(
+          `INSERT INTO source_authority_policies
+             (organisation_id, predicate_pattern, integration_ids, freshness_window_hours, set_by_actor)
+           VALUES ($1, $2, $3::uuid[], $4, $5)
+           ON CONFLICT (organisation_id, predicate_pattern) DO UPDATE SET
+             integration_ids = EXCLUDED.integration_ids,
+             freshness_window_hours = EXCLUDED.freshness_window_hours,
+             set_by_actor = EXCLUDED.set_by_actor,
+             updated_at = now()`,
+          [
+            organisationId,
+            body.predicatePattern,
+            body.integrationIds,
+            body.freshnessWindowHours,
+            request.adericel.principal?.displayName ?? 'api',
+          ],
+        );
+      });
+
+      await audit(app, request, {
+        action: 'integration:source-authority',
+        resourceType: 'Organisation',
+        resourceId: organisationId,
+        metadata: { predicatePattern: body.predicatePattern },
       });
 
       return reply.status(204).send();

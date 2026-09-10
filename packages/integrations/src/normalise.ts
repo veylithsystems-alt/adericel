@@ -167,6 +167,24 @@ export const PREDICATE_MAP: Partial<Record<ObservationKind, readonly PredicateMa
       'number',
       'organisation',
     ),
+    m(
+      'incidentPlanPublished',
+      'organisation.incident.plan_published',
+      'boolean',
+      'organisation',
+    ),
+    m(
+      'incidentLastExerciseAt',
+      'organisation.incident.last_exercise_at',
+      'string',
+      'organisation',
+    ),
+    m(
+      'changeProcessPublished',
+      'organisation.change.process_published',
+      'boolean',
+      'organisation',
+    ),
     m('boundaryFirewallPresent', 'network.firewall.present', 'boolean', 'organisation'),
     m(
       'firewallDefaultDenyInbound',

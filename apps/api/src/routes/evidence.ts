@@ -513,7 +513,10 @@ export function registerEvidenceRoutes(server: FastifyInstance, app: AppContext)
             ])
             .optional(),
           status: z
-            .enum(['CANDIDATE', 'CONFIRMED', 'REJECTED', 'SUPERSEDED', 'WITHDRAWN'])
+            // DISPUTED belongs here: a claim Adericel is withholding because
+            // two sources disagree is precisely the one an operator goes
+            // looking for, and omitting it would make it unfindable.
+            .enum(['CANDIDATE', 'CONFIRMED', 'REJECTED', 'SUPERSEDED', 'WITHDRAWN', 'DISPUTED'])
             .optional(),
         }),
       );

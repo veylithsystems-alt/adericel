@@ -315,6 +315,10 @@ importers:
       zod:
         specifier: ^4.1.11
         version: 4.5.4
+    devDependencies:
+      '@adericel/truth-engine':
+        specifier: workspace:*
+        version: link:../truth-engine
 
   packages/notifications:
     dependencies:

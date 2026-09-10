@@ -8,10 +8,12 @@ import {
   type AssuranceState,
 } from '@adericel/domain';
 import { createAssessmentService } from '@adericel/actions';
+import { referencedPredicates } from '@adericel/truth-engine';
 import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
 import { audit, requireOrganisation } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery, organisationParam } from '../middleware/validation.js';
+import { explainEvidenceGaps } from '../services/observation-coverage.js';
 
 /**
  * Assurance routes.
@@ -359,6 +361,35 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
       );
       const rule = ruleset?.rules.find((r) => r.key === data.control.rule_key) ?? null;
 
+      // Why this control cannot be assessed, in terms a person can act on.
+      //
+      // "No evidence recorded" is true and useless. Computed only when the
+      // determination is actually UNKNOWN, because a passing control does not
+      // need its evidence supply explained, and only over the predicates this
+      // rule genuinely reads.
+      const state = data.assessment?.state ?? 'UNKNOWN';
+      const rulePredicates = rule
+        ? [
+            ...referencedPredicates(rule.expression),
+            ...(rule.applicability ? referencedPredicates(rule.applicability) : []),
+          ]
+        : [];
+      const answered = new Set(
+        data.claims
+          .filter((claim) => claim.status === 'CANDIDATE' || claim.status === 'CONFIRMED')
+          .map((claim) => claim.predicate),
+      );
+      const evidenceGaps =
+        state === 'UNKNOWN' && rulePredicates.length > 0
+          ? await app.db.withTenant(params.organisationId, async (ctx) =>
+              explainEvidenceGaps(
+                ctx,
+                app.connectors,
+                rulePredicates.filter((predicate) => !answered.has(predicate)),
+              ),
+            )
+          : [];
+
       return reply.status(200).send({
         control: {
           id: data.control.id,
@@ -374,6 +405,13 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           data.assessment?.rationale ??
           'This control has not yet been assessed. Adericel holds no determination for it.',
         reasoning: data.assessment?.reasoning ?? [],
+        /**
+         * Present only when the control is UNKNOWN. Each entry says which of
+         * three things is true — nothing supplies this evidence, something
+         * supplies it and is currently failing, or two systems disagree — and
+         * what would fix it.
+         */
+        evidenceGaps,
         assessment: data.assessment
           ? {
               id: data.assessment.id,
