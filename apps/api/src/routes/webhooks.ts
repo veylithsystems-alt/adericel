@@ -29,13 +29,23 @@ export function registerWebhookRoutes(server: FastifyInstance, app: AppContext):
   server.addHook('preParsing', async (request, _reply, payload) => {
     if (!request.url.startsWith('/v1/webhooks/')) return payload;
     const chunks: Buffer[] = [];
+    let received = 0;
     for await (const chunk of payload) {
-      chunks.push(Buffer.from(chunk as Buffer));
-      if (Buffer.concat(chunks).byteLength > app.config.api.bodyLimitBytes) {
+      const buffer = Buffer.from(chunk as Buffer);
+      received += buffer.byteLength;
+      // A running total, not a concatenation.
+      //
+      // Concatenating on every chunk to measure the length copies everything
+      // accumulated so far, per chunk — quadratic in the number of chunks, and
+      // the sender chooses the chunk size. Against a 1 MB body limit, one
+      // unauthenticated request sent a byte at a time forced roughly 550 GB of
+      // memcpy, all of it before any signature was checked.
+      if (received > app.config.api.bodyLimitBytes) {
         throw new AdericelError('VALIDATION_FAILED', 'Webhook body exceeds the permitted size');
       }
+      chunks.push(buffer);
     }
-    const raw = Buffer.concat(chunks);
+    const raw = Buffer.concat(chunks, received);
     request.rawBody = raw.toString('utf8');
     const { Readable } = await import('node:stream');
     return Readable.from(raw);

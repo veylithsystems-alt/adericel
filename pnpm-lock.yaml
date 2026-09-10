@@ -93,6 +93,9 @@ importers:
       '@adericel/actions':
         specifier: workspace:*
         version: link:../../packages/actions
+      '@adericel/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@adericel/domain':
         specifier: workspace:*
         version: link:../../packages/domain

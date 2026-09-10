@@ -16,6 +16,7 @@
     { "path": "../../packages/policy" },
     { "path": "../../packages/actions" },
     { "path": "../../packages/integrations" },
-    { "path": "../../packages/notifications" }
+    { "path": "../../packages/notifications" },
+    { "path": "../../packages/billing" }
   ]
 }

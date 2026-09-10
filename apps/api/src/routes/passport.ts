@@ -364,6 +364,9 @@ export function registerPassportRoutes(server: FastifyInstance, app: AppContext)
       issuedAt: resolved.issuedAt,
       contentHash: resolved.contentHash,
       withdrawn: resolved.withdrawn,
+      // Said before the passport itself, because it changes what everything
+      // below it means to a reader.
+      maintenance: resolved.maintenance,
       passport: resolved.passport,
       // Told to the recipient rather than assumed: this describes an instant,
       // and the issuer may have withdrawn it since.

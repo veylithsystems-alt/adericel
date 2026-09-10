@@ -47,6 +47,11 @@ export const EVENT_TYPES = [
   'VerificationCompleted',
   'ReportRequested',
   'ReportGenerated',
+  // Billing changes what Adericel is doing for a customer, so it belongs in the
+  // customer's own event stream rather than only in an operator's ledger.
+  'SubscriptionChanged',
+  'AssuranceMaintenanceStopped',
+  'AssuranceMaintenanceResumed',
   'SystemHealthDegraded',
 ] as const;
 

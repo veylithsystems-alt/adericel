@@ -175,6 +175,10 @@ services:
       NOTIFY_HTTP_ENDPOINT: ${NOTIFY_HTTP_ENDPOINT:-}
       NOTIFY_HTTP_AUTH_HEADER: ${NOTIFY_HTTP_AUTH_HEADER:-X-Postmark-Server-Token}
       NOTIFY_HTTP_AUTH_TOKEN: ${NOTIFY_HTTP_AUTH_TOKEN:-}
+      # Billing. `manual` takes no online payment and accepts no webhooks.
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-manual}
+      BILLING_STRIPE_SECRET_KEY: ${BILLING_STRIPE_SECRET_KEY:-}
+      BILLING_STRIPE_WEBHOOK_SECRET: ${BILLING_STRIPE_WEBHOOK_SECRET:-}
       # Node's heap cap is set below the container limit so V8 collects rather
       # than the kernel killing the process.
       NODE_OPTIONS: '--max-old-space-size=384'

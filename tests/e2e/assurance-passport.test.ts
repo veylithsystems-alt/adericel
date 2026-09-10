@@ -81,6 +81,7 @@ interface PassportBody {
       evidenceAgeDays: number | null;
     }[];
     findings: { severity: string; title: string | null; control: string }[];
+    maintenance: { maintained: boolean; stoppedAt: string | null; observedUntil: string | null };
     remediation: { actionType: string; verified: boolean }[];
     evidence: { total: number; stale: number };
     interpretation: string;
@@ -145,6 +146,9 @@ describe.skipIf(!available)('assurance passport', () => {
 
     // And it tells the reader how to read it, in the document.
     expect(firstPassport.content.interpretation).toMatch(/UNKNOWN is not a pass/i);
+    // A paying customer's record is maintained, and the passport says so where
+    // a third party will see it.
+    expect(firstPassport.content.maintenance.maintained).toBe(true);
   });
 
   it('hashes its content, and the hash is reproducible from the content alone', async () => {

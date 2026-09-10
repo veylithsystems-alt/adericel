@@ -23,6 +23,11 @@ import {
   createLogNotifier,
   type Notifier,
 } from '@adericel/notifications';
+import {
+  createManualProvider,
+  createStripeProvider,
+  type PaymentProvider,
+} from '@adericel/billing';
 import { compilePolicy, DEFAULT_ACTION_POLICY, type CompiledPolicy } from '@adericel/policy';
 import { createBuiltInRegistry, type RulesetRegistry } from '@adericel/truth-engine';
 import type { CredentialUnsealer } from '@adericel/actions';
@@ -67,6 +72,12 @@ export interface AppContext {
    * verification link that goes nowhere is a customer lost silently.
    */
   readonly notifier: Notifier;
+  /**
+   * How payment is taken. `manual` is a real deployment shape — invoicing by
+   * bank transfer — not a stub, and the checkout routes refuse rather than
+   * pretending when it is in use.
+   */
+  readonly payments: PaymentProvider;
   readonly startedAtIso: string;
 }
 
@@ -79,6 +90,7 @@ export interface CreateContextOptions {
   readonly connectors?: ConnectorRegistry;
   readonly fetchImpl?: typeof fetch;
   readonly notifier?: Notifier;
+  readonly payments?: PaymentProvider;
 }
 
 /**
@@ -215,6 +227,16 @@ export function createAppContext(options: CreateContextOptions): AppContext {
     tokens: createTokenHasher(config.auth.credentialEncryptionKey),
     unsealCredentials,
     notifier: options.notifier ?? buildNotifier(config, logger, options.fetchImpl),
+    payments:
+      options.payments ??
+      (config.billing.provider === 'stripe'
+        ? createStripeProvider({
+            secretKey: config.billing.stripe.secretKey,
+            webhookSigningSecret: config.billing.stripe.webhookSecret,
+            apiBaseUrl: `${config.billing.stripe.apiBaseUrl.replace(/\/+$/, '')}/v1`,
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+          })
+        : createManualProvider()),
     startedAtIso: clock.nowIso(),
   };
 }

@@ -33,6 +33,7 @@ import {
 import { createFilesystemStore } from '@adericel/evidence';
 import { createRecordingNotifier, type RecordingNotifier } from '@adericel/notifications';
 import { buildServer, createAppContext, type AppContext } from '@adericel/api';
+import { buildHandlers, type JobType } from '@adericel/worker';
 import { up as migrateUp } from '../../scripts/migrate.js';
 
 export const TEST_INSTANT = '2026-09-09T12:00:00.000Z';
@@ -112,6 +113,15 @@ export interface Harness {
    */
   readonly notifier: RecordingNotifier;
   readonly config: AdericelConfig;
+  /**
+   * Run one scheduled job, as the worker would.
+   *
+   * Tests that assert on what the worker does — that a lapsed organisation
+   * stops being collected from, that overdue subscriptions lapse on time —
+   * have to exercise the real handler. A test that reimplements the query it
+   * is checking proves only that the test agrees with itself.
+   */
+  runJob(jobType: JobType, organisationId?: string): Promise<{ status: string; detail: string }>;
   close(): Promise<void>;
   /** Remove all tenant and control-plane data, keeping the schema. */
   truncate(): Promise<void>;
@@ -180,6 +190,27 @@ export async function createHarness(
     fixtureState,
     notifier,
     config,
+    async runJob(jobType, organisationId) {
+      const handlers = buildHandlers({
+        db,
+        logger: nullLogger,
+        clock,
+        config,
+        rulesets: app.rulesets,
+        connectors,
+        defaultPolicy: app.defaultPolicy,
+        unsealCredentials: app.unsealCredentials,
+      });
+      const handler = handlers[jobType];
+      if (!handler) throw new Error(`No handler registered for job type ${jobType}`);
+      return handler({
+        id: randomUUID(),
+        organisationId: organisationId ?? null,
+        jobType,
+        payload: {},
+        cron: null,
+      });
+    },
     async close() {
       await server.close();
       await db.close();
@@ -198,7 +229,7 @@ export async function createHarness(
           TRUNCATE TABLE
             action_transitions, action_executions, verifications, approval_decisions,
             approvals, actions, policies, exceptions, risk_findings, risks, findings,
-            passport_share_views, passport_shares, assurance_passports,
+            billing_events, passport_share_views, passport_shares, assurance_passports,
             assurance_states, assessments, assessment_inputs, claim_evidence, claims, evidence_observations,
             evidence_subjects, evidence, observations, integration_runs, integrations,
             control_requirements, controls, organisation_frameworks, graph_edges, graph_nodes,

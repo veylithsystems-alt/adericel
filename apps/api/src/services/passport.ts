@@ -103,6 +103,23 @@ export interface PassportContent {
     readonly freshestDays: number | null;
     readonly oldestDays: number | null;
   };
+  /**
+   * Whether Adericel was still observing this organisation when the passport
+   * was compiled.
+   *
+   * Inside the content, deliberately, so it is covered by the content hash. A
+   * lapsed customer can still issue a passport — it is their record and they
+   * may legitimately need it — but a freshly dated document carrying months-old
+   * determinations, handed to an insurer, would read as current. Putting the
+   * fact in the hashed content means it cannot be removed without the passport
+   * failing verification.
+   */
+  readonly maintenance: {
+    readonly maintained: boolean;
+    readonly stoppedAt: string | null;
+    /** The last moment Adericel actually observed anything for this estate. */
+    readonly observedUntil: string | null;
+  };
   readonly disclosure: 'REDACTED' | 'FULL';
   /**
    * Said in the passport itself, not in a footnote, because a recipient who
@@ -143,8 +160,14 @@ export async function buildPassportContent(
     readonly disclosure: 'REDACTED' | 'FULL';
   },
 ): Promise<PassportContent> {
-  const organisation = await ctx.oneOrFail<{ name: string; country_code: string | null }>(
-    `SELECT name, country_code FROM organisations WHERE id = $1`,
+  const organisation = await ctx.oneOrFail<{
+    name: string;
+    country_code: string | null;
+    assurance_maintained: boolean;
+    maintenance_stopped_at: Date | null;
+  }>(
+    `SELECT name, country_code, assurance_maintained, maintenance_stopped_at
+     FROM organisations WHERE id = $1`,
     [options.organisationId],
     'Organisation',
   );
@@ -330,8 +353,20 @@ export async function buildPassportContent(
       freshestDays: daysBetween(evidence.freshest, options.nowEpochMs),
       oldestDays: daysBetween(evidence.oldest, options.nowEpochMs),
     },
+    maintenance: {
+      maintained: organisation.assurance_maintained,
+      stoppedAt: organisation.maintenance_stopped_at?.toISOString() ?? null,
+      observedUntil: evidence.freshest?.toISOString() ?? null,
+    },
     disclosure: options.disclosure,
-    interpretation: buildInterpretation(summary.state, unknown, summary.inScope, determined),
+    interpretation: buildInterpretation({
+      state: summary.state,
+      unknown,
+      inScope: summary.inScope,
+      determined,
+      maintained: organisation.assurance_maintained,
+      stoppedAt: organisation.maintenance_stopped_at?.toISOString() ?? null,
+    }),
   };
 }
 
@@ -342,12 +377,32 @@ export async function buildPassportContent(
  * document, whatever the numbers technically said. So the document says what it
  * means, in the place they are looking.
  */
-function buildInterpretation(
-  state: AssuranceState,
-  unknown: number,
-  inScope: number,
-  determined: number,
-): string {
+function buildInterpretation(input: {
+  readonly state: AssuranceState;
+  readonly unknown: number;
+  readonly inScope: number;
+  readonly determined: number;
+  readonly maintained: boolean;
+  readonly stoppedAt: string | null;
+}): string {
+  const { state, unknown, inScope, determined } = input;
+
+  // Said first, before anything else, because it changes what every other
+  // sentence in this document means. A reader who takes a stale record for a
+  // current one has been misled by the document, whatever the figures said.
+  if (!input.maintained) {
+    const since = input.stoppedAt ? ` since ${input.stoppedAt.slice(0, 10)}` : '';
+    return (
+      `THIS RECORD IS NO LONGER MAINTAINED. Adericel stopped observing this organisation` +
+      `${since}, so everything below describes the last time it was assessed and not the ` +
+      `present. It was true when determined and has not been altered. Do not read it as a ` +
+      `current statement: ask the organisation for a maintained passport before relying on ` +
+      `it. This says nothing about whether their security is good or bad — only that Adericel ` +
+      `has stopped looking. Of ${inScope} in-scope controls, ${determined} were determined and ` +
+      `${unknown} were UNKNOWN at that point. UNKNOWN is not a pass.`
+    );
+  }
+
   const coverage =
     inScope === 0
       ? 'No controls are in scope.'
@@ -467,6 +522,9 @@ export function redactPassport(content: PassportContent): PassportContent {
     ...content,
     findings: content.findings.map((f) => ({ ...f, title: null })),
     remediation: content.remediation.map((r) => ({ ...r, verificationDetail: null })),
+    // `maintenance` is never redacted. Whether a record is still maintained is
+    // the fact a third party most needs, and a disclosure level is about how
+    // much detail they get, not about whether they are told the truth.
     disclosure: 'REDACTED',
   };
 }
@@ -482,6 +540,24 @@ export interface ResolvedShare {
   readonly sequence: number;
   readonly issuedAt: string;
   readonly withdrawn: { readonly at: string; readonly reason: string | null } | null;
+  /**
+   * Whether Adericel is still observing this organisation.
+   *
+   * A recipient's whole reason to look at a passport is that the record is
+   * CURRENTLY MAINTAINED. Once collection has stopped — a lapsed subscription,
+   * usually — the passport still truthfully describes the instant it was
+   * issued, and continuing to present it without saying so would let a third
+   * party read it as current. That is manufacturing certainty by omission,
+   * which is the one thing this product exists to refuse.
+   *
+   * The passport is not withdrawn and its content is unchanged: it was true
+   * when issued and remains so. Only the claim to currency is withdrawn.
+   */
+  readonly maintenance: {
+    readonly maintained: boolean;
+    readonly stoppedAt: string | null;
+    readonly note: string | null;
+  };
 }
 
 /**
@@ -546,8 +622,13 @@ export async function resolveShare(
       'Passport',
     );
 
-    const organisation = await ctx.oneOrFail<{ name: string }>(
-      `SELECT name FROM organisations WHERE id = $1`,
+    const organisation = await ctx.oneOrFail<{
+      name: string;
+      assurance_maintained: boolean;
+      maintenance_stopped_at: Date | null;
+    }>(
+      `SELECT name, assurance_maintained, maintenance_stopped_at
+       FROM organisations WHERE id = $1`,
       [found!.organisation_id],
       'Organisation',
     );
@@ -581,6 +662,17 @@ export async function resolveShare(
               at: passport.withdrawn_at.toISOString(),
               reason: passport.withdrawn_reason,
             },
+      maintenance: {
+        maintained: organisation.assurance_maintained,
+        stoppedAt: organisation.maintenance_stopped_at?.toISOString() ?? null,
+        note: organisation.assurance_maintained
+          ? null
+          : 'Adericel is no longer observing this organisation. This record was true at the ' +
+            'instant it was issued and has not been altered, but it is no longer being ' +
+            'maintained, so it does not describe the present. Ask the organisation for a ' +
+            'current passport before relying on it. This says nothing about whether their ' +
+            'security is good or bad — only that Adericel has stopped looking.',
+      },
     };
   });
 }

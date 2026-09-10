@@ -23,6 +23,11 @@ export const JOB_TYPES = [
   'purge-observations',
   'purge-idempotency-keys',
   'self-assurance',
+  // Billing: lapse subscriptions whose grace period has run out. Separate from
+  // webhook handling because a customer whose payment failed and who then hears
+  // nothing more from the provider must still lapse, and an event that never
+  // arrives cannot trigger anything.
+  'lapse-overdue-subscriptions',
 ] as const;
 
 export type JobType = (typeof JOB_TYPES)[number];

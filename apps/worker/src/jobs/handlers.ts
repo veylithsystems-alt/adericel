@@ -43,11 +43,46 @@ const BATCH = 200;
 export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHandler>> {
   const { db, clock, logger } = deps;
 
+  /**
+   * The organisations a scheduled job may act on.
+   *
+   * `assurance_maintained` is the billing lifecycle's only lever, and this is
+   * where it bites: an organisation whose subscription has lapsed stops being
+   * collected from and stops being assessed. Nothing is deleted and no
+   * determination changes — the record stands as a set of statements about the
+   * instants they were made — but Adericel stops claiming to know the present.
+   *
+   * Filtering here rather than in each handler is deliberate. Every scheduled
+   * job routes through this one function, so a new job inherits the rule
+   * instead of having to remember it.
+   *
+   * A job that names an organisation explicitly is checked too. An operator
+   * re-running a collection by hand for a lapsed customer would otherwise
+   * quietly resume the assurance Adericel is no longer being paid to maintain.
+   */
   async function organisationsToProcess(job: DueJob): Promise<readonly string[]> {
-    if (job.organisationId) return [job.organisationId];
+    if (job.organisationId) {
+      const maintained = await db.withPlatform(async (ctx) =>
+        ctx.one<{ id: string }>(
+          `SELECT id FROM organisations
+           WHERE id = $1 AND status = 'ACTIVE' AND assurance_maintained`,
+          [job.organisationId],
+        ),
+      );
+      if (!maintained) {
+        logger.info(
+          { organisationId: job.organisationId, jobType: job.jobType },
+          'skipping scheduled work: assurance is not being maintained for this organisation',
+        );
+        return [];
+      }
+      return [job.organisationId];
+    }
     return db.withPlatform(async (ctx) => {
       const rows = await ctx.many<{ id: string }>(
-        `SELECT id FROM organisations WHERE status = 'ACTIVE' ORDER BY id LIMIT $1`,
+        `SELECT id FROM organisations
+         WHERE status = 'ACTIVE' AND assurance_maintained
+         ORDER BY id LIMIT $1`,
         [BATCH],
       );
       return rows.map((row) => row.id);
@@ -153,6 +188,68 @@ export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHan
     },
 
     /** Time out approvals nobody acted on, so an action cannot sit forever. */
+    /**
+     * Stop maintaining assurance for subscriptions whose grace period ended.
+     *
+     * The grace period exists because a failed payment is usually an expired
+     * card, and suspending an estate over one is disproportionate. When it runs
+     * out, Adericel stops observing — and stops nothing else. No evidence is
+     * deleted, no determination is altered, and the record remains available in
+     * full. What ends is the claim to currency.
+     */
+    'lapse-overdue-subscriptions': async (): Promise<JobResult> => {
+      const now = clock.nowIso();
+      const lapsed = await db.withPlatform(async (ctx) => {
+        const due = await ctx.many<{ id: string; status: string }>(
+          `SELECT id, status FROM subscriptions
+           WHERE lapsed_at IS NULL
+             AND ((grace_ends_at IS NOT NULL AND grace_ends_at <= $1::timestamptz)
+                  OR (status = 'TRIAL' AND trial_ends_at IS NOT NULL
+                      AND trial_ends_at <= $1::timestamptz))`,
+          [now],
+        );
+        const results: { subscriptionId: string; organisations: number }[] = [];
+        for (const row of due) {
+          const reason =
+            row.status === 'TRIAL' ? 'Trial ended without a subscription' : 'Payment overdue';
+          const affected = await ctx.many<{ id: string }>(
+            `UPDATE organisations o
+             SET assurance_maintained = false,
+                 maintenance_stopped_at = COALESCE(o.maintenance_stopped_at, $2::timestamptz),
+                 maintenance_stopped_reason = $3
+             FROM subscriptions s
+             WHERE s.id = $1 AND o.status <> 'CLOSED' AND o.assurance_maintained
+               AND ((s.organisation_id IS NOT NULL AND o.id = s.organisation_id)
+                    OR (s.msp_id IS NOT NULL AND o.msp_id = s.msp_id))
+             RETURNING o.id`,
+            [row.id, now, reason],
+          );
+          await ctx.query(
+            `UPDATE subscriptions
+             SET lapsed_at = COALESCE(lapsed_at, $2::timestamptz), lapse_reason = $3
+             WHERE id = $1`,
+            [row.id, now, reason],
+          );
+          logger.warn(
+            { subscriptionId: row.id, organisations: affected.length, reason },
+            'stopped maintaining assurance for a lapsed subscription',
+          );
+          results.push({ subscriptionId: row.id, organisations: affected.length });
+        }
+        return results;
+      });
+
+      const organisations = lapsed.reduce((total, row) => total + row.organisations, 0);
+      return {
+        status: 'SUCCEEDED',
+        detail:
+          lapsed.length === 0
+            ? 'No subscriptions were overdue'
+            : `Stopped maintaining ${organisations} organisation(s) across ` +
+              `${lapsed.length} lapsed subscription(s)`,
+      };
+    },
+
     'expire-approvals': async (job): Promise<JobResult> => {
       const organisationIds = await organisationsToProcess(job);
       let expired = 0;

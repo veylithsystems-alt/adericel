@@ -134,10 +134,23 @@ export const configSchema = z.object({
   }),
 
   billing: z.object({
+    /**
+     * How payment is taken. `manual` is a real answer, not a placeholder: a
+     * deployment that invoices by bank transfer needs no provider, and the
+     * checkout routes refuse rather than pretending.
+     */
+    provider: z.enum(['manual', 'stripe']).default('manual'),
     /** Default wholesale price per organisation per month, in minor units. */
     defaultOrganisationPriceMinor: z.coerce.number().int().nonnegative().default(19_900),
     currency: z.string().length(3).default('GBP'),
     trialDays: z.coerce.number().int().nonnegative().default(30),
+    stripe: z
+      .object({
+        secretKey: z.string().default(''),
+        webhookSecret: z.string().default(''),
+        apiBaseUrl: z.string().default('https://api.stripe.com'),
+      })
+      .default(() => ({ secretKey: '', webhookSecret: '', apiBaseUrl: 'https://api.stripe.com' })),
   }),
 
   security: z.object({
@@ -255,6 +268,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdericelConfig
       requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
     },
     billing: {
+      provider: env.BILLING_PROVIDER,
+      stripe: {
+        secretKey: env.BILLING_STRIPE_SECRET_KEY,
+        webhookSecret: env.BILLING_STRIPE_WEBHOOK_SECRET,
+        apiBaseUrl: env.BILLING_STRIPE_API_BASE_URL,
+      },
       defaultOrganisationPriceMinor: env.BILLING_DEFAULT_ORG_PRICE_MINOR,
       currency: env.BILLING_CURRENCY,
       trialDays: env.BILLING_TRIAL_DAYS,
@@ -324,6 +343,20 @@ export function assertProductionSafety(config: AdericelConfig): void {
   }
   if (!config.security.blockPrivateEgress) {
     failures.push('SECURITY_BLOCK_PRIVATE_EGRESS must remain enabled in production');
+  }
+  if (config.billing.provider === 'stripe') {
+    // A Stripe deployment without a webhook secret accepts unsigned billing
+    // events, which is a way for anyone who finds the endpoint to activate
+    // their own subscription.
+    if (config.billing.stripe.secretKey === '') {
+      failures.push('BILLING_STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe');
+    }
+    if (config.billing.stripe.webhookSecret.length < 16) {
+      failures.push(
+        'BILLING_STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe; without it ' +
+          'billing webhooks would be accepted unsigned',
+      );
+    }
   }
   if (failures.length > 0) {
     throw new Error(

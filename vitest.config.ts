@@ -15,6 +15,7 @@ const workspacePackages = [
   'actions',
   'integrations',
   'notifications',
+  'billing',
 ];
 
 /**

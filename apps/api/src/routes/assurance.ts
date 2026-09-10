@@ -134,10 +134,37 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
       const states = data.controlStates.map((row) => row.state as AssuranceState);
       const summary = summarise(states);
 
+      // Whether Adericel is still observing this organisation. Read before the
+      // state is presented, because a state nobody is maintaining means
+      // something different from one that is current, and the reader cannot
+      // tell them apart from the state alone.
+      const maintenance = await app.db.withPlatform(async (ctx) =>
+        ctx.oneOrFail<{
+          assurance_maintained: boolean;
+          maintenance_stopped_at: Date | null;
+          maintenance_stopped_reason: string | null;
+        }>(
+          `SELECT assurance_maintained, maintenance_stopped_at, maintenance_stopped_reason
+           FROM organisations WHERE id = $1`,
+          [organisationId],
+          'Organisation',
+        ),
+      );
+
       return reply.status(200).send({
         organisationId,
         // The headline state, and never a score. See docs/product/brand.
         state: summary.state,
+        maintenance: {
+          maintained: maintenance.assurance_maintained,
+          stoppedAt: maintenance.maintenance_stopped_at?.toISOString() ?? null,
+          reason: maintenance.maintenance_stopped_reason,
+          note: maintenance.assurance_maintained
+            ? null
+            : 'Adericel has stopped observing this organisation, so this describes the last ' +
+              'assessment rather than the present. Nothing has been deleted and no ' +
+              'determination has changed.',
+        },
         counts: summary.counts,
         inScope: summary.inScope,
         coverage: summary.coverage,
