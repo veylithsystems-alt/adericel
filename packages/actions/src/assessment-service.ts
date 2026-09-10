@@ -11,9 +11,16 @@ import {
 } from '@adericel/domain';
 import { createClaimRepository, createEvidenceRepository } from '@adericel/evidence';
 import { publish, type TenantContext } from '@adericel/graph';
-import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/shared';
+import {
+  AdericelError,
+  canonicalJson,
+  contentHash,
+  type Clock,
+  type Logger,
+} from '@adericel/shared';
 import {
   assessControl,
+  parseAssessmentInput,
   ruleRequiredPredicates,
   type ClaimFacts,
   type ControlAssessmentInput,
@@ -89,13 +96,41 @@ export interface AssessmentService {
   replay(assessmentId: string): Promise<ReplayResult>;
 }
 
+/** Whether the facts the assessment ran on could be recovered, and intact. */
+export type SnapshotIntegrity =
+  /** The recorded inputs re-hash to the digest stored on the assessment. */
+  | 'VERIFIED'
+  /** The inputs were found but no longer hash to the recorded digest. */
+  | 'DIGEST_MISMATCH'
+  /** The inputs were found but are not a well-formed engine input. */
+  | 'UNPARSEABLE'
+  /** No inputs are on record for this assessment. */
+  | 'NOT_RECORDED';
+
+/** Whether the exact ruleset the assessment ran under is present in this build. */
+export type RulesetIntegrity =
+  | 'VERIFIED'
+  /** The key and version are present but their content differs from the recorded hash. */
+  | 'HASH_MISMATCH'
+  | 'NOT_AVAILABLE';
+
 export interface ReplayResult {
   readonly assessmentId: string;
+  /**
+   * True only when the recorded inputs, run under the recorded ruleset, produce
+   * the recorded determination in full: same digest, same state, same
+   * unknown reason, same rationale.
+   */
   readonly reproduced: boolean;
+  readonly snapshotIntegrity: SnapshotIntegrity;
+  readonly rulesetIntegrity: RulesetIntegrity;
   readonly originalState: AssuranceState;
-  readonly replayedState: AssuranceState;
+  readonly replayedState: AssuranceState | null;
+  readonly originalUnknownReason: UnknownReason | null;
+  readonly replayedUnknownReason: UnknownReason | null;
   readonly originalDigest: string;
-  readonly replayedDigest: string;
+  readonly replayedDigest: string | null;
+  readonly rationaleMatches: boolean;
   readonly explanation: string;
 }
 
@@ -237,6 +272,45 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
         expiresAt: row.expires_at.toISOString(),
       })),
     };
+  }
+
+  /**
+   * Record the exact facts an assessment ran on, so it can be replayed from its
+   * own record rather than from data that has since moved on.
+   *
+   * Content-addressed by the input digest: an unchanged estate reassessed every
+   * night yields the same digest by construction, so this writes one row the
+   * first time and touches a counter thereafter. The `snapshot` column is never
+   * updated once written — a digest collision would have to be a SHA-256
+   * collision, and preserving the first-written bytes means a later write can
+   * never silently rewrite the basis of an earlier determination.
+   */
+  async function recordInput(
+    control: ControlRow,
+    ruleset: Ruleset,
+    input: ControlAssessmentInput,
+    provenance: { engineVersion: string; inputDigest: string; ruleKey: string },
+  ): Promise<void> {
+    await ctx.query(
+      `INSERT INTO assessment_inputs
+         (organisation_id, input_digest, snapshot, engine_version, ruleset_key, ruleset_version,
+          ruleset_hash, control_id, rule_key)
+       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (organisation_id, input_digest) DO UPDATE SET
+         last_used_at = now(),
+         use_count = assessment_inputs.use_count + 1`,
+      [
+        ctx.organisationId,
+        provenance.inputDigest,
+        canonicalJson(input),
+        provenance.engineVersion,
+        ruleset.key,
+        ruleset.version,
+        ruleset.hash,
+        control.id,
+        provenance.ruleKey,
+      ],
+    );
   }
 
   async function persist(
@@ -448,6 +522,10 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       const input = await buildInput(control, ruleset, asOfIso);
       const outcome = assessControl(ruleset, input);
 
+      // Written before the assessment row, inside the same transaction, so an
+      // assessment can never be persisted without the facts that produced it.
+      await recordInput(control, ruleset, input, outcome.provenance);
+
       const { assessment, previousState, changed } = await persist(
         'CONTROL',
         control.id,
@@ -620,57 +698,156 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
         subject_kind: string;
         subject_id: string;
         state: string;
+        unknown_reason: string | null;
+        rationale: string;
         ruleset_key: string;
         ruleset_version: string;
+        ruleset_hash: string;
         input_digest: string;
-        assessed_at: Date;
       }>(
-        `SELECT id, subject_kind, subject_id, state, ruleset_key, ruleset_version, input_digest, assessed_at
+        `SELECT id, subject_kind, subject_id, state, unknown_reason, rationale,
+                ruleset_key, ruleset_version, ruleset_hash, input_digest
          FROM assessments WHERE id = $1 AND organisation_id = $2`,
         [assessmentId, ctx.organisationId],
         'Assessment',
       );
 
       if (row.subject_kind !== 'CONTROL') {
-        throw new AdericelError('PRECONDITION_FAILED', 'Only control assessments can be replayed');
+        throw new AdericelError(
+          'PRECONDITION_FAILED',
+          'Only control assessments are produced by the engine, so only they can be replayed. ' +
+            'Roll-ups are derived from the control assessments beneath them.',
+          { safeDetails: { assessmentId, subjectKind: row.subject_kind } },
+        );
       }
 
-      const control = await loadControl(row.subject_id);
+      const base = {
+        assessmentId,
+        originalState: row.state as AssuranceState,
+        originalUnknownReason: (row.unknown_reason as UnknownReason | null) ?? null,
+        originalDigest: row.input_digest,
+      };
+      const irreproducible = (
+        snapshotIntegrity: SnapshotIntegrity,
+        rulesetIntegrity: RulesetIntegrity,
+        explanation: string,
+      ): ReplayResult => ({
+        ...base,
+        reproduced: false,
+        snapshotIntegrity,
+        rulesetIntegrity,
+        replayedState: null,
+        replayedUnknownReason: null,
+        replayedDigest: null,
+        rationaleMatches: false,
+        explanation,
+      });
+
       const ruleset = rulesets.tryGet(row.ruleset_key, row.ruleset_version);
       if (!ruleset) {
+        return irreproducible(
+          'NOT_RECORDED',
+          'NOT_AVAILABLE',
+          `Ruleset ${row.ruleset_key}@${row.ruleset_version} is not present in this build, so the ` +
+            'assessment cannot be reproduced. Deploy a build carrying that ruleset version to replay it.',
+        );
+      }
+
+      // A published ruleset version is supposed to be immutable. If the content
+      // under this key and version no longer hashes to what the assessment
+      // recorded, that promise has been broken somewhere, and replaying under
+      // the substitute would produce a plausible answer to the wrong question.
+      if (ruleset.hash !== row.ruleset_hash) {
+        return irreproducible(
+          'NOT_RECORDED',
+          'HASH_MISMATCH',
+          `Ruleset ${row.ruleset_key}@${row.ruleset_version} is present but its content has changed ` +
+            `since this assessment ran (recorded ${row.ruleset_hash}, current ${ruleset.hash}). ` +
+            'Published ruleset versions must be immutable; this is a build or release fault and ' +
+            'should be escalated rather than worked around.',
+        );
+      }
+
+      const snapshotRow = await ctx.one<{ snapshot: unknown }>(
+        `SELECT snapshot FROM assessment_inputs
+         WHERE organisation_id = $1 AND input_digest = $2`,
+        [ctx.organisationId, row.input_digest],
+      );
+      if (!snapshotRow) {
+        return irreproducible(
+          'NOT_RECORDED',
+          'VERIFIED',
+          'No inputs are on record for this assessment, so it cannot be reproduced. Assessments ' +
+            'made before input recording was introduced are in this position; the assessment row ' +
+            'remains the authoritative account of the determination made at that instant.',
+        );
+      }
+
+      let input: ControlAssessmentInput;
+      try {
+        input = parseAssessmentInput(snapshotRow.snapshot);
+      } catch (error) {
+        return irreproducible(
+          'UNPARSEABLE',
+          'VERIFIED',
+          'The recorded inputs for this assessment are not a well-formed engine input and cannot ' +
+            `be replayed: ${(error as Error).message}. This indicates storage corruption or ` +
+            'tampering and should be escalated.',
+        );
+      }
+
+      const outcome = assessControl(ruleset, input);
+
+      // The digest was written on the assessment row, the snapshot in a separate
+      // table. Re-deriving the digest from the snapshot and comparing the two is
+      // what makes this a proof rather than a re-read: an altered snapshot no
+      // longer hashes to the digest the determination was recorded under.
+      const digestMatches = outcome.provenance.inputDigest === row.input_digest;
+      const stateMatches = outcome.state === row.state;
+      const unknownReasonMatches = (outcome.unknownReason ?? null) === base.originalUnknownReason;
+      const rationaleMatches = outcome.rationale === row.rationale;
+
+      const replayed = {
+        ...base,
+        snapshotIntegrity: (digestMatches ? 'VERIFIED' : 'DIGEST_MISMATCH') as SnapshotIntegrity,
+        rulesetIntegrity: 'VERIFIED' as RulesetIntegrity,
+        replayedState: outcome.state,
+        replayedUnknownReason: outcome.unknownReason,
+        replayedDigest: outcome.provenance.inputDigest,
+        rationaleMatches,
+      };
+
+      if (!digestMatches) {
         return {
-          assessmentId,
+          ...replayed,
           reproduced: false,
-          originalState: row.state as AssuranceState,
-          replayedState: 'UNKNOWN',
-          originalDigest: row.input_digest,
-          replayedDigest: '',
           explanation:
-            `Ruleset ${row.ruleset_key}@${row.ruleset_version} is no longer available in this build, ` +
-            'so the assessment cannot be reproduced. Deploy the archived ruleset version to replay it.',
+            'The recorded inputs no longer hash to the digest stored on the assessment ' +
+            `(recorded ${row.input_digest}, recomputed ${outcome.provenance.inputDigest}). The ` +
+            'stored facts are not the facts this determination was made on. Treat this as ' +
+            'evidence tampering or storage corruption and escalate.',
         };
       }
 
-      const asOfIso = row.assessed_at.toISOString();
-      const input = await buildInput(control, ruleset, asOfIso);
-      const outcome = assessControl(ruleset, input);
-
-      const digestMatches = outcome.provenance.inputDigest === row.input_digest;
-      const stateMatches = outcome.state === row.state;
+      if (!stateMatches || !unknownReasonMatches || !rationaleMatches) {
+        return {
+          ...replayed,
+          reproduced: false,
+          explanation:
+            'The inputs are intact and verified, but re-running them produces a different ' +
+            `determination (recorded ${row.state}, replayed ${outcome.state}). The engine is not ` +
+            'deterministic across these builds. This is a defect in Adericel, not in the ' +
+            "customer's data, and should be escalated.",
+        };
+      }
 
       return {
-        assessmentId,
-        reproduced: digestMatches && stateMatches,
-        originalState: row.state as AssuranceState,
-        replayedState: outcome.state,
-        originalDigest: row.input_digest,
-        replayedDigest: outcome.provenance.inputDigest,
-        explanation: digestMatches
-          ? stateMatches
-            ? 'Reproduced exactly: identical inputs produced an identical determination.'
-            : 'Inputs match but the determination differs. This indicates an engine defect and should be escalated.'
-          : 'Inputs have changed since the original assessment, so the historical determination cannot be ' +
-            'reproduced from current data. The original assessment record remains authoritative for that instant.',
+        ...replayed,
+        reproduced: true,
+        explanation:
+          'Reproduced exactly. The facts recorded with this assessment, re-run under ruleset ' +
+          `${row.ruleset_key}@${row.ruleset_version} (${row.ruleset_hash}), produce the same ` +
+          'determination, the same reason and the same explanation.',
       };
     },
   };

@@ -57,13 +57,51 @@ export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migr
   return migrations;
 }
 
+/**
+ * Prepare the migration bookkeeping, deterministically.
+ *
+ * Both halves of this matter, and the first cost a production upgrade path.
+ *
+ * The bookkeeping table is qualified. It used to be created unqualified, which
+ * resolved through `search_path` — `"$user", public` by default. On a virgin
+ * database the `adericel` schema does not exist yet, so it landed in `public`.
+ * Once migration 0001 created the schema, the same unqualified name resolved to
+ * `adericel` instead, because the deployment's login role is also called
+ * `adericel` and `"$user"` comes first. The next run therefore created a second,
+ * empty bookkeeping table, concluded that no migrations had ever been applied,
+ * and tried to re-run 0001 — which failed on `relation "msps" already exists`.
+ * The first deployment of a database worked and every upgrade after it did not.
+ * A database that has landed in that state is repaired here rather than
+ * requiring a manual fix.
+ *
+ * The search path is then pinned, so where a migration's unqualified `CREATE
+ * TABLE` lands is a property of the migration runner rather than of what the
+ * connecting role happens to be called.
+ */
 const BOOTSTRAP = `
-CREATE TABLE IF NOT EXISTS schema_migrations (
+CREATE SCHEMA IF NOT EXISTS adericel;
+
+CREATE TABLE IF NOT EXISTS public.schema_migrations (
   id           text PRIMARY KEY,
   checksum     text NOT NULL,
   applied_at   timestamptz NOT NULL DEFAULT now(),
   duration_ms  integer NOT NULL DEFAULT 0
-);`;
+);
+
+DO $bootstrap$
+BEGIN
+  IF to_regclass('adericel.schema_migrations') IS NOT NULL THEN
+    -- Adopt anything the stray table recorded before discarding it, so a
+    -- database that recorded its history there does not lose it.
+    INSERT INTO public.schema_migrations (id, checksum, applied_at, duration_ms)
+    SELECT id, checksum, applied_at, duration_ms FROM adericel.schema_migrations
+    ON CONFLICT (id) DO NOTHING;
+    DROP TABLE adericel.schema_migrations;
+  END IF;
+END;
+$bootstrap$;
+
+SET search_path TO adericel, public;`;
 
 export interface MigrationStatus {
   readonly id: string;
@@ -84,7 +122,7 @@ export async function status(client: pg.Client): Promise<MigrationStatus[]> {
   await client.query(BOOTSTRAP);
   const migrations = await loadMigrations();
   const { rows } = await client.query<{ id: string; checksum: string; applied_at: Date }>(
-    'SELECT id, checksum, applied_at FROM schema_migrations',
+    'SELECT id, checksum, applied_at FROM public.schema_migrations',
   );
   const applied = new Map(rows.map((r) => [r.id, r]));
   return migrations.map((migration) => {
@@ -105,7 +143,7 @@ export async function up(
   await client.query(BOOTSTRAP);
   const migrations = await loadMigrations();
   const { rows } = await client.query<{ id: string; checksum: string }>(
-    'SELECT id, checksum FROM schema_migrations',
+    'SELECT id, checksum FROM public.schema_migrations',
   );
   const applied = new Map(rows.map((r) => [r.id, r.checksum]));
 
@@ -131,7 +169,7 @@ export async function up(
       await client.query("SELECT set_config('adericel.scope', 'platform', true)");
       await client.query(migration.up);
       await client.query(
-        'INSERT INTO schema_migrations (id, checksum, duration_ms) VALUES ($1, $2, $3)',
+        'INSERT INTO public.schema_migrations (id, checksum, duration_ms) VALUES ($1, $2, $3)',
         [migration.id, migration.checksum, Date.now() - started],
       );
       await client.query('COMMIT');
@@ -155,7 +193,7 @@ export async function down(
   const migrations = await loadMigrations();
   const byId = new Map(migrations.map((m) => [m.id, m]));
   const { rows } = await client.query<{ id: string }>(
-    'SELECT id FROM schema_migrations ORDER BY id DESC LIMIT $1',
+    'SELECT id FROM public.schema_migrations ORDER BY id DESC LIMIT $1',
     [steps],
   );
   let count = 0;
@@ -167,7 +205,7 @@ export async function down(
     try {
       await client.query("SELECT set_config('adericel.scope', 'platform', true)");
       await client.query(migration.down);
-      await client.query('DELETE FROM schema_migrations WHERE id = $1', [migration.id]);
+      await client.query('DELETE FROM public.schema_migrations WHERE id = $1', [migration.id]);
       await client.query('COMMIT');
       count += 1;
     } catch (error) {

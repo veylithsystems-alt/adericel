@@ -52,8 +52,12 @@ no replay.
 
 **Positive.** The engine is testable with no infrastructure at all, which is why
 its test suite runs in milliseconds and covers the aggregation lattice
-exhaustively. Determinations are reproducible. The boundary is enforceable in
-review: a diff that adds an import to the truth-engine package is visible.
+exhaustively. Determinations are reproducible. The boundary is enforced by
+test, not by review: `tests/unit/engine-purity.test.ts` reads the package's
+module graph and fails on an import that can reach the world, on a reference to
+the clock, randomness or the environment, and on mutable module-level state.
+Review catches what a reviewer happens to look at; the test catches the branch
+nobody exercised.
 
 **Negative.** Callers must assemble the input, which is more code than reading
 from a database mid-assessment. Adding a rule that needs a new class of fact
@@ -71,10 +75,11 @@ rather than the data.
 
 ## Operational implications
 
-The engine version is recorded on every assessment. An engine upgrade that
-changed a determination would be visible as a state change with an unchanged
-input digest — which the replay endpoint reports as an engine defect rather than
-a posture change.
+The engine version is recorded on every assessment, and the facts it ran on are
+recorded alongside it (ADR-0023). An engine upgrade that changed a determination
+is therefore visible directly: replaying the recorded inputs yields a verified
+digest and a different state, which the replay endpoint reports as an engine
+defect rather than a posture change.
 
 ## Migration implications
 

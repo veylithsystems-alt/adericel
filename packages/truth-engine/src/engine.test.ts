@@ -628,3 +628,278 @@ describe('the ISO 27001 ruleset', () => {
     }
   });
 });
+
+/**
+ * Properties asserted over every rule in every shipped ruleset, rather than
+ * over hand-picked examples.
+ *
+ * A case-by-case test proves the cases somebody thought of. These say something
+ * about the whole surface, so a rule added next year inherits the guarantee
+ * without anybody remembering to extend a list.
+ */
+describe('assessControl — invariants across every shipped rule', () => {
+  const everyRule = BUILT_IN_RULESETS.flatMap((definition) => {
+    const ruleset = compileRuleset(definition);
+    return ruleset.rules.map((rule) => ({ ruleset, rule }));
+  });
+
+  it('has rules to quantify over', () => {
+    expect(everyRule.length).toBeGreaterThan(20);
+  });
+
+  it('never reports SATISFIED when it has no facts at all', () => {
+    const claimed: string[] = [];
+    for (const { ruleset, rule } of everyRule) {
+      // A subject exists and is in scope, but nothing whatsoever is known about
+      // it. This is the state of a freshly connected tenant, and the state in
+      // which an assurance product is most tempted to flatter its customer.
+      const subjects =
+        rule.subjectKinds.length === 0
+          ? []
+          : rule.subjectKinds.map((kind, index) => ({
+              nodeId: `subject-${index}`,
+              kind,
+              label: `subject-${index}`,
+              attributes: {},
+              claims: [],
+            }));
+      const outcome = assessControl(
+        ruleset,
+        input({
+          ruleKey: rule.key,
+          controlKey: rule.key,
+          subjects,
+          organisationClaims: [],
+          evidence: [],
+          observedSubjectKinds: rule.subjectKinds,
+        }),
+      );
+      if (outcome.state === 'SATISFIED' || outcome.state === 'PARTIALLY_SATISFIED') {
+        claimed.push(`${ruleset.key}/${rule.key} -> ${outcome.state}`);
+      }
+    }
+    expect(claimed).toEqual([]);
+  });
+
+  it('never reports NOT_APPLICABLE for an asset class it has never observed', () => {
+    const excused: string[] = [];
+    for (const { ruleset, rule } of everyRule) {
+      if (rule.subjectKinds.length === 0) continue;
+      const outcome = assessControl(
+        ruleset,
+        input({
+          ruleKey: rule.key,
+          controlKey: rule.key,
+          subjects: [],
+          evidence: [],
+          observedSubjectKinds: [],
+        }),
+      );
+      // Excusing itself from the denominator is how a tenant with no endpoint
+      // collection at all scores better than one whose collection works.
+      if (outcome.state !== 'UNKNOWN')
+        excused.push(`${ruleset.key}/${rule.key} -> ${outcome.state}`);
+    }
+    expect(excused).toEqual([]);
+  });
+
+  it('states a reason exactly when, and only when, the answer is UNKNOWN', () => {
+    const inconsistent: string[] = [];
+    const scenarios = (rule: { key: string; subjectKinds: readonly string[] }) => [
+      { subjects: [], organisationClaims: [], evidence: [], observedSubjectKinds: [] },
+      {
+        subjects: rule.subjectKinds.map((kind, i) => ({
+          nodeId: `s-${i}`,
+          kind,
+          label: `s-${i}`,
+          attributes: {},
+          claims: [],
+        })),
+        organisationClaims: [],
+        evidence: [],
+        observedSubjectKinds: [...rule.subjectKinds],
+      },
+      {
+        subjects: [],
+        organisationClaims: [],
+        evidence: [],
+        observedSubjectKinds: [...rule.subjectKinds],
+      },
+    ];
+    for (const { ruleset, rule } of everyRule) {
+      for (const scenario of scenarios(rule)) {
+        const outcome = assessControl(
+          ruleset,
+          input({ ruleKey: rule.key, controlKey: rule.key, ...scenario }),
+        );
+        const hasReason = outcome.unknownReason !== null;
+        if (hasReason !== (outcome.state === 'UNKNOWN')) {
+          inconsistent.push(
+            `${ruleset.key}/${rule.key}: state ${outcome.state}, reason ${String(outcome.unknownReason)}`,
+          );
+        }
+      }
+    }
+    expect(inconsistent).toEqual([]);
+  });
+
+  it('always explains itself, whatever it concludes', () => {
+    const silent: string[] = [];
+    for (const { ruleset, rule } of everyRule) {
+      const outcome = assessControl(
+        ruleset,
+        input({
+          ruleKey: rule.key,
+          controlKey: rule.key,
+          subjects: [],
+          evidence: [],
+          observedSubjectKinds: [...rule.subjectKinds],
+        }),
+      );
+      // A determination a customer cannot read is not a determination they can
+      // act on, challenge, or show an auditor.
+      if (outcome.rationale.trim().length < 20) {
+        silent.push(`${ruleset.key}/${rule.key}: "${outcome.rationale}"`);
+      }
+    }
+    expect(silent).toEqual([]);
+  });
+});
+
+describe('assessControl — SATISFIED is not reachable over unseen subjects', () => {
+  it('does not report SATISFIED while any in-scope subject is unknown', () => {
+    const outcome = assessControl(
+      registry.get('adericel-baseline'),
+      input({
+        subjects: [
+          identity('a', [claim('identity.mfa.enforced', true)]),
+          identity('b', [claim('identity.mfa.enforced', true)]),
+          // Present, in scope, and nothing known about it.
+          identity('c', []),
+        ],
+      }),
+    );
+    expect(outcome.state).toBe('UNKNOWN');
+    expect(outcome.unknownSubjects.map((s) => s.nodeId)).toEqual(['c']);
+  });
+
+  it('records which subjects it could not speak to, by name', () => {
+    const outcome = assessControl(
+      registry.get('adericel-baseline'),
+      input({
+        subjects: [
+          identity('known-good', [claim('identity.mfa.enforced', true)]),
+          identity('unseen-1', []),
+          identity('unseen-2', []),
+        ],
+      }),
+    );
+    // Naming them is what makes the answer actionable: "go and look at these".
+    expect(outcome.unknownSubjects.map((s) => s.nodeId).sort()).toEqual(['unseen-1', 'unseen-2']);
+    expect(outcome.subjectOutcomes).toHaveLength(3);
+  });
+
+  it('ANY may report SATISFIED alongside unknowns, and this is deliberate', () => {
+    // ANY asks whether at least one subject satisfies the control. One
+    // confirmed pass settles that question, so unknowns elsewhere do not make
+    // the answer uncertain. Recorded as a test so it is a decision rather than
+    // an accident, and so a change to it has to be argued for.
+    const ruleset = compileRuleset({
+      key: 'test-any',
+      version: '1.0.0',
+      name: 'Any',
+      engineVersion: '1.0.0',
+      rules: [
+        {
+          key: 'any.rule',
+          title: 'At least one identity enforces MFA',
+          subjectKinds: ['Identity'],
+          expression: {
+            op: 'eq',
+            left: { op: 'claim', predicate: 'identity.mfa.enforced' },
+            right: { op: 'const', value: true },
+          },
+          aggregation: 'ANY',
+          unknownTolerance: 1,
+          failureTitle: 'No identity enforces MFA.',
+          failureDescription: 'At least one identity must enforce MFA.',
+        },
+      ],
+    });
+    const outcome = assessControl(
+      ruleset,
+      input({
+        ruleKey: 'any.rule',
+        controlKey: 'any.rule',
+        subjects: [identity('a', [claim('identity.mfa.enforced', true)]), identity('b', [])],
+      }),
+    );
+    expect(outcome.state).toBe('SATISFIED');
+    expect(outcome.unknownSubjects).toHaveLength(1);
+  });
+});
+
+describe('assessControl — evidence provenance', () => {
+  it('cites only the evidence behind the claims it actually relied on', () => {
+    const outcome = assessControl(
+      registry.get('adericel-baseline'),
+      input({
+        evidence: [evidence({ id: 'ev-used' }), evidence({ id: 'ev-unrelated' })],
+        subjects: [
+          identity('a', [
+            claim('identity.mfa.enforced', true, { id: 'c-a', evidenceIds: ['ev-used'] }),
+          ]),
+        ],
+      }),
+    );
+    expect(outcome.state).toBe('SATISFIED');
+    expect(outcome.evidenceIds).toEqual(['ev-used']);
+    expect(outcome.claimIds).toEqual(['c-a']);
+  });
+
+  it('cites a refused claim as consulted, and says in the reasoning why it was refused', () => {
+    const outcome = assessControl(
+      registry.get('adericel-baseline'),
+      input({
+        evidence: [evidence({ id: 'ev-ai' })],
+        subjects: [
+          identity('a', [
+            claim('identity.mfa.enforced', true, {
+              id: 'c-ai',
+              origin: 'AI_SUGGESTED',
+              status: 'CANDIDATE',
+              evidenceIds: ['ev-ai'],
+            }),
+          ]),
+        ],
+      }),
+    );
+    // The lists are "what was consulted", not "what supported the answer". A
+    // refused claim belongs in them, because hiding it would leave a customer
+    // unable to see that Adericel looked at something and declined to use it —
+    // and the reasoning must say so in words, not merely by omission.
+    expect(outcome.state).toBe('UNKNOWN');
+    expect(outcome.claimIds).toContain('c-ai');
+    expect(outcome.evidenceIds).toContain('ev-ai');
+    expect(outcome.subjectOutcomes[0]!.detail).toMatch(/AI-suggested/i);
+    // And it emphatically did not count towards the determination.
+    expect(outcome.unknownReason).toBe('INSUFFICIENT_EVIDENCE');
+  });
+
+  it('carries the ruleset identity and input digest on every outcome', () => {
+    for (const state of ['satisfied', 'unknown'] as const) {
+      const outcome = assessControl(
+        registry.get('adericel-baseline'),
+        input({
+          subjects: [
+            identity('a', state === 'satisfied' ? [claim('identity.mfa.enforced', true)] : []),
+          ],
+        }),
+      );
+      expect(outcome.provenance.rulesetHash).toMatch(/^sha256:/);
+      expect(outcome.provenance.inputDigest).toMatch(/^sha256:/);
+      expect(outcome.provenance.engineVersion).toBe('1.0.0');
+      expect(outcome.provenance.assessedAt).toBe(AS_OF);
+    }
+  });
+});

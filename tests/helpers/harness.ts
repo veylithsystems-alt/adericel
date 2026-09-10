@@ -188,7 +188,7 @@ export async function createHarness(
           TRUNCATE TABLE
             action_transitions, action_executions, verifications, approval_decisions,
             approvals, actions, policies, exceptions, risk_findings, risks, findings,
-            assurance_states, assessments, claim_evidence, claims, evidence_observations,
+            assurance_states, assessments, assessment_inputs, claim_evidence, claims, evidence_observations,
             evidence_subjects, evidence, observations, integration_runs, integrations,
             control_requirements, controls, organisation_frameworks, graph_edges, graph_nodes,
             outbox_events, event_log, audit_log, idempotency_keys, scheduled_jobs, reports,

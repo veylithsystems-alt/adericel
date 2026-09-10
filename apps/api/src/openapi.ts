@@ -411,12 +411,23 @@ function buildPaths(): Record<string, unknown> {
       post: operation({
         summary: 'Replay a historical assessment',
         description:
-          'Re-runs the recorded determination against the recorded ruleset version and compares ' +
-          'input digests. Reports honestly when inputs have since changed rather than implying a ' +
-          'reproduction it cannot perform.',
+          'Re-derives the determination from the facts recorded with the assessment, under the ' +
+          'exact ruleset version and hash it ran on — not from current data, which has moved on. ' +
+          'The recomputed input digest is compared with the digest stored on the assessment, so a ' +
+          'reproduction is a proof rather than a re-read: an altered snapshot reports ' +
+          'DIGEST_MISMATCH, a ruleset whose content has changed under the same version reports ' +
+          'HASH_MISMATCH, and an assessment with no recorded inputs reports NOT_RECORDED. In none ' +
+          'of those cases is a determination offered.',
         tags: ['Assurance'],
         parameters: [ORG_PARAM, ID_PARAM],
-        responses: { '200': { description: 'Replay result' } },
+        responses: {
+          '200': {
+            description:
+              'Replay result, including snapshot and ruleset integrity, the recorded and replayed ' +
+              'state, unknown reason and input digest, and a plain-language explanation.',
+          },
+          '412': { description: 'Not a control assessment; roll-ups are derived, not computed' },
+        },
       }),
     },
     '/v1/organisations/{organisationId}/evidence': {

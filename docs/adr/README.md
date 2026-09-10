@@ -33,6 +33,7 @@ implications.
 | [0020](./ADR-0020-backup-dr.md)                              | Backup and disaster recovery                          | Accepted |
 | [0021](./ADR-0021-observability.md)                          | Observability and correlation                         | Accepted |
 | [0022](./ADR-0022-typescript-monorepo.md)                    | TypeScript monorepo                                   | Accepted |
+| [0023](./ADR-0023-recorded-assessment-inputs.md)             | Assessments record the facts they ran on              | Accepted |
 
 ## Writing a new ADR
 

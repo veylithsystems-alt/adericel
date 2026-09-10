@@ -270,9 +270,9 @@ export function ControlExplanation(): ReactElement {
         )}
       </Section>
 
-      <Section title="Evidence" note="What the claims rest on">
+      <Section title="Evidence" note="What those claims were checked against">
         {data.evidence.length === 0 ? (
-          <Empty>No evidence supports this determination.</Empty>
+          <Empty>No evidence was available to this determination.</Empty>
         ) : (
           <div className="panel panel--flush table__wrap">
             <table className="table">
