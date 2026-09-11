@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adericel</title>
+    <meta
+      name="description"
+      content="Autonomous organisational security assurance infrastructure"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <!--
+      Brand typefaces are bundled, not fetched. Three reasons, in order:
+
+      The production Content-Security-Policy sets `font-src 'self'`, so a
+      Google Fonts link renders the whole interface in a system fallback and
+      says nothing about it. The brand was silently not being applied.
+
+      A request to fonts.gstatic.com from a customer's browser tells a third
+      party who is using their security tooling and when. That is a telemetry
+      leak a security-conscious MSP will find, and they will be right to ask.
+
+      And a self-hosted deployment behind a restrictive proxy — which is where
+      several of these will run — has no route to an external font host at all.
+    -->
+    <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/brand/app-icon.svg" />
+    <meta name="theme-color" content="#14181F" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

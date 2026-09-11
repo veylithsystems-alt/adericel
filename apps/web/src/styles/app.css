@@ -1,0 +1,705 @@
+/*
+ * Adericel interface styles — Brand Pack v1.0.
+ *
+ * Rules separate; nothing is raised. There are no shadows and no gradients
+ * anywhere in this file, which is a brand rule and also a legibility one: an
+ * assurance interface should read like a document, not like a control panel.
+ */
+
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  font-weight: var(--weight-regular);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+}
+h1 {
+  font-size: var(--text-h1);
+  line-height: var(--leading-h1);
+  letter-spacing: -0.01em;
+}
+h2 {
+  font-size: var(--text-h2);
+  line-height: var(--leading-h2);
+}
+h3 {
+  font-size: var(--text-h3);
+  line-height: var(--leading-h3);
+}
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+}
+
+code,
+.mono,
+.data {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  line-height: var(--leading-small);
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.masthead {
+  background: var(--surface-brand);
+  color: var(--text-on-brand);
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.masthead__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-h2);
+  letter-spacing: -0.01em;
+}
+
+.masthead__context {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-small);
+  color: var(--text-on-brand);
+  opacity: 0.85;
+}
+
+/*
+ * Which of the three control rooms this session is in.
+ *
+ * Deliberately typographic rather than coloured: colour in this product means
+ * an assurance state, and a surface is not a state. It reads as a label on the
+ * room, not as a verdict about anything in it.
+ */
+.masthead__surface {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px var(--space-3);
+  border: var(--border-width) solid rgb(255 255 255 / 30%);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.nav {
+  display: flex;
+  gap: var(--space-5);
+  padding: 0 var(--space-5);
+  background: var(--surface-brand);
+  border-bottom: var(--border-width) solid rgb(255 255 255 / 12%);
+}
+
+.nav__link {
+  color: var(--text-on-brand);
+  opacity: 0.7;
+  text-decoration: none;
+  padding: var(--space-2) 0 var(--space-3);
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+}
+.nav__link:hover {
+  opacity: 1;
+}
+.nav__link--active {
+  opacity: 1;
+  /*
+   * Deliberately NOT --state-proven.
+   *
+   * Green means PROVEN in this product. Using it to underline the page you are
+   * on says nothing about assurance and teaches the reader that the colour is
+   * decorative — which then weakens it everywhere it does carry meaning. The
+   * active tab is marked with the header's own foreground instead.
+   */
+  border-bottom-color: var(--text-on-brand);
+}
+
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--border-strong);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.page-header__lead {
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  margin-top: var(--space-2);
+  max-width: 60ch;
+}
+
+.section {
+  margin-bottom: var(--space-7);
+}
+.section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: var(--border);
+  margin-bottom: var(--space-4);
+}
+.section__note {
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+}
+
+.grid {
+  display: grid;
+  gap: var(--space-4);
+}
+.grid--2 {
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+}
+.grid--3 {
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+.grid--4 {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.panel {
+  border: var(--border);
+  background: var(--surface-raised);
+  padding: var(--space-4);
+}
+.panel--flush {
+  padding: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+/* A button in a vertical stack sizes to its label. Stretching a destructive
+   action to the full width of the page makes it the most prominent thing on
+   the screen, which is the opposite of what it should be. */
+.stack > .button--small,
+.stack > .button--danger,
+.stack > .button--quiet {
+  align-self: start;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.row--between {
+  justify-content: space-between;
+}
+.spacer {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------ state marks */
+
+/*
+ * State tags — Brand Pack v1.1.
+ *
+ * A filled pill in the state colour with paper text, uppercase and letter
+ * spaced. Filled rather than tinted because these are the one place the state
+ * palette is spent, and a tint reads as a background rather than as an
+ * assertion.
+ *
+ * Compact by design: the pack lists oversized badges as a DON'T, and a badge
+ * that dominates the row it sits in starts competing with the thing it
+ * describes.
+ */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-pill);
+  border: var(--border-width) solid transparent;
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.state--proven {
+  background: var(--state-proven);
+  color: var(--text-on-state);
+}
+
+.state--failing {
+  background: var(--state-failing);
+  color: var(--text-on-state);
+}
+
+.state--exception {
+  background: var(--state-exception);
+  color: var(--text-on-state);
+}
+
+/*
+ * Not applicable. Outlined rather than filled: it is not an assurance reading
+ * at all, so it gets none of the state palette.
+ */
+.state--muted {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--rule);
+}
+
+/*
+ * Unknown carries no colour, on the pack's explicit instruction and for the
+ * reason the whole product exists. The hatch says "no reading here" rather than
+ * "a poor reading", and turning it into warning yellow — which is the thing
+ * every other tool in this category does — would place it on the good-to-bad
+ * axis it is specifically not on.
+ */
+.state--unknown {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    var(--hatch-angle),
+    currentColor 0,
+    currentColor var(--hatch-line),
+    transparent var(--hatch-line),
+    transparent var(--hatch-pitch)
+  );
+}
+
+/*
+ * The hatch would run straight through the label and make it unreadable, so the
+ * text sits on its own small pad of the page ground. The pad is the surface
+ * behind the tag, which is why it is a token rather than a literal.
+ */
+.state--unknown > * {
+  background: var(--surface);
+  padding: 0 0.35em;
+  border-radius: var(--radius-sm);
+}
+
+/* --------------------------------------------------------------- tables */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-small);
+}
+.table th {
+  text-align: left;
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-meta);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-strong);
+  white-space: nowrap;
+}
+.table td {
+  padding: var(--space-3);
+  border-bottom: var(--border);
+  vertical-align: top;
+}
+.table tbody tr:hover {
+  background: var(--surface-sunken);
+}
+.table__numeric {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+.table__wrap {
+  overflow-x: auto;
+}
+
+/* --------------------------------------------------------------- counts */
+
+.count-bar {
+  display: flex;
+  gap: 1px;
+  height: 6px;
+  width: 100%;
+  background: var(--rule);
+}
+.count-bar__segment {
+  height: 100%;
+}
+.count-bar__segment--proven {
+  background: var(--state-proven);
+}
+.count-bar__segment--failing {
+  background: var(--state-failing);
+}
+.count-bar__segment--exception {
+  background: var(--state-exception);
+}
+.count-bar__segment--muted {
+  background: var(--rule);
+}
+.count-bar__segment--unknown {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--text-primary) 0,
+    var(--text-primary) 2px,
+    transparent 2px,
+    transparent 5px
+  );
+  border: var(--border-width) solid var(--text-primary);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.metric__value {
+  font-family: var(--font-mono);
+  font-size: 1.75rem;
+  line-height: 1.1;
+  font-weight: var(--weight-medium);
+}
+.metric__label {
+  font-size: var(--text-meta);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.metric__note {
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+}
+
+/* -------------------------------------------------------------- controls */
+
+.button {
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: var(--weight-medium);
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.button:hover:not(:disabled) {
+  opacity: 0.88;
+}
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.button--secondary {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+.button--small {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-meta);
+}
+.button--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.button--quiet:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+.button--danger {
+  background: var(--state-failing);
+  border-color: var(--state-failing);
+  color: #fff;
+}
+
+.form-note {
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.field__label {
+  font-size: var(--text-meta);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.input,
+.textarea,
+.select {
+  font: inherit;
+  font-size: var(--text-small);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  width: 100%;
+}
+.textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+/* ---------------------------------------------------------------- notices */
+
+.notice {
+  border-left: 3px solid var(--text-secondary);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  font-size: var(--text-small);
+}
+.notice--failing {
+  border-left-color: var(--state-failing);
+}
+.notice--exception {
+  border-left-color: var(--state-exception);
+}
+.notice--proven {
+  border-left-color: var(--state-proven);
+}
+.notice--unknown {
+  border-left-color: var(--text-primary);
+}
+.notice__title {
+  font-weight: var(--weight-semibold);
+  margin-bottom: var(--space-1);
+}
+
+/**
+ * Provenance mark: demonstration data.
+ *
+ * Deliberately NOT a state class. DEMONSTRATION is not an assurance state, and
+ * borrowing the UNKNOWN hatching for it would imply Adericel is uncertain about
+ * a fact when what it is actually saying is that the source is not real. State
+ * treatments carry meaning here and must not be reused as decoration.
+ */
+.provenance {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-sm);
+  border: var(--border-width) dashed var(--text-primary);
+  color: var(--text-primary);
+  background: var(--surface-sunken);
+  white-space: nowrap;
+  line-height: 1.35;
+}
+
+.meta {
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+}
+.hash {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.reasoning {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.reasoning__step {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border);
+  font-size: var(--text-small);
+}
+.reasoning__outcome {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  letter-spacing: 0.06em;
+}
+.reasoning__outcome--PASS {
+  color: var(--state-proven);
+}
+.reasoning__outcome--FAIL {
+  color: var(--state-failing);
+}
+.reasoning__outcome--UNKNOWN {
+  color: var(--text-primary);
+}
+.reasoning__outcome--SKIPPED {
+  color: var(--text-secondary);
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.timeline__item {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: var(--border);
+  font-size: var(--text-small);
+}
+.timeline__when {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+}
+
+.empty {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  border: var(--border);
+  border-style: dashed;
+}
+
+.signin {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+.signin__card {
+  width: min(26rem, 100%);
+}
+.signin__wordmark {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+  font-size: 1.75rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.02em;
+}
+.signin__tagline {
+  font-size: var(--text-meta);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-6);
+}
+
+.mark {
+  flex: none;
+}
+
+@media (max-width: 40rem) {
+  .main {
+    padding: var(--space-5) var(--space-4) var(--space-7);
+  }
+  .timeline__item,
+  .reasoning__step {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+  .nav {
+    overflow-x: auto;
+  }
+}
+
+/* ------------------------------------------------------- account security */
+
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.recovery-codes code,
+.setup-key {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-body);
+  letter-spacing: 0.08em;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  background: var(--surface-sunken, transparent);
+  /* Codes get copied by hand off a screen. Breaking the run of characters is
+     the difference between a code that is typed correctly and a support call. */
+  word-break: break-all;
+}
+.setup-key {
+  display: inline-block;
+}

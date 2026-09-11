@@ -11,6 +11,7 @@
 Adericel must maintain an authoritative, continuously updated model of organisational security state. Traditional compliance systems fragment assurance across spreadsheets, documents, tools, and point-in-time audits.
 
 The company's core intellectual property is the ability to:
+
 - Know what exists
 - Determine what is true
 - Prove what can be proven
@@ -26,6 +27,7 @@ This requires a unified domain model that connects observations to assurance thr
 ## Problem
 
 Without a canonical domain model, Adericel becomes:
+
 - A collection of integrations without coherent truth
 - Unable to distinguish observation from inference from proof
 - Unable to maintain evidence provenance
@@ -43,47 +45,47 @@ The graph represents:
 
 ### Core Entities (Nodes)
 
-| Entity | Purpose | Cardinality |
-|--------|---------|-------------|
-| **Organisation** | Customer tenant boundary | One per customer |
-| **Person** | Human identity holder | Multiple per org |
-| **Identity** | Authenticatable credential (Entra ID user, service principal, etc.) | Multiple per person |
-| **Device** | Managed endpoint | Multiple per org |
-| **Application** | Software service | Multiple per org |
-| **Service** | Cloud/infrastructure service | Multiple per org |
-| **Data** | Information asset | Multiple per org |
-| **Supplier** | External organisation | Multiple per org |
-| **Observation** | Raw fact collected from a source system | Multiple (continuous) |
-| **Evidence** | Normalised, validated observation | Multiple |
-| **Finding** | Assessment that a control is not met | Multiple (temporal) |
-| **Control** | Security control | Multiple per framework |
-| **Requirement** | Security requirement | Multiple per framework |
-| **Framework** | Compliance/assurance framework (Cyber Essentials, ISO 27001, etc.) | Multiple per org |
-| **Policy** | Organisational decision rule for autonomous action | Multiple per org |
-| **Action** | Remediation or configuration change | Multiple (temporal) |
-| **Verification** | Proof that an action was successful | Multiple (temporal, 1:N with Action) |
-| **Assurance** | Current state of a requirement/control/framework | Multiple (temporal) |
+| Entity           | Purpose                                                             | Cardinality                          |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------ |
+| **Organisation** | Customer tenant boundary                                            | One per customer                     |
+| **Person**       | Human identity holder                                               | Multiple per org                     |
+| **Identity**     | Authenticatable credential (Entra ID user, service principal, etc.) | Multiple per person                  |
+| **Device**       | Managed endpoint                                                    | Multiple per org                     |
+| **Application**  | Software service                                                    | Multiple per org                     |
+| **Service**      | Cloud/infrastructure service                                        | Multiple per org                     |
+| **Data**         | Information asset                                                   | Multiple per org                     |
+| **Supplier**     | External organisation                                               | Multiple per org                     |
+| **Observation**  | Raw fact collected from a source system                             | Multiple (continuous)                |
+| **Evidence**     | Normalised, validated observation                                   | Multiple                             |
+| **Finding**      | Assessment that a control is not met                                | Multiple (temporal)                  |
+| **Control**      | Security control                                                    | Multiple per framework               |
+| **Requirement**  | Security requirement                                                | Multiple per framework               |
+| **Framework**    | Compliance/assurance framework (Cyber Essentials, ISO 27001, etc.)  | Multiple per org                     |
+| **Policy**       | Organisational decision rule for autonomous action                  | Multiple per org                     |
+| **Action**       | Remediation or configuration change                                 | Multiple (temporal)                  |
+| **Verification** | Proof that an action was successful                                 | Multiple (temporal, 1:N with Action) |
+| **Assurance**    | Current state of a requirement/control/framework                    | Multiple (temporal)                  |
 
 ### Relationships (Edges)
 
-| Relationship | From | To | Purpose |
-|--------------|------|-----|---------|
-| **owns** | Organisation | Person/Device/Application/Data |  Asset ownership |
-| **authenticates** | Person | Identity | Identity binding |
-| **uses** | Identity | Device/Application | Usage relationship |
-| **runs_on** | Application | Device/Service | Deployment |
-| **processes** | Application | Data | Data processing |
-| **protects** | Control | Data/Device/Identity/Application | Control scope |
-| **satisfies** | Control | Requirement | Requirement coverage |
-| **implements** | Requirement | Framework | Framework requirement |
-| **observes** | Observation | Entity | What was observed |
-| **evidences** | Evidence | Observation | Evidence source |
-| **proves** | Evidence | Control | Control proof |
-| **triggers** | Finding | Control | Control failure |
-| **remediates** | Action | Finding | Remediation target |
-| **verified_by** | Action | Verification | Action undergoes verification |
-| **produced_by** | Evidence | Verification | Verification produces evidence of success |
-| **affected_by** | Entity | Supplier | Supplier dependency |
+| Relationship      | From         | To                               | Purpose                                   |
+| ----------------- | ------------ | -------------------------------- | ----------------------------------------- |
+| **owns**          | Organisation | Person/Device/Application/Data   | Asset ownership                           |
+| **authenticates** | Person       | Identity                         | Identity binding                          |
+| **uses**          | Identity     | Device/Application               | Usage relationship                        |
+| **runs_on**       | Application  | Device/Service                   | Deployment                                |
+| **processes**     | Application  | Data                             | Data processing                           |
+| **protects**      | Control      | Data/Device/Identity/Application | Control scope                             |
+| **satisfies**     | Control      | Requirement                      | Requirement coverage                      |
+| **implements**    | Requirement  | Framework                        | Framework requirement                     |
+| **observes**      | Observation  | Entity                           | What was observed                         |
+| **evidences**     | Evidence     | Observation                      | Evidence source                           |
+| **proves**        | Evidence     | Control                          | Control proof                             |
+| **triggers**      | Finding      | Control                          | Control failure                           |
+| **remediates**    | Action       | Finding                          | Remediation target                        |
+| **verified_by**   | Action       | Verification                     | Action undergoes verification             |
+| **produced_by**   | Evidence     | Verification                     | Verification produces evidence of success |
+| **affected_by**   | Entity       | Supplier                         | Supplier dependency                       |
 
 ### Properties (Attributes)
 
@@ -99,12 +101,12 @@ Every node carries:
   createdBy: actor,
   source: integration source,
   externalId: reference to source system,
-  
+
   // State tracking
   state: ACTIVE | ARCHIVED | UNKNOWN,
   lastObservedAt: timestamp,
   lastVerifiedAt: timestamp,
-  
+
   // Evidence provenance
   evidenceChain: [Evidence],
   historicalStates: [HistoricalState]
@@ -142,7 +144,7 @@ INTENT
    ↓
 POLICY_EVALUATED
    ↓
-AUTHORISATION_REQUIRED? 
+AUTHORISATION_REQUIRED?
    ├─ YES → AWAITING_APPROVAL
    │         ↓
    │    APPROVED | DENIED
@@ -168,12 +170,15 @@ AUTHORISATION_REQUIRED?
 ## Alternatives Considered
 
 ### 1. Relational Database Without Graph Semantics
+
 **Rejected:** Would require re-modelling for each new relationship type. Proof chains and evidence provenance become difficult to query and maintain.
 
 ### 2. Document-Per-Control Model
+
 **Rejected:** Loses organisational relationships, creates data duplication, unable to trace control dependencies or asset relationships.
 
 ### 3. External Compliance Platform Integration
+
 **Rejected:** Makes Adericel dependent on external platform models, loses control over schema evolution, creates vendor lock-in, unable to maintain framework-independent model.
 
 ---
@@ -233,6 +238,7 @@ The model supports all deployment patterns without re-architecture.
 ## Reversal Conditions
 
 This decision is reversed if:
+
 1. The graph model becomes a performance bottleneck that caching cannot solve
 2. A framework is encountered that requires non-relational semantics
 3. Multi-tenant queries become operationally infeasible

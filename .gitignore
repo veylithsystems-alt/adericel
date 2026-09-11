@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+.vite/
+.turbo/
+tmp/
+var/
+storage/local/
+docs/api/openapi.generated.json

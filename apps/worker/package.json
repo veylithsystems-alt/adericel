@@ -1,0 +1,38 @@
+{
+  "name": "@adericel/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsx watch --conditions=development src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@adericel/shared": "workspace:*",
+    "@adericel/domain": "workspace:*",
+    "@adericel/graph": "workspace:*",
+    "@adericel/evidence": "workspace:*",
+    "@adericel/truth-engine": "workspace:*",
+    "@adericel/policy": "workspace:*",
+    "@adericel/actions": "workspace:*",
+    "@adericel/integrations": "workspace:*",
+    "pg": "^8.16.3",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.5"
+  },
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "adericel-worker": "./dist/main.js"
+  }
+}

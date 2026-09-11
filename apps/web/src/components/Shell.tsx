@@ -1,0 +1,199 @@
+import type { ReactElement, ReactNode } from 'react';
+import { NavLink, useParams } from 'react-router-dom';
+import { Wordmark } from './Mark.js';
+import { signOut } from '../lib/api.js';
+import { isClientOnly, occupies, surfaceLabel } from '../lib/surface.js';
+import type { Me } from '../lib/types.js';
+
+/**
+ * Application shell.
+ *
+ * Navigation follows the assurance chain rather than a feature list, which is
+ * how the people using it actually think about the work:
+ *
+ *   Assurance — what is true now, and what is unknown
+ *   Fix       — findings and the action centre
+ *   Proof     — evidence and its provenance
+ *   Change    — what moved, and why
+ *   Ask       — explore the graph and query the record
+ */
+export function Shell({ me, children }: { me: Me; children: ReactNode }): ReactElement {
+  const { organisationId } = useParams();
+  const base = organisationId ? `/organisations/${organisationId}` : null;
+  // Which of the three information boundaries this session is inside. Named in
+  // the masthead because an operator who holds authority in more than one must
+  // never be unsure which room they are acting in.
+  const label = surfaceLabel(me);
+  const clientOnly = isClientOnly(me);
+  const ownOrganisation = me.organisations[0]?.id ?? null;
+
+  return (
+    <div className="app">
+      <header className="masthead">
+        <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Wordmark size={22} inverse />
+        </NavLink>
+        <div className="masthead__context">
+          {label ? (
+            <span className="masthead__surface" title={me.surfaces[0]?.summary}>
+              {label.product}
+              <span aria-hidden="true"> · </span>
+              {label.room}
+            </span>
+          ) : null}
+          <NavLink to="/account" style={{ color: 'inherit' }}>
+            {me.principal.displayName}
+          </NavLink>
+          <button
+            type="button"
+            className="button button--small button--secondary"
+            style={{ color: 'var(--text-on-brand)', borderColor: 'currentColor' }}
+            onClick={() => void signOut()}
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <nav className="nav" aria-label="Primary">
+        {/* A client sees one organisation, so "Portfolio" would be a word for
+            something that does not exist for them. An MSP genuinely has one. */}
+        {clientOnly && ownOrganisation ? (
+          <NavLink
+            to={`/organisations/${ownOrganisation}`}
+            end
+            className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+          >
+            Assurance
+          </NavLink>
+        ) : (
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+          >
+            Portfolio
+          </NavLink>
+        )}
+        {/* Veylith's own operations. Shown only to a platform operator — the API
+            refuses it to anyone else regardless, so this is about not offering a
+            door that will not open rather than about access control. */}
+        {occupies(me, 'VEYLITH_INTERNAL') ? (
+          <NavLink
+            to="/control-room"
+            className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+          >
+            Control room
+          </NavLink>
+        ) : null}
+        {base ? (
+          <>
+            {clientOnly ? null : (
+              <NavLink
+                to={base}
+                end
+                className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+              >
+                Assurance
+              </NavLink>
+            )}
+            <NavLink
+              to={`${base}/fix`}
+              className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+            >
+              Fix
+            </NavLink>
+            <NavLink
+              to={`${base}/proof`}
+              className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+            >
+              Proof
+            </NavLink>
+            <NavLink
+              to={`${base}/change`}
+              className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+            >
+              Change
+            </NavLink>
+            <NavLink
+              to={`${base}/ask`}
+              className={({ isActive }) => `nav__link${isActive ? ' nav__link--active' : ''}`}
+            >
+              Ask
+            </NavLink>
+          </>
+        ) : null}
+      </nav>
+
+      <main className="main">{children}</main>
+    </div>
+  );
+}
+
+export function PageHeader({
+  title,
+  lead,
+  actions,
+}: {
+  title: string;
+  lead?: string;
+  actions?: ReactNode;
+}): ReactElement {
+  return (
+    <div className="page-header">
+      <div>
+        <h1>{title}</h1>
+        {lead ? <p className="page-header__lead">{lead}</p> : null}
+      </div>
+      {actions ? <div className="row">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function Section({
+  title,
+  note,
+  actions,
+  children,
+}: {
+  title: string;
+  note?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}): ReactElement {
+  return (
+    <section className="section">
+      <div className="section__head">
+        <h2>{title}</h2>
+        {actions ?? (note ? <span className="section__note">{note}</span> : null)}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export function Loading({ what }: { what: string }): ReactElement {
+  return <div className="empty">Loading {what}…</div>;
+}
+
+export function ErrorNotice({
+  error,
+}: {
+  error: { message: string; code?: string; correlationId?: string };
+}): ReactElement {
+  return (
+    <div className="notice notice--failing">
+      <div className="notice__title">{error.code ?? 'Error'}</div>
+      <p>{error.message}</p>
+      {error.correlationId ? (
+        <p className="hash" style={{ marginTop: 'var(--space-2)' }}>
+          Correlation {error.correlationId}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function Empty({ children }: { children: ReactNode }): ReactElement {
+  return <div className="empty">{children}</div>;
+}

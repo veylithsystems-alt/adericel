@@ -1,0 +1,102 @@
+name: Security
+
+# Adericel assures organisations. It would be difficult to defend a product that
+# does not apply its own standard to itself, so these checks run on every change
+# and on a schedule — because a dependency that was clean on Monday is not
+# necessarily clean on Friday, and nothing about the repository has to change
+# for that to be true.
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22.22.2'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # High and critical fail the build. Moderate and below are reported and
+      # do not block: a blanket policy that fails on every transitive moderate
+      # advisory gets disabled within a fortnight, and a disabled check is worse
+      # than a noisy one.
+      - name: Audit (high and above)
+        run: pnpm audit --audit-level high
+      - name: Full advisory report
+        if: always()
+        run: pnpm audit || true
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          config-file: ./.github/codeql-config.yml
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'
+
+  secrets:
+    name: No secrets in the tree
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The n8n export is the highest-risk artefact for accidental disclosure:
+      # it is the one file designed to be handed to someone else. Its validator
+      # refuses embedded keys, inline passwords and hard-coded hostnames.
+      - name: n8n export carries no credentials
+        run: pnpm n8n:validate
+      - name: Repository carries no obvious credential material
+        run: |
+          set -euo pipefail
+          patterns='-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|sk-ant-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36}'
+          # Only tracked files. Scanning the working tree would drown in
+          # node_modules, where every crypto library mentions PEM headers.
+          # xargs may split into several batches, so the result is collected
+          # rather than read from an exit status that only describes the last.
+          matches="$(git ls-files -z ':!:pnpm-lock.yaml' \
+            | xargs -0 grep -InE "$patterns" -- || true)"
+          if [ -n "$matches" ]; then
+            echo "$matches"
+            echo '::error::credential-shaped material found in tracked files'
+            exit 1
+          fi
+          echo 'No credential-shaped material found in tracked files.'
