@@ -13,6 +13,7 @@
     { "path": "./packages/notifications" },
     { "path": "./packages/value" },
     { "path": "./packages/triage" },
+    { "path": "./packages/questionnaire" },
     { "path": "./apps/api" },
     { "path": "./apps/worker" }
   ]

@@ -44,6 +44,11 @@ implications.
 | [0031](./ADR-0031-three-surfaces.md)                                | Three surfaces, and no standing route between them    | Accepted |
 | [0032](./ADR-0032-erasure-and-retention.md)                         | Erasure means erasure                                 | Accepted |
 | [0033](./ADR-0033-proof-of-value.md)                                | Adericel counts what it did; the MSP prices it        | Accepted |
+| [0034](./ADR-0034-answer-is-a-determination.md)                     | A questionnaire answer is a determination             | Accepted |
+| [0035](./ADR-0035-interpretations-are-artefacts.md)                 | Interpretations are confirmed, versioned artefacts    | Accepted |
+| [0036](./ADR-0036-no-silent-yes.md)                                 | No silent yes                                         | Accepted |
+| [0037](./ADR-0037-question-bank-boundary.md)                        | The bank holds questions, never answers               | Accepted |
+| [0038](./ADR-0038-post-submission-watch.md)                         | A submitted answer keeps being checked                | Accepted |
 
 ## Writing a new ADR
 
