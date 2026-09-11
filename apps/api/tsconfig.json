@@ -17,6 +17,7 @@
     { "path": "../../packages/autonomy" },
     { "path": "../../packages/vaol" },
     { "path": "../../packages/value" },
+    { "path": "../../packages/triage" },
     { "path": "../../packages/actions" },
     { "path": "../../packages/integrations" },
     { "path": "../../packages/notifications" },

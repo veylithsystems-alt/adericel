@@ -12,6 +12,7 @@
     { "path": "./packages/integrations" },
     { "path": "./packages/notifications" },
     { "path": "./packages/value" },
+    { "path": "./packages/triage" },
     { "path": "./apps/api" },
     { "path": "./apps/worker" }
   ]

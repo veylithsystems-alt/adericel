@@ -251,6 +251,29 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
         };
       }
 
+      /**
+       * A target marked to fail execution.
+       *
+       * Set through the fixture state rather than through configuration, so a
+       * single organisation can be made to fail one action while the rest of a
+       * portfolio succeeds. The demonstration needs that: an MSP portfolio in
+       * which every remediation either works or does not is not a portfolio
+       * anybody recognises.
+       *
+       * A demonstration connector is the only place this belongs. No live
+       * connector has, or may have, a way to be told to fail.
+       */
+      const targetState = state.effectsFor(context.integrationId, request.targetExternalId);
+      if (targetState.__failExecution === true) {
+        return {
+          status: 'FAILED',
+          externalOperationRef: null,
+          detail: 'The upstream rejected the change.',
+          errorCode: 'UPSTREAM_REJECTED',
+          retryable: true,
+        };
+      }
+
       // Configured to report success without changing state. This exists so the
       // demonstration and the tests can show verification correctly refuting an
       // action that claimed to succeed.

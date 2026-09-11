@@ -126,6 +126,9 @@ importers:
       '@adericel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@adericel/triage':
+        specifier: workspace:*
+        version: link:../../packages/triage
       '@adericel/truth-engine':
         specifier: workspace:*
         version: link:../../packages/truth-engine
@@ -370,6 +373,21 @@ importers:
 
   packages/shared:
     dependencies:
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
+  packages/triage:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/graph':
+        specifier: workspace:*
+        version: link:../graph
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: ^4.1.11
         version: 4.5.4

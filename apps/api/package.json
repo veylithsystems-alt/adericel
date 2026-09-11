@@ -30,6 +30,7 @@
     "zod": "^4.1.11",
     "@adericel/autonomy": "workspace:*",
     "@adericel/vaol": "workspace:*",
+    "@adericel/triage": "workspace:*",
     "@adericel/value": "workspace:*"
   },
   "devDependencies": {

@@ -2,6 +2,12 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { assuranceSeverityRank, summarise, type AssuranceState } from '@adericel/domain';
 import { ASSURANCE_TASKS, effortFor, modelCompleteness } from '@adericel/value';
+import {
+  assessCoverage,
+  buildExceptionQueue,
+  summariseQueue,
+  COVERAGE_STAGES as COVERAGE_ORDER,
+} from '@adericel/triage';
 import type { AppContext } from '../context.js';
 import { audit, requireMsp, requirePrincipal } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
@@ -661,6 +667,124 @@ export function registerValueRoutes(server: FastifyInstance, app: AppContext): v
           caveats: row.caveat_count,
           generatedAt: row.generated_at,
         })),
+      });
+    },
+  );
+}
+
+/**
+ * Triage: the exception queue and the coverage ladder.
+ *
+ * The portfolio already offered five lists — unknowns, approvals,
+ * deteriorating, recurring failures, coverage. Each answered part of one
+ * question, and an operator holding a problem in their head had to visit
+ * several screens to find out what it actually was.
+ *
+ * These two routes are what an MSP opens in the morning. Everything else in the
+ * portfolio is for looking something up once the queue has told you where.
+ */
+export function registerTriageRoutes(server: FastifyInstance, app: AppContext): void {
+  /** Organisations this MSP owns. Proven here, never taken from the request. */
+  async function organisationsOf(mspId: string): Promise<readonly string[]> {
+    return app.db.withPlatform(async (ctx) => {
+      const rows = await ctx.many<{ id: string }>(
+        `SELECT id FROM organisations WHERE msp_id = $1 AND status <> 'CLOSED'`,
+        [mspId],
+      );
+      return rows.map((row) => row.id);
+    });
+  }
+
+  /**
+   * What needs a person, right now, across the whole portfolio.
+   *
+   * Ranked so the top of the list is genuinely the thing to do first: anything
+   * that has stopped Adericel knowing the truth about a customer outranks
+   * everything else, because a customer silently ceasing to be observed is the
+   * worst outcome in this product and the least visible.
+   */
+  server.get(
+    '/v1/msps/:mspId/exceptions',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:read');
+      const query = parseQuery(
+        request,
+        z.object({
+          limit: z.coerce.number().int().min(1).max(500).default(200),
+          kind: z.string().max(64).optional(),
+          response: z.enum(['DECIDE', 'CONFIGURE', 'INVESTIGATE', 'ASK_CUSTOMER']).optional(),
+          organisationId: z.string().uuid().optional(),
+        }),
+      );
+
+      const organisationIds = await organisationsOf(mspId);
+      // A caller may narrow to one organisation, and only to one this MSP owns.
+      // The intersection is taken here rather than trusting the parameter.
+      const scope = query.organisationId
+        ? organisationIds.filter((id) => id === query.organisationId)
+        : organisationIds;
+
+      const { exceptions, limitations } = await app.db.withPlatform(async (ctx) =>
+        buildExceptionQueue(ctx, scope, app.clock.nowIso(), { limit: query.limit }),
+      );
+
+      const filtered = exceptions.filter(
+        (exception) =>
+          (query.kind === undefined || exception.kind === query.kind) &&
+          (query.response === undefined || exception.response === query.response),
+      );
+
+      return reply.status(200).send({
+        summary: summariseQueue(filtered),
+        exceptions: filtered,
+        // Controls no customer in this portfolio can be assessed against. A
+        // limit of what Adericel can currently evidence, not an operator's job.
+        limitations,
+        // Stated rather than implied: an empty queue means Adericel is handling
+        // the portfolio, not that nobody has looked.
+        note:
+          filtered.length === 0
+            ? 'Nothing in this portfolio currently needs a person. Everything failing that ' +
+              'Adericel is permitted to fix has been fixed and verified.'
+            : null,
+      });
+    },
+  );
+
+  /**
+   * How far each customer has actually got up the coverage ladder.
+   *
+   * "Is the connector connected" is the wrong question and answering it is how
+   * an assurance product ends up green while knowing nothing.
+   */
+  server.get(
+    '/v1/msps/:mspId/coverage',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:read');
+
+      const organisationIds = await organisationsOf(mspId);
+      const assessments = await app.db.withPlatform(async (ctx) =>
+        assessCoverage(ctx, organisationIds),
+      );
+
+      const byStage: Record<string, number> = {};
+      for (const assessment of assessments) {
+        byStage[assessment.stage] = (byStage[assessment.stage] ?? 0) + 1;
+      }
+
+      return reply.status(200).send({
+        byStage,
+        // The only figure that means anything commercially.
+        fullyCovered: assessments.filter((a) => a.stage === 'ASSURANCE_COVERED').length,
+        total: assessments.length,
+        organisations: [...assessments].sort((a, b) => {
+          const rank = COVERAGE_ORDER.indexOf(a.stage) - COVERAGE_ORDER.indexOf(b.stage);
+          return rank !== 0 ? rank : a.organisationName.localeCompare(b.organisationName);
+        }),
       });
     },
   );
