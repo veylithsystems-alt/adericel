@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adericel.com/schemas/passport-interchange/v1.json",
+  "title": "Adericel Assurance Passport Interchange v1",
+  "description": "A portable, cryptographically signed Assurance Passport. The signature establishes authenticity and integrity of the issued record only, never that the underlying controls pass. UNKNOWN, exceptions and coverage cross this boundary exactly as issued.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "issuer", "content", "contentHash", "asOf", "issuedAt", "signature"],
+  "properties": {
+    "schema": {
+      "const": "adericel.passport-interchange/v1",
+      "description": "Envelope schema and version. A verifier that does not recognise this exact value must not treat the record as trusted or as forged."
+    },
+    "issuer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "keyId", "algorithm"],
+      "description": "Names which key signed. Not a trust anchor: trust comes from resolving keyId to a public key the verifier already trusts.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "keyId": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "algorithm": { "const": "Ed25519" }
+      }
+    },
+    "content": {
+      "type": "object",
+      "description": "The Assurance Passport content, verbatim, exactly as issued inside the product. Its own shape is versioned separately (adericel.passport/v1). The signature is computed over the canonical (RFC 8785-style) encoding of this object."
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 over the canonical encoding of content. A convenience for quick comparison; the signature is the authority and a verifier recomputes this rather than trusting it."
+    },
+    "asOf": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The instant the assurance record describes."
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The instant the interchange envelope was signed."
+    },
+    "signature": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "description": "Ed25519 detached signature over the canonical encoding of content."
+    }
+  }
+}

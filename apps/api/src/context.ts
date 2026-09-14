@@ -31,6 +31,7 @@ import {
 import { compilePolicy, DEFAULT_ACTION_POLICY, type CompiledPolicy } from '@adericel/policy';
 import { createBuiltInRegistry, type RulesetRegistry } from '@adericel/truth-engine';
 import type { CredentialUnsealer } from '@adericel/actions';
+import { buildPassportSigner, type PassportSigner } from './services/passport-signing.js';
 
 /**
  * Application context.
@@ -78,6 +79,13 @@ export interface AppContext {
    * pretending when it is in use.
    */
   readonly payments: PaymentProvider;
+  /**
+   * The Assurance Passport issuer signer (ADR-0039). Optional: undefined when
+   * no signing key is configured, in which case passports are still issued and
+   * hashed, and the signed-interchange export reports that signing is
+   * unavailable rather than emitting an unsigned artefact.
+   */
+  readonly passportSigner: PassportSigner | undefined;
   readonly startedAtIso: string;
 }
 
@@ -237,6 +245,7 @@ export function createAppContext(options: CreateContextOptions): AppContext {
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           })
         : createManualProvider()),
+    passportSigner: buildPassportSigner(config, logger),
     startedAtIso: clock.nowIso(),
   };
 }

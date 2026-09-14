@@ -173,6 +173,33 @@ export const configSchema = z.object({
     /** Block requests to private/link-local ranges. Mitigates SSRF. */
     blockPrivateEgress: booleanish.default(true),
   }),
+
+  /**
+   * Assurance Passport signing (ADR-0039).
+   *
+   * Signing keys are configured SEPARATELY from every other secret and are
+   * never derived from the root secret. Signing authority is a different thing
+   * from encrypting credentials or hashing tokens: it can be custodied
+   * differently (an HSM or KMS later) and compromising it has a different blast
+   * radius, so it gets its own configuration and can be absent entirely. When
+   * absent, passports are still issued and content-hashed exactly as before;
+   * only the signed interchange export is unavailable, and it says so rather
+   * than emitting an unsigned artefact that looks signed.
+   */
+  passport: z.object({
+    /** Descriptive issuer name embedded in the envelope. Not a trust anchor. */
+    issuerName: z.string().min(1).max(200).default('Adericel'),
+    /** Immutable id of the active signing key. Empty means signing is disabled. */
+    activeKeyId: z.string().default(''),
+    /** PKCS8 PEM for the active key's private half. Never logged or stored. */
+    activePrivateKeyPem: z.string().default(''),
+    /**
+     * SPKI PEM verification keys, active and retired, that this deployment
+     * publishes. Retired keys are retained so historical passports keep
+     * verifying. Encoded as `keyId:base64(pem)` entries.
+     */
+    verificationKeys: z.array(z.string()).default([]),
+  }),
 });
 
 export type AdericelConfig = z.infer<typeof configSchema>;
@@ -283,6 +310,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdericelConfig
       egressAllowlist: csv(env.SECURITY_EGRESS_ALLOWLIST),
       blockPrivateEgress: env.SECURITY_BLOCK_PRIVATE_EGRESS,
     },
+    passport: {
+      issuerName: env.PASSPORT_ISSUER_NAME,
+      activeKeyId: env.PASSPORT_ACTIVE_KEY_ID,
+      activePrivateKeyPem: env.PASSPORT_ACTIVE_PRIVATE_KEY_PEM,
+      verificationKeys: csv(env.PASSPORT_VERIFICATION_KEYS),
+    },
   };
 
   const parsed = configSchema.safeParse(prune(raw));
@@ -343,6 +376,23 @@ export function assertProductionSafety(config: AdericelConfig): void {
   }
   if (!config.security.blockPrivateEgress) {
     failures.push('SECURITY_BLOCK_PRIVATE_EGRESS must remain enabled in production');
+  }
+
+  // Passport signing must be all-or-nothing. A key id without private material
+  // (or the reverse) is a half-configured signer that would fail at the moment
+  // of export rather than at start-up, which is exactly when it must not fail.
+  // Not configuring signing at all is permitted — passports are still hashed.
+  const signingConfigured =
+    config.passport.activeKeyId !== '' || config.passport.activePrivateKeyPem !== '';
+  if (signingConfigured) {
+    if (config.passport.activeKeyId === '') {
+      failures.push('PASSPORT_ACTIVE_KEY_ID is required when a passport signing key is configured');
+    }
+    if (config.passport.activePrivateKeyPem === '') {
+      failures.push(
+        'PASSPORT_ACTIVE_PRIVATE_KEY_PEM is required when passport signing is configured',
+      );
+    }
   }
   if (config.billing.provider === 'stripe') {
     // A Stripe deployment without a webhook secret accepts unsigned billing

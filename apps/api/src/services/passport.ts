@@ -1,7 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { summarise, type AssuranceState } from '@adericel/domain';
 import { publish, type TenantContext } from '@adericel/graph';
-import { AdericelError, canonicalJson, contentHash } from '@adericel/shared';
+import {
+  AdericelError,
+  buildInterchange,
+  canonicalJson,
+  contentHash,
+  type PassportInterchange,
+} from '@adericel/shared';
+import type { PassportSigner } from './passport-signing.js';
 import { z } from 'zod';
 import type { AppContext } from '../context.js';
 
@@ -674,5 +681,38 @@ export async function resolveShare(
             'security is good or bad — only that Adericel has stopped looking.',
       },
     };
+  });
+}
+
+
+/**
+ * Assemble a signed, portable interchange envelope from an already-issued
+ * passport.
+ *
+ * This does not re-issue, re-assess or re-hash anything: it takes the passport
+ * content exactly as it was frozen at issue and wraps it. The signature is
+ * computed over the same canonical encoding the stored `content_hash` covers,
+ * so a recipient who verifies the signature and a recipient who compares the
+ * hash are checking the same bytes.
+ *
+ * Returns null when no signer is configured, so the route can tell the caller
+ * signing is unavailable rather than emitting an unsigned envelope dressed up
+ * as a signed one.
+ */
+export function buildPassportInterchange(
+  signer: PassportSigner | undefined,
+  issued: {
+    readonly content: PassportContent;
+    readonly asOf: string;
+    readonly issuedAt: string;
+  },
+  issuerName: string,
+): PassportInterchange<PassportContent> | null {
+  if (!signer) return null;
+  return buildInterchange(signer, {
+    issuerName,
+    content: issued.content,
+    asOf: issued.asOf,
+    issuedAt: issued.issuedAt,
   });
 }

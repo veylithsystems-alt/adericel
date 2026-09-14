@@ -5,12 +5,15 @@ import type { AppContext } from '../context.js';
 import { audit, requireOrganisation, requirePrincipal } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
 import {
+  buildPassportInterchange,
   issuePassport,
   mintShareToken,
   passportShareSchema,
   resolveShare,
   type PassportContent,
 } from '../services/passport.js';
+import { publishedVerificationKeys } from '../services/passport-signing.js';
+import { PASSPORT_INTERCHANGE_SCHEMA } from '@adericel/shared';
 
 /**
  * Assurance Passport routes.
@@ -60,6 +63,73 @@ export function registerPassportRoutes(server: FastifyInstance, app: AppContext)
       });
 
       return reply.status(201).send(issued);
+    },
+  );
+
+  /**
+   * Export a passport as a signed, portable interchange envelope.
+   *
+   * This is the artefact that leaves Adericel and can be verified by someone
+   * who has no account here: same passport content as the stored record,
+   * wrapped with the issuer identity and an Ed25519 signature over the
+   * canonical encoding. Authenticated and org-scoped, because producing an
+   * export is an assurance action; the *resulting file* is what is designed to
+   * be verified offline, not this endpoint.
+   *
+   * If no signing key is configured the deployment cannot sign, and this says
+   * so with a clear 503 rather than emitting an unsigned envelope that looks
+   * signed. That distinction is the whole point of the increment.
+   */
+  server.post(
+    '/v1/organisations/:organisationId/passports/:id/interchange',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { organisationId, id } = parseParams(request, orgChild);
+      await requireOrganisation(app, request, organisationId, 'org:export');
+
+      const row = await app.db.withTenant(organisationId, async (ctx) =>
+        ctx.one<{ content: PassportContent; as_of: Date; issued_at: Date }>(
+          `SELECT content, as_of, issued_at FROM assurance_passports
+           WHERE organisation_id = $1 AND id = $2`,
+          [organisationId, id],
+        ),
+      );
+      if (!row) {
+        throw new AdericelError('NOT_FOUND', 'No such passport for this organisation.', 404);
+      }
+
+      const interchange = buildPassportInterchange(
+        app.passportSigner,
+        {
+          content: row.content,
+          asOf: row.as_of.toISOString(),
+          issuedAt: row.issued_at.toISOString(),
+        },
+        app.config.passport.issuerName,
+      );
+      if (interchange === null) {
+        // No signer configured. Never fabricate a signature or downgrade to an
+        // unsigned artefact: report the real reason and stop.
+        throw new AdericelError(
+          'SIGNING_UNAVAILABLE',
+          'This deployment has no passport signing key configured, so a verifiable interchange ' +
+            'export cannot be produced. The unsigned passport record remains available.',
+          503,
+        );
+      }
+
+      await audit(app, request, {
+        action: 'passport:interchange-export',
+        resourceType: 'Report',
+        resourceId: id,
+        metadata: {
+          schema: interchange.schema,
+          keyId: interchange.issuer.keyId,
+          contentHash: interchange.contentHash,
+        },
+      });
+
+      return reply.status(200).send(interchange);
     },
   );
 
@@ -437,6 +507,33 @@ export function registerPassportRoutes(server: FastifyInstance, app: AppContext)
         ? 'This passport was issued by Adericel and has since been withdrawn by the ' +
           'organisation that issued it. Do not rely on it.'
         : 'This is a passport Adericel issued, unaltered since issue.',
+    });
+  });
+
+  /**
+   * Public discovery of Adericel's issuer verification keys.
+   *
+   * A recipient who holds an exported passport needs the public key that signed
+   * it, resolved by keyId. Publishing the keys here means verification is
+   * "fetch the key once, then check offline forever" rather than requiring a
+   * live call per verification. Only PUBLIC keys, active and retired, are
+   * served: retired keys stay published so historical passports keep verifying.
+   *
+   * This reveals no organisational content and enables no tenant enumeration —
+   * it is issuer metadata, the same for every recipient. It is deliberately not
+   * the trust foundation: a verifier may equally pin these keys out of band.
+   * The endpoint is unauthenticated and rate-limited harder than an org read.
+   */
+  server.get('/v1/passport-issuer-keys', publicLimit, async (_request, reply) => {
+    const keys = publishedVerificationKeys(app.config, app.logger);
+    return reply.status(200).send({
+      issuerName: app.config.passport.issuerName,
+      interchangeSchema: PASSPORT_INTERCHANGE_SCHEMA,
+      keys: keys.map((k) => ({
+        keyId: k.keyId,
+        algorithm: k.algorithm,
+        publicKeySpki: k.publicKeySpkiB64,
+      })),
     });
   });
 }

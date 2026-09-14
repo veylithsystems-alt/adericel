@@ -134,3 +134,12 @@ The three plans from the business brief are seeded here — Assure £299, Protec
 architecturally is not the numbers, which will move, but that the tiers are
 defined by how much authority the customer delegates (tell me, help me, do it)
 rather than by which dashboard features unlock.
+
+---
+
+**2026-09-14 addendum (ADR-0039):** The content hash defined here is now
+also the signing material for the cryptographically verifiable passport
+interchange envelope. Signing is additive and changes nothing above: the
+canonical encoding and hash are unchanged, and the hash remains authoritative
+for equality. See ADR-0039.
+
