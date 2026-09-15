@@ -206,7 +206,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 > v3.1 added requirement families v3.0 did not contain. These entries derive
 > from `ADERICEL_V3.1_CONTRACT_GAP_REPORT.md`.
 
-### RR-050 — No truth-state vocabulary
+### RR-050 — No truth-state vocabulary — **CLOSED 15 Sept 2026**
 
 | Field           | Value                                                                                                                                                                                   |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

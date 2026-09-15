@@ -54,6 +54,7 @@ implications.
 | [0041](./ADR-0041-sovereign-inference.md)                           | Inference is local first, and leaving requires an author          | Accepted |
 | [0042](./ADR-0042-msp-only-distribution.md)                         | Every organisation belongs to an MSP                              | Accepted |
 | [0043](./ADR-0043-degraded-and-blocked.md)                          | A broken source is not an unknown                                 | Accepted |
+| [0044](./ADR-0044-truth-state.md)                                   | How firmly we know it, separately from what we concluded          | Accepted |
 
 ## Writing a new ADR
 

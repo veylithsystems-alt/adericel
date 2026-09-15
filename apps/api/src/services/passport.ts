@@ -1,5 +1,13 @@
 import { randomBytes } from 'node:crypto';
-import { summarise, type AssuranceState } from '@adericel/domain';
+import {
+  summarise,
+  truthStateOfClaim,
+  TRUTH_STATES,
+  type AssuranceState,
+  type ClaimOrigin,
+  type ClaimStatus,
+  type TruthState,
+} from '@adericel/domain';
 import { publish, type TenantContext } from '@adericel/graph';
 import { AdericelError, canonicalJson, contentHash } from '@adericel/shared';
 import { z } from 'zod';
@@ -39,11 +47,71 @@ export const passportShareSchema = z.object({
   expiresInDays: z.number().int().min(1).max(PASSPORT_TOKEN_TTL_DAYS_MAX).default(30),
 });
 
+/**
+ * The weakest truth state among the claims an assessment ran on.
+ *
+ * Weakest, deliberately. A control resting on one API observation and one
+ * human attestation is only as firm as the attestation — reporting OBSERVED
+ * because an observation was among the inputs would tell a recipient the
+ * conclusion is better founded than it is, which is the specific kind of
+ * flattery this product exists to refuse.
+ *
+ * Null when the assessment cited no claims at all. Null rather than UNKNOWN:
+ * "no claims were cited" is a statement about the assessment, and UNKNOWN is a
+ * statement about the world.
+ */
+function weakestTruthState(
+  origins: readonly string[] | null,
+  statuses: readonly string[] | null,
+): TruthState | null {
+  if (!origins || origins.length === 0) return null;
+
+  // Ordered weakest first, so the first match wins.
+  const weakestFirst: readonly TruthState[] = [
+    'UNKNOWN',
+    'TARGET',
+    'ASSUMED',
+    'INTERPRETED',
+    'DERIVED',
+    'OBSERVED',
+    'VERIFIED',
+  ];
+
+  const present = new Set<TruthState>();
+  for (const [index, origin] of origins.entries()) {
+    present.add(
+      truthStateOfClaim({
+        origin: origin as ClaimOrigin,
+        status: (statuses?.[index] ?? 'ACTIVE') as ClaimStatus,
+      }),
+    );
+  }
+
+  for (const candidate of weakestFirst) {
+    if (present.has(candidate)) return candidate;
+  }
+  // Unreachable while the list above covers TRUTH_STATES, which a test asserts.
+  return TRUTH_STATES.includes('UNKNOWN') ? 'UNKNOWN' : null;
+}
+
 export interface PassportControl {
   readonly key: string;
   readonly title: string;
   readonly state: AssuranceState;
   readonly unknownReason: string | null;
+  /**
+   * How firmly Adericel knows this, as distinct from what it concluded.
+   *
+   * A control satisfied on a re-observed API reading and one satisfied on a
+   * person's word are the same assurance state and very different claims. A
+   * recipient weighing this Passport is entitled to tell them apart, and until
+   * now could not: the Passport reported the conclusion and hid its footing.
+   *
+   * The weakest truth state behind the control, not the strongest — a control
+   * resting on one observation and one attestation is only as firm as the
+   * attestation, and reporting the observation would flatter it.
+   */
+  readonly truthState: TruthState | null;
   /** Why Adericel concluded this, in the words a person can read. */
   readonly rationale: string | null;
   readonly lastAssessedAt: string | null;
@@ -182,6 +250,8 @@ export async function buildPassportContent(
     state: string | null;
     unknown_reason: string | null;
     rationale: string | null;
+    claim_origins: string[] | null;
+    claim_statuses: string[] | null;
     last_assessed_at: Date | null;
     evidence_count: string;
     freshest: Date | null;
@@ -189,6 +259,13 @@ export async function buildPassportContent(
     `SELECT c.key, c.title,
             a.state, a.unknown_reason,
             latest.rationale,
+            -- The claims the assessment actually ran on, so the Passport can
+            -- report how firmly the conclusion is held rather than only what it
+            -- concluded.
+            (SELECT array_agg(cl.origin) FROM claims cl
+              WHERE cl.id = ANY(COALESCE(latest.claim_ids, ARRAY[]::uuid[]))) AS claim_origins,
+            (SELECT array_agg(cl.status) FROM claims cl
+              WHERE cl.id = ANY(COALESCE(latest.claim_ids, ARRAY[]::uuid[]))) AS claim_statuses,
             a.last_assessed_at,
             COALESCE(array_length(latest.evidence_ids, 1), 0)::text AS evidence_count,
             (SELECT max(e.collected_at) FROM evidence e
@@ -208,6 +285,7 @@ export async function buildPassportContent(
     key: row.key,
     title: row.title,
     state: (row.state ?? 'UNKNOWN') as AssuranceState,
+    truthState: weakestTruthState(row.claim_origins, row.claim_statuses),
     unknownReason: row.state === null ? 'NO_EVIDENCE' : row.unknown_reason,
     rationale:
       row.state === null
