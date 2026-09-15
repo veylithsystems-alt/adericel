@@ -144,9 +144,39 @@ The suites are separated by what a failure would mean:
 tick there is not "a test broke"; it is a claim about isolation that no longer
 holds, and it should say so in the checks list without anyone having to open it.
 
+## Verifying a Passport without us
+
+The Assurance Passport is exported as a detached-signed envelope that a
+recipient checks on their own machine, with no Adericel account and no network
+call:
+
+```bash
+pnpm passport:keygen adericel-prod-2026-01 "Your Company Ltd"
+```
+
+The envelope carries the Passport byte-identically as issued, plus an Ed25519
+signature over the canonical encoding of everything else in it. The issuer
+public keys are published at `/v1/assurance/keys`, and the envelope and
+canonicalisation are documented in [`schemas/`](./schemas), so verification can
+be reimplemented in about twenty lines against any standard Ed25519 library.
+Verification that only works with the vendor's tool is not independent
+verification.
+
+What a valid signature establishes: Adericel issued this exact record, and
+nobody has altered it. **It does not mean the assurance position is
+satisfactory** — a signed Passport reporting nine UNKNOWN controls is a signed
+record of nine UNKNOWN controls — and it does not mean the record is current.
+Both sentences travel with the verification result.
+
+Signing is off until an issuer key is configured, and a deployment without one
+exports the Passport with its content hash and says plainly that it is
+unsigned. A hash is not a signature and nothing here calls it one.
+[ADR-0040](./docs/adr/ADR-0040-signed-passport-interchange.md) records why;
+[the key lifecycle](./docs/operations/issuer-key-lifecycle.md) is the procedure.
+
 ## The n8n export
 
-`workflows/n8n/adericel.n8n.json` is one file: 20 workflows, 185 nodes, the
+`workflows/n8n/adericel.n8n.json` is one file: 25 workflows, 236 nodes, the
 complete orchestration layer. Import it into a clean self-hosted n8n instance —
 core nodes only, no community packages required.
 
@@ -193,10 +223,12 @@ feature list:
 
 ## Documentation
 
-- [Architecture decision records](./docs/adr/README.md) — twenty-two decisions,
+- [Architecture decision records](./docs/adr/README.md) — forty decisions,
   each with what it costs
 - [Threat model](./docs/security/threat-model.md) — including what it does not cover
 - [Operations runbook](./docs/operations/runbook.md)
+- [Issuer key lifecycle](./docs/operations/issuer-key-lifecycle.md) — generating,
+  rotating, retiring and revoking the key that signs Passports
 - [VPS sizing](./docs/operations/vps-sizing.md)
 - [Brand](./docs/product/brand/README.md)
 

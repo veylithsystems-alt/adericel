@@ -161,6 +161,13 @@ export function buildOpenApiDocument(app: AppContext): Record<string, unknown> {
       { name: 'Integrations', description: 'Connectors, credentials and collection' },
       { name: 'Observability', description: 'Audit, events, traces and health' },
       { name: 'Webhooks', description: 'Signed inbound ingestion' },
+      {
+        name: 'Passport',
+        description:
+          'The Assurance Passport and its signed, offline-verifiable interchange format. The ' +
+          'verification routes need no account: they exist for the insurer, auditor or ' +
+          'procurement team the record is handed to.',
+      },
     ],
     components: {
       securitySchemes: {
@@ -341,6 +348,83 @@ function buildPaths(): Record<string, unknown> {
         tags: ['Organisations'],
         parameters: [ORG_PARAM],
         responses: { '200': { description: 'Updated' } },
+      }),
+    },
+    '/v1/organisations/{organisationId}/passports/{id}/interchange': {
+      get: operation({
+        summary: 'Download a Passport as a signed, offline-verifiable file',
+        description:
+          'Returns the Passport inside a detached-signature envelope ' +
+          '(`adericel.passport-interchange/v1`). A recipient verifies it against the issuer ' +
+          'public key published at `/v1/assurance/keys`, on their own machine, with no network ' +
+          'call and no Adericel account.\n\n' +
+          'A valid signature establishes that Adericel issued this exact record and that nobody ' +
+          'has altered it. It does NOT mean the assurance position described is satisfactory, ' +
+          'and it does not mean the record is current — read the `asOf` field.\n\n' +
+          'Answers 200 even when it cannot sign, returning `signed: false` with the reason: the ' +
+          'deployment has no issuer key, or the Passport has been withdrawn (a withdrawal cannot ' +
+          'be inside a signature made before it, so an offline verifier could not learn of it). ' +
+          'A content hash is never described as a signature.',
+        tags: ['Passport'],
+        parameters: [ORG_PARAM, ID_PARAM],
+        responses: { '200': { description: 'Signed envelope, or the reason it is unsigned' } },
+      }),
+    },
+    '/v1/assurance/{token}/interchange': {
+      get: operation({
+        summary: 'Download a shared Passport as a signed file (no account required)',
+        description:
+          'The same envelope, reached with a share token instead of a session. Expiry, ' +
+          'revocation and the recorded view apply exactly as on the readable view. Redacted ' +
+          'shares are returned unsigned: the signature is over the record as issued, and signing ' +
+          'a redacted view would put a second valid-looking record of the same Passport into ' +
+          'the world.',
+        tags: ['Passport'],
+        security: [],
+        parameters: [
+          {
+            name: 'token',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+            description: 'The share token. It is the credential; there is nothing else to check.',
+          },
+        ],
+        responses: { '200': { description: 'Signed envelope, or the reason it is unsigned' } },
+      }),
+    },
+    '/v1/assurance/keys': {
+      get: operation({
+        summary: 'The issuer public keys',
+        description:
+          'Everything needed to verify an Adericel signature offline. Every key ever used is ' +
+          'listed, including RETIRED ones: a retired key still has to verify the Passports it ' +
+          'signed, and removing it would make genuine records fail in a way indistinguishable ' +
+          'from forgery. A key marked REVOKED is one Adericel has withdrawn trust in — its ' +
+          'signatures verify cryptographically and must not be relied upon.\n\n' +
+          'No organisation is named and no record is read, so this cannot be used to discover ' +
+          'who Adericel\u2019s customers are.',
+        tags: ['Passport'],
+        security: [],
+        responses: { '200': { description: 'Published keyring' } },
+      }),
+    },
+    '/v1/assurance/verify-interchange': {
+      post: operation({
+        summary: 'Verify a signed Passport envelope',
+        description:
+          'A convenience, not the mechanism: the point of a signature is that you do not need ' +
+          'this endpoint. Post the envelope you hold; it is verified as a pure function against ' +
+          'the published keys, and nothing is read from the database.\n\n' +
+          'Outcomes are never collapsed into a boolean. `UNKNOWN_KEY` means you have not ' +
+          'fetched the issuer key yet and is not evidence of tampering; `INVALID_SIGNATURE` ' +
+          'means the record was altered or was not issued by the key it names; `REVOKED_KEY` ' +
+          'means the signature is sound and the key is no longer trusted. Those call for ' +
+          'completely different responses.\n\n' +
+          'Accepts no identifier, so there is no lookup here to turn into an enumeration oracle.',
+        tags: ['Passport'],
+        security: [],
+        responses: { '200': { description: 'Verification outcome' } },
       }),
     },
     '/v1/organisations/{organisationId}/export': {

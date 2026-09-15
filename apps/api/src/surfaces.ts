@@ -34,7 +34,14 @@ const PUBLIC_ROUTES = new Set([
   'POST /v1/signup/complete',
   'POST /v1/invitations/accept',
   'GET /v1/assurance/:token',
+  'GET /v1/assurance/:token/interchange',
   'POST /v1/assurance/verify',
+  // Neither of these reads a tenant row. The keys endpoint returns published
+  // public keys and names no organisation; the verifier is a pure function
+  // over an envelope the caller already holds and accepts no identifier, so
+  // there is nothing here to enumerate.
+  'GET /v1/assurance/keys',
+  'POST /v1/assurance/verify-interchange',
   'POST /v1/webhooks/billing',
   'POST /v1/webhooks/observations',
   'POST /v1/webhooks/ping',

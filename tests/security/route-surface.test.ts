@@ -33,6 +33,14 @@ const DELIBERATELY_PUBLIC: Record<string, string> = {
   'POST /v1/invitations/accept': 'Accepted from an emailed token by someone with no account.',
   'GET /v1/assurance/:token': 'A shared Assurance Passport. The token is the credential.',
   'POST /v1/assurance/verify': 'Lets a third party verify a passport hash they hold.',
+  'GET /v1/assurance/:token/interchange':
+    'The signed file behind a shared Passport. Same token, same expiry, same view record.',
+  'GET /v1/assurance/keys':
+    'The issuer public keys. Publishing them is what makes offline verification possible, ' +
+    'and a key nobody can obtain verifies nothing. Names no organisation and reads no row.',
+  'POST /v1/assurance/verify-interchange':
+    'Verifies an envelope the caller already holds, as a pure function over the published ' +
+    'keys. Accepts no identifier, so there is no lookup to turn into an enumeration oracle.',
   // The webhook routes carry no session and are not unauthenticated: each
   // verifies a signature over the raw body before it does anything. Session
   // authentication would be the wrong mechanism — the caller is a machine that

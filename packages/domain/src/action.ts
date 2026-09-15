@@ -118,7 +118,14 @@ export interface ActionRecord {
   readonly policyDecision: Record<string, unknown> | null;
   readonly autonomyLevel: number | null;
   readonly approvalId: string | null;
-  /** Caller-supplied or derived key that makes execution exactly-once. */
+  /**
+   * Caller-supplied or derived key that lets a repeat attempt find the prior
+   * one instead of repeating the side effect.
+   *
+   * This makes the external effect at-most-once. It is not exactly-once, which
+   * is not achievable across a network boundary: an attempt whose outcome was
+   * never established stays UNKNOWN_OUTCOME and is reconciled, not retried.
+   */
   readonly idempotencyKey: string;
   /**
    * Digest of the request as proposed: action type, risk class, target,

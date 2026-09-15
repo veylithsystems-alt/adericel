@@ -535,7 +535,17 @@ export function mintShareToken(): string {
 
 export interface ResolvedShare {
   readonly organisationName: string;
+  readonly passportId: string;
   readonly passport: PassportContent;
+  /**
+   * What the recipient is actually looking at.
+   *
+   * Reported rather than inferred. A redacted view is a truthful subset of the
+   * issued record, and a recipient who does not know it is a subset may read an
+   * absent finding as no finding. It also decides whether a signed interchange
+   * file can be offered at all: the signature is over the record as issued.
+   */
+  readonly disclosure: 'FULL' | 'REDACTED';
   readonly contentHash: string;
   readonly sequence: number;
   readonly issuedAt: string;
@@ -606,6 +616,7 @@ export async function resolveShare(
 
   return app.db.withTenant(found!.organisation_id, async (ctx) => {
     const passport = await ctx.oneOrFail<{
+      id: string;
       content: PassportContent;
       content_hash: string;
       sequence: number;
@@ -613,7 +624,7 @@ export async function resolveShare(
       withdrawn_at: Date | null;
       withdrawn_reason: string | null;
     }>(
-      `SELECT p.content, p.content_hash, p.sequence, p.issued_at, p.withdrawn_at,
+      `SELECT p.id, p.content, p.content_hash, p.sequence, p.issued_at, p.withdrawn_at,
               p.withdrawn_reason
        FROM assurance_passports p
        JOIN passport_shares s ON s.passport_id = p.id
@@ -647,6 +658,8 @@ export async function resolveShare(
 
     return {
       organisationName: organisation.name,
+      passportId: passport.id,
+      disclosure: found!.disclosure,
       passport: found!.disclosure === 'FULL' ? passport.content : redactPassport(passport.content),
       // The hash is over the stored content as issued, which is what makes it
       // verifiable. Redaction changes what the recipient sees, so the hash is

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Adericel — Autonomous Organisational Security Assurance Infrastructure",
+  "description": "Adericel \u2014 Autonomous Organisational Security Assurance Infrastructure",
   "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=22.0.0",
@@ -38,6 +38,7 @@
     "start:api": "node apps/api/dist/main.js",
     "start:worker": "node apps/worker/dist/main.js",
     "openapi:emit": "tsx --conditions=development scripts/emit-openapi.ts",
+    "passport:keygen": "tsx --conditions=development scripts/passport-keygen.ts",
     "proof": "tsx --conditions=development proof/src/main.ts",
     "proof:failures": "vitest run proof/failures.test.ts",
     "proof-of-value": "tsx --conditions=development scripts/proof-of-value-demo.ts",

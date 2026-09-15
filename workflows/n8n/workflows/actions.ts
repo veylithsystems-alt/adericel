@@ -351,7 +351,7 @@ export function actionExecutionWorkflow(): N8nWorkflow {
         'Dispatches an action Adericel has **already authorised**.\n\n' +
         'The API enforces the state machine: an action that is not AUTHORISED is ' +
         'refused with 412, whatever this workflow asks for. Execution is also ' +
-        'exactly-once — the attempt is recorded before dispatch, so an n8n retry ' +
+        'at-most-once — the attempt is recorded before dispatch, so an n8n retry ' +
         'finds the prior attempt instead of repeating the change.\n\n' +
         '**Executed is not successful.** The action moves to VERIFYING and only ' +
         'reaches CONFIRMED once re-observation supports it.',
@@ -400,7 +400,7 @@ return [
       url: '={{ $json.apiBaseUrl }}/v1/organisations/{{ $json.organisationId }}/actions/{{ $json.actionId }}/execute',
       retry: false,
       notes:
-        'Deliberately NOT retried at the node level. Adericel makes execution exactly-once, and an ' +
+        'Deliberately NOT retried at the node level. Adericel records the attempt before dispatch, and an ' +
         'attempt whose outcome is unknown must be reconciled by a person rather than repeated.',
     }),
     node(
@@ -537,7 +537,7 @@ return [
     id: WORKFLOW_IDS.actionExecution,
     name: 'Adericel — 11 Action execution',
     description:
-      'Dispatches an authorised action exactly once, then hands over to verification. Escalates an ' +
+      'Dispatches an authorised action at most once, then hands over to verification. Escalates an ' +
       'unknown outcome to a person rather than retrying it.',
     nodes,
     connections,

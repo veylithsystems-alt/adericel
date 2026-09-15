@@ -26,9 +26,14 @@ import { evaluateVerification } from './verification.js';
  *  1. Nothing executes without a recorded policy decision.
  *  2. An approver is never the proposer, and one person cannot satisfy a
  *     two-approver requirement.
- *  3. Execution is exactly-once. An attempt is recorded BEFORE dispatch, so a
- *     crash between dispatch and response leaves a durable record that a retry
- *     finds instead of repeating the external side effect.
+ *  3. Execution is at-most-once in effect, not exactly-once in guarantee. An
+ *     attempt is recorded BEFORE dispatch, so a crash between dispatch and
+ *     response leaves a durable record that a retry finds instead of repeating
+ *     the external side effect. What that cannot do is establish what the
+ *     upstream actually did: an attempt whose outcome is unknown stays
+ *     UNKNOWN_OUTCOME and is reconciled or escalated, never blindly retried.
+ *     Exactly-once delivery is not achievable across a network boundary and
+ *     this code does not claim it.
  *  4. An executed action is not a successful action. It moves to VERIFYING and
  *     reaches CONFIRMED only when re-observation supports it.
  */
@@ -649,7 +654,8 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
 
       // Reconciliation before dispatch. If a prior attempt reached the external
       // system, we must not repeat the side effect — we adopt its outcome
-      // instead. This is the difference between at-least-once and exactly-once.
+      // instead. This is what makes the effect at-most-once; it is not a
+      // guarantee of exactly-once, which no network boundary can give.
       const priorAttempt = await ctx.one<{
         id: string;
         status: string;

@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { AdericelError } from '@adericel/shared';
+import {
+  AdericelError,
+  publishableKeyring,
+  verifyInterchange,
+  type VerificationResult,
+} from '@adericel/shared';
 import type { AppContext } from '../context.js';
 import { audit, requireOrganisation, requirePrincipal } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
@@ -11,6 +16,10 @@ import {
   resolveShare,
   type PassportContent,
 } from '../services/passport.js';
+import {
+  exportPassportInterchange,
+  exportSharedInterchange,
+} from '../services/passport-interchange.js';
 
 /**
  * Assurance Passport routes.
@@ -344,11 +353,68 @@ export function registerPassportRoutes(server: FastifyInstance, app: AppContext)
     },
   );
 
+  /**
+   * Download a passport as a signed, independently verifiable file.
+   *
+   * The one export a recipient can check without Adericel. Everything else the
+   * product produces asks somebody to trust a dashboard, a PDF, or the person
+   * who forwarded it; this asks them to trust an Ed25519 signature and a public
+   * key they already have.
+   *
+   * 200 either way. A deployment with no signing key, or a withdrawn passport,
+   * returns the record and a plain statement of why it carries no signature —
+   * not an error, and never a content hash dressed up as one.
+   */
+  server.get(
+    '/v1/organisations/:organisationId/passports/:id/interchange',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const params = parseParams(request, orgChild);
+      await requireOrganisation(app, request, params.organisationId, 'org:export');
+
+      const exported = await exportPassportInterchange(app, params.organisationId, params.id);
+
+      await audit(app, request, {
+        action: 'passport:interchange:export',
+        resourceType: 'Report',
+        resourceId: params.id,
+        metadata: {
+          signed: exported.signed,
+          // The key id is not secret — it is published so recipients can
+          // select a key — and it is what makes a rotation auditable after
+          // the fact. No private material appears here or anywhere near it.
+          keyId: exported.signed ? exported.interchange.keyId : null,
+          ...(exported.signed ? {} : { reason: exported.reason }),
+        },
+      });
+
+      return reply.status(200).send(exported);
+    },
+  );
+
   // ---- Public surface --------------------------------------------------
   //
   // Read by people with no Adericel account: an insurer, a client's security
   // team, a procurement reviewer. These are the routes that make a passport an
   // assurance record rather than a dashboard page.
+
+  /**
+   * Download the shared passport as a signed file.
+   *
+   * Same token, same expiry, same revocation and the same view record as the
+   * readable view: a recipient downloading a customer's assurance record is a
+   * fact that customer is entitled to see, and a separate route must not be a
+   * way around that.
+   */
+  server.get('/v1/assurance/:token/interchange', publicLimit, async (request, reply) => {
+    const { token } = parseParams(request, z.object({ token: z.string().min(20).max(200) }));
+    const exported = await exportSharedInterchange(app, token, {
+      ip: request.ip,
+      userAgent:
+        typeof request.headers['user-agent'] === 'string' ? request.headers['user-agent'] : null,
+    });
+    return reply.status(200).send(exported);
+  });
 
   server.get('/v1/assurance/:token', publicLimit, async (request, reply) => {
     const { token } = parseParams(request, z.object({ token: z.string().min(20).max(200) }));
@@ -377,6 +443,90 @@ export function registerPassportRoutes(server: FastifyInstance, app: AppContext)
           'trusting whoever sent you this link.',
         endpoint: `${app.config.api.publicUrl.replace(/\/+$/, '')}/v1/assurance/verify`,
       },
+    });
+  });
+
+  /**
+   * The issuer public keys.
+   *
+   * Public by construction: publishing them is what lets a recipient verify
+   * offline, and a key that nobody can obtain verifies nothing. Every key ever
+   * used is listed, including retired ones — a retired key still has to verify
+   * the passports it signed, and dropping it would make years of genuine
+   * records fail in a way indistinguishable from forgery.
+   *
+   * No organisation is named and nothing is looked up, so this cannot be used
+   * to discover who Adericel's customers are.
+   */
+  server.get('/v1/assurance/keys', publicLimit, async (_request, reply) => {
+    if (!app.config.passport.publicVerificationEnabled) {
+      throw new AdericelError(
+        'NOT_FOUND',
+        'Public verification is not enabled on this deployment.',
+      );
+    }
+    return reply.status(200).send({
+      ...publishableKeyring(app.issuerKeys),
+      meaning:
+        'A signature made by one of these keys establishes that Adericel issued that exact ' +
+        'record and that it has not been altered since. It does not mean the assurance the ' +
+        'record describes is satisfactory, and it does not mean the record is still current.',
+      retention:
+        'Retired keys remain listed permanently so that passports signed under them keep ' +
+        'verifying. A key marked REVOKED is a key Adericel has withdrawn trust in: signatures ' +
+        'made by it verify cryptographically and must not be relied upon.',
+    });
+  });
+
+  /**
+   * Verify a signed interchange envelope.
+   *
+   * A convenience, not the mechanism. The point of a signature is that the
+   * recipient does not need this endpoint — the same check runs on their laptop
+   * with the published key and no network. It exists because somebody with a
+   * file and a deadline will paste it into a box, and they should get the right
+   * answer when they do.
+   *
+   * Pure: the envelope in the request is verified against the published keys
+   * and nothing is read from the database. No identifier is accepted, so there
+   * is no lookup to turn into an enumeration oracle, and a caller learns
+   * nothing about any organisation whose passport they were not already given.
+   */
+  server.post('/v1/assurance/verify-interchange', publicLimit, async (request, reply) => {
+    if (!app.config.passport.publicVerificationEnabled) {
+      throw new AdericelError(
+        'NOT_FOUND',
+        'Public verification is not enabled on this deployment.',
+      );
+    }
+
+    // Deliberately `unknown`. The envelope is hostile input from an
+    // unauthenticated caller, and `verifyInterchange` is written to answer
+    // rather than throw on anything at all — including something that is not
+    // an envelope.
+    const candidate: unknown = request.body;
+    const result: VerificationResult = verifyInterchange(candidate, app.issuerKeys.publicKeys);
+
+    return reply.status(200).send({
+      ...result,
+      /**
+       * Said explicitly, every time, including on VALID.
+       *
+       * "Verified" reads as "approved" to almost everybody. A signed passport
+       * reporting nine UNKNOWN controls is a signed record of nine UNKNOWN
+       * controls, and a recipient who takes the green tick as the answer has
+       * been misled by us, not by the customer.
+       */
+      whatThisDoesNotTellYou:
+        'A valid signature establishes authenticity and integrity only. It does not mean the ' +
+        'assurance position described is good, and it does not mean the record is current — ' +
+        'read the "asOf" date, and check separately whether the issuer has withdrawn it.',
+      withdrawalCheck:
+        result.outcome === 'VALID'
+          ? `POST {"contentHash": "..."} to ${app.config.api.publicUrl.replace(/\/+$/, '')}` +
+            '/v1/assurance/verify to find out whether this passport has since been withdrawn. ' +
+            'Withdrawal happens after issuance, so it cannot be inside the signature.'
+          : null,
     });
   });
 

@@ -5,12 +5,14 @@ import {
   createLocalRootKeyProvider,
   createLogger,
   createPasswordHasher,
+  loadIssuerKeyring,
   systemClock,
   type AdericelConfig,
   type Clock,
   type CredentialCipher,
   type TokenHasher,
   type EnvelopeCipher,
+  type IssuerKeyring,
   type Logger,
   type PasswordHasher,
 } from '@adericel/shared';
@@ -78,6 +80,18 @@ export interface AppContext {
    * pretending when it is in use.
    */
   readonly payments: PaymentProvider;
+  /**
+   * Issuer keys for signed Passport interchange.
+   *
+   * Built at start-up and held only here. The signing half never reaches a
+   * database row, an export, a log line or a telemetry field; the routes touch
+   * `publicKeys` and call `signWithKeyring`, and neither path can reach the
+   * private material.
+   *
+   * A deployment with signing off gets a keyring that says so. Nothing
+   * downstream substitutes a content hash for a signature.
+   */
+  readonly issuerKeys: IssuerKeyring;
   readonly startedAtIso: string;
 }
 
@@ -91,6 +105,7 @@ export interface CreateContextOptions {
   readonly fetchImpl?: typeof fetch;
   readonly notifier?: Notifier;
   readonly payments?: PaymentProvider;
+  readonly issuerKeys?: IssuerKeyring;
 }
 
 /**
@@ -237,6 +252,10 @@ export function createAppContext(options: CreateContextOptions): AppContext {
             ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
           })
         : createManualProvider()),
+    // Throws on a mismatched or unusable keyring. Deliberately at start-up: a
+    // signing configuration that is wrong should stop the process, not surface
+    // at the moment a customer's insurer asks for a verifiable record.
+    issuerKeys: options.issuerKeys ?? loadIssuerKeyring(config.passport),
     startedAtIso: clock.nowIso(),
   };
 }

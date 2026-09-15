@@ -11,3 +11,6 @@ export * from './crypto.js';
 export * from './pagination.js';
 export * from './totp.js';
 export * from './envelope.js';
+export * from './issuer-key.js';
+export * from './passport-interchange.js';
+export * from './issuer-keyring.js';

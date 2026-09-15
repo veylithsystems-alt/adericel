@@ -2092,13 +2092,13 @@
     "nodes": [
       {
         "parameters": {
-          "content": "## Action execution\n\nDispatches an action Adericel has **already authorised**.\n\nThe API enforces the state machine: an action that is not AUTHORISED is refused with 412, whatever this workflow asks for. Execution is also exactly-once — the attempt is recorded before dispatch, so an n8n retry finds the prior attempt instead of repeating the change.\n\n**Executed is not successful.** The action moves to VERIFYING and only reaches CONFIRMED once re-observation supports it.",
+          "content": "## Action execution\n\nDispatches an action Adericel has **already authorised**.\n\nThe API enforces the state machine: an action that is not AUTHORISED is refused with 412, whatever this workflow asks for. Execution is also at-most-once — the attempt is recorded before dispatch, so an n8n retry finds the prior attempt instead of repeating the change.\n\n**Executed is not successful.** The action moves to VERIFYING and only reaches CONFIRMED once re-observation supports it.",
           "height": 340,
           "width": 560,
           "color": 3
         },
-        "id": "4759fd016d5d185f",
-        "name": "Note 9025c8",
+        "id": "a63d732c4496942a",
+        "name": "Note 48f002",
         "type": "n8n-nodes-base.stickyNote",
         "typeVersion": 1,
         "position": [
@@ -2212,7 +2212,7 @@
           660,
           0
         ],
-        "notes": "Deliberately NOT retried at the node level. Adericel makes execution exactly-once, and an attempt whose outcome is unknown must be reconciled by a person rather than repeated.",
+        "notes": "Deliberately NOT retried at the node level. Adericel records the attempt before dispatch, and an attempt whose outcome is unknown must be reconciled by a person rather than repeated.",
         "notesInFlow": false,
         "credentials": {
           "httpHeaderAuth": {
@@ -2482,7 +2482,7 @@
     },
     "staticData": null,
     "meta": {
-      "description": "Dispatches an authorised action exactly once, then hands over to verification. Escalates an unknown outcome to a person rather than retrying it.",
+      "description": "Dispatches an authorised action at most once, then hands over to verification. Escalates an unknown outcome to a person rather than retrying it.",
       "templateCredsSetupCompleted": false
     },
     "pinData": {},

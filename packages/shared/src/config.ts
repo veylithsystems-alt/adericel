@@ -153,6 +153,56 @@ export const configSchema = z.object({
       .default(() => ({ secretKey: '', webhookSecret: '', apiBaseUrl: 'https://api.stripe.com' })),
   }),
 
+  /**
+   * Signed Passport interchange.
+   *
+   * Deliberately its own section, and deliberately NOT derived from
+   * `auth.jwtSecret` or `auth.credentialEncryptionKey`. An issuer key that is a
+   * function of the deployment root secret cannot be rotated independently of
+   * it, and a compromise of the application secret would silently become a
+   * compromise of every signature Adericel has ever produced. These are
+   * separately established credentials or the feature is off.
+   */
+  passport: z.object({
+    /**
+     * Whether Adericel signs Passports at all.
+     *
+     * Off by default. A deployment with no issuer key does not sign, and says
+     * so; it does not fall back to hashing and call the result verified.
+     */
+    signingEnabled: booleanish.default(false),
+    /**
+     * The active signing key, as a JSON document.
+     *
+     * Supplied whole rather than as separate fields so the key id, the issuer
+     * and the private material travel together and cannot be mismatched by a
+     * half-applied deployment change. Shape:
+     *
+     *   {"keyId":"...","algorithm":"Ed25519","issuer":"...","privateKey":"..."}
+     *
+     * Held as an opaque string here. It is parsed once, at start-up, by the
+     * keyring; the parsed value never re-enters this frozen config object, and
+     * the key name is matched by the log redactor either way.
+     */
+    signingKeyJson: z.string().default(''),
+    /**
+     * Public keys a verifier should trust, as a JSON array.
+     *
+     * Includes RETIRED keys. A retired key is never destroyed: destroying it
+     * would make every Passport it ever signed unverifiable, which to a
+     * recipient is indistinguishable from a forgery.
+     */
+    keyringJson: z.string().default(''),
+    /**
+     * Whether the unauthenticated verification endpoint is mounted.
+     *
+     * It returns only the trusted public keys and a verdict on a submitted
+     * envelope. It must never accept an identifier and look something up: that
+     * would make it an oracle for which organisations exist.
+     */
+    publicVerificationEnabled: booleanish.default(true),
+  }),
+
   security: z.object({
     /** Reject evidence uploads whose declared type is not in this set. */
     allowedEvidenceMimeTypes: z
@@ -278,6 +328,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdericelConfig
       currency: env.BILLING_CURRENCY,
       trialDays: env.BILLING_TRIAL_DAYS,
     },
+    passport: {
+      signingEnabled: env.PASSPORT_SIGNING_ENABLED,
+      signingKeyJson: env.PASSPORT_SIGNING_KEY,
+      keyringJson: env.PASSPORT_KEYRING,
+      publicVerificationEnabled: env.PASSPORT_PUBLIC_VERIFICATION_ENABLED,
+    },
     security: {
       allowedEvidenceMimeTypes: csv(env.SECURITY_ALLOWED_EVIDENCE_MIME_TYPES),
       egressAllowlist: csv(env.SECURITY_EGRESS_ALLOWLIST),
@@ -294,8 +350,35 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdericelConfig
   }
 
   const config = parsed.data;
+  assertPassportSigningConfigured(config);
   assertProductionSafety(config);
   return Object.freeze(config);
+}
+
+/**
+ * Refuse to start with signing switched on and nothing to sign with.
+ *
+ * Applies in every environment, not only production. A deployment that says it
+ * signs Passports and then cannot is worse than one that says it does not: the
+ * first produces a recipient expecting a signature and an export that quietly
+ * has none, and there is no good moment to discover that. Either the key is
+ * present at start-up or the process does not start.
+ *
+ * Note what this does NOT do: it does not invent a key, derive one from
+ * `auth.jwtSecret`, or fall back to hashing and describe the result as
+ * verified. The only safe failure here is a loud one.
+ */
+export function assertPassportSigningConfigured(config: AdericelConfig): void {
+  if (!config.passport.signingEnabled) return;
+  if (config.passport.signingKeyJson.trim() === '') {
+    throw new Error(
+      'Refusing to start: PASSPORT_SIGNING_ENABLED is on but PASSPORT_SIGNING_KEY is empty. ' +
+        'Issuer keys are separately established credentials and are never derived from ' +
+        'AUTH_JWT_SECRET or AUTH_CREDENTIAL_ENCRYPTION_KEY. Generate one with ' +
+        '`pnpm passport:keygen`, or set PASSPORT_SIGNING_ENABLED=false and accept that ' +
+        'exports will carry a content hash and no signature.',
+    );
+  }
 }
 
 /** Remove undefined leaves so Zod defaults apply cleanly. */

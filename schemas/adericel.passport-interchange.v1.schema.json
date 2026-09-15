@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adericel.com/schemas/adericel.passport-interchange.v1.schema.json",
+  "title": "Adericel Assurance Passport Interchange v1",
+  "description": "A portable assurance record whose authenticity and integrity can be verified offline against a published issuer public key. The signature establishes that this exact record was issued by the named key and has not been altered. It does not establish that the assurance the record reports is satisfactory.",
+  "type": "object",
+  "required": [
+    "schema",
+    "passport",
+    "passportHash",
+    "passportId",
+    "sequence",
+    "asOf",
+    "issuedAt",
+    "issuer",
+    "keyId",
+    "algorithm",
+    "signature",
+    "canonicalisation"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "adericel.passport-interchange/v1",
+      "description": "Envelope version. A verifier that does not implement this exact value must refuse rather than attempt."
+    },
+    "passport": {
+      "type": "object",
+      "description": "The Assurance Passport exactly as issued. Byte-identical to what Adericel produced: nothing is added, removed, reordered, scored or simplified, because the value of the envelope is that the thing verified is the thing issued. UNKNOWN states, exceptions and stated limitations are preserved."
+    },
+    "passportHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "The passport's own content hash as Adericel recorded it, over canonical JSON."
+    },
+    "passportId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Adericel's identifier for this passport, so it can be cited in correspondence."
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic per organisation, so 'passport 4' is unambiguous."
+    },
+    "asOf": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The instant the assurance describes. Not the instant the file was produced."
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The instant this envelope was sealed."
+    },
+    "issuer": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who the signing key speaks for. Never established from this field alone: trust comes from holding the public key, not from what the document claims."
+    },
+    "keyId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Which issuer public key verifies this envelope. Inside the signed material as well as on the envelope, so a valid signature cannot be relabelled as made by a different key."
+    },
+    "algorithm": {
+      "const": "Ed25519",
+      "description": "Pinned, not negotiated. A verifier must refuse any other value rather than attempt it."
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base64url detached Ed25519 signature over the canonical JSON of every field in this envelope except 'signature' and 'canonicalisation'."
+    },
+    "canonicalisation": {
+      "const": "adericel.canonical-json/v1",
+      "description": "How to reproduce the signed bytes. Stated in the envelope because a verifier who canonicalises differently gets a false negative and cannot tell that from tampering."
+    }
+  }
+}
