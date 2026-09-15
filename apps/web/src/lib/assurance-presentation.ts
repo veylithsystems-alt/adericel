@@ -13,11 +13,18 @@
  */
 
 export type AssuranceState =
-  'SATISFIED' | 'PARTIALLY_SATISFIED' | 'NOT_SATISFIED' | 'EXCEPTED' | 'NOT_APPLICABLE' | 'UNKNOWN';
+  | 'SATISFIED'
+  | 'PARTIALLY_SATISFIED'
+  | 'NOT_SATISFIED'
+  | 'EXCEPTED'
+  | 'NOT_APPLICABLE'
+  | 'UNKNOWN'
+  | 'DEGRADED'
+  | 'BLOCKED';
 
 export interface StatePresentation {
   readonly label: string;
-  readonly tone: 'proven' | 'failing' | 'exception' | 'unknown' | 'muted';
+  readonly tone: 'proven' | 'failing' | 'exception' | 'unknown' | 'muted' | 'impaired';
   /** One line explaining what the state actually asserts. */
   readonly meaning: string;
 }
@@ -55,16 +62,55 @@ export const STATE_PRESENTATION: Record<AssuranceState, StatePresentation> = {
       'Adericel does not hold sufficient trustworthy evidence to say. This is not the same as ' +
       'secure, insecure, compliant or non-compliant.',
   },
+  DEGRADED: {
+    label: 'Source broken',
+    tone: 'impaired',
+    meaning:
+      'The source that establishes this control has stopped working. This is a fault in ' +
+      'collection, not a finding about the organisation — it says nothing about whether the ' +
+      'control is met, only that Adericel can no longer tell.',
+  },
+  BLOCKED: {
+    label: 'Blocked',
+    tone: 'impaired',
+    meaning:
+      'Adericel is not permitted to establish this, or is waiting on somebody who is. No ' +
+      'amount of collection will resolve it; a person with authority has to act.',
+  },
 };
 
 /** Worst first. Failures rank above unknowns; unknowns above anything positive. */
 export const STATE_ORDER: Record<AssuranceState, number> = {
   NOT_SATISFIED: 0,
-  UNKNOWN: 1,
-  PARTIALLY_SATISFIED: 2,
-  EXCEPTED: 3,
-  SATISFIED: 4,
-  NOT_APPLICABLE: 5,
+  // Above plain unknowns: each names something specific somebody can do.
+  DEGRADED: 1,
+  BLOCKED: 2,
+  UNKNOWN: 3,
+  PARTIALLY_SATISFIED: 4,
+  EXCEPTED: 5,
+  SATISFIED: 6,
+  NOT_APPLICABLE: 7,
+};
+
+/** Why a control is degraded, in the words an operator would use. */
+export const DEGRADED_REASON_TEXT: Record<string, string> = {
+  COLLECTION_FAILING: 'Collection from the source is failing',
+  CREDENTIAL_EXPIRED: 'The stored credential no longer works',
+  CONSENT_WITHDRAWN: 'Consent for this connection was withdrawn',
+  SOURCE_UNAVAILABLE: 'The source cannot be reached',
+  PARTIAL_COLLECTION: 'Only part of the estate was collected',
+  SCHEMA_DRIFT: 'The source changed shape and no longer maps',
+  RATE_LIMITED: 'The source is throttling collection',
+};
+
+/** Why a control is blocked. Each of these needs a person, not a repair. */
+export const BLOCKED_REASON_TEXT: Record<string, string> = {
+  AUTHORITY_MISSING: 'Adericel holds no authority to look',
+  APPROVAL_PENDING: 'An action this depends on is awaiting approval',
+  CONSENT_REQUIRED: 'The customer has not granted consent yet',
+  DEPENDENCY_BLOCKED: 'Something this depends on is itself unresolved',
+  SAFETY_CONDITION_UNMET: 'A safety precondition is not met',
+  CONTAINED: 'This estate is under containment',
 };
 
 export const UNKNOWN_REASON_TEXT: Record<string, string> = {

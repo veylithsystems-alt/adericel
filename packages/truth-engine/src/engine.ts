@@ -2,8 +2,10 @@ import {
   evaluateEvidenceUsability,
   isRuleEligible,
   type AssuranceState,
+  type BlockedReason,
   type ClaimOrigin,
   type ClaimStatus,
+  type DegradedReason,
   type EvidenceSourceType,
   type EvidenceStatus,
   type ReasoningStep,
@@ -90,6 +92,42 @@ export interface ControlAssessmentInput {
    * all look better than one where collection works and found a problem.
    */
   readonly observedSubjectKinds: readonly string[];
+  /**
+   * Predicates whose supply is impaired, and why.
+   *
+   * WHY THIS IS AN INPUT RATHER THAN A LOOKUP
+   *
+   * The engine cannot ask whether a connector is healthy: it performs no I/O,
+   * reads no clock and holds no state (ADR-0002), and it must produce the same
+   * answer on any machine at any time given the same inputs. A connector's
+   * health is a fact about the world, so it arrives the same way every other
+   * fact about the world does — as data, inside the digest.
+   *
+   * That keeps replay honest. Re-running a historical assessment reproduces the
+   * state Adericel reported at the time, including the fact that a source was
+   * broken then, rather than silently re-deciding it with today's health.
+   *
+   * Empty for every caller that has nothing to report, which is why it is
+   * optional: adding impairment must not force every existing call site to
+   * invent a value.
+   */
+  readonly impairments?: readonly PredicateImpairment[];
+}
+
+/**
+ * A reason a required predicate cannot currently be supplied.
+ *
+ * Carries the distinction contract v3.1 §6 requires: DEGRADED is a broken
+ * mechanism, BLOCKED is a missing permission. One needs an engineer, the other
+ * needs a person with authority.
+ */
+export interface PredicateImpairment {
+  /** The canonical predicate whose supply is impaired. */
+  readonly predicate: string;
+  readonly kind: 'DEGRADED' | 'BLOCKED';
+  readonly reason: DegradedReason | BlockedReason;
+  /** What an operator should be told. Not free text from a connector. */
+  readonly detail: string;
 }
 
 export interface SubjectOutcome {
@@ -118,6 +156,12 @@ export interface AssessmentProvenanceOut {
 export interface AssessmentOutcome {
   readonly state: AssuranceState;
   readonly unknownReason: UnknownReason | null;
+  /** Set only when state is DEGRADED. Names a repair. */
+  readonly degradedReason: DegradedReason | null;
+  /** Set only when state is BLOCKED. Names a person, not a repair. */
+  readonly blockedReason: BlockedReason | null;
+  /** The impairment that downgraded this result, for the explanation page. */
+  readonly impairment: PredicateImpairment | null;
   readonly rationale: string;
   readonly reasoning: readonly ReasoningStep[];
   readonly severity: Severity;
@@ -214,6 +258,48 @@ function resolveClaims(
   return resolved;
 }
 
+/**
+ * Apply impairment to an otherwise-UNKNOWN result.
+ *
+ * THE SAFETY RULE, AND WHY IT IS THIS WAY ROUND
+ *
+ * Impairment may ONLY convert UNKNOWN into DEGRADED or BLOCKED. It never
+ * touches SATISFIED, NOT_SATISFIED, PARTIALLY_SATISFIED, EXCEPTED or
+ * NOT_APPLICABLE.
+ *
+ * The tempting alternative is to mark a control DEGRADED whenever its connector
+ * is unhealthy, including when the control currently reads SATISFIED. That is
+ * wrong, and wrong in the direction that matters: the control *is* satisfied on
+ * the evidence held, and saying otherwise would report a finding about the
+ * organisation on the strength of a fault in Adericel. Evidence that has gone
+ * stale because collection stopped is already handled upstream — the claim
+ * becomes ineligible and the control falls to UNKNOWN on its own, at which
+ * point this function can honestly call it DEGRADED.
+ *
+ * So a broken connector shows up here only once it has actually cost Adericel
+ * the ability to determine something. Until then it shows up in connector
+ * health and the coverage ladder, where it belongs.
+ *
+ * When several impairments touch one control, DEGRADED wins over BLOCKED: a
+ * broken mechanism usually explains more, and it is the one an operator can act
+ * on without finding somebody with authority first.
+ */
+function applyImpairment(
+  state: AssuranceState,
+  missingPredicates: readonly string[],
+  impairments: readonly PredicateImpairment[],
+): { state: AssuranceState; impairment: PredicateImpairment | null } {
+  if (state !== 'UNKNOWN' || impairments.length === 0) return { state, impairment: null };
+
+  const missing = new Set(missingPredicates);
+  const relevant = impairments.filter((i) => missing.has(i.predicate));
+  if (relevant.length === 0) return { state, impairment: null };
+
+  const degraded = relevant.find((i) => i.kind === 'DEGRADED');
+  const chosen = degraded ?? relevant[0]!;
+  return { state: chosen.kind, impairment: chosen };
+}
+
 function unknownReasonFor(
   missingPredicates: readonly string[],
   claims: ReadonlyMap<string, ResolvedClaim>,
@@ -270,6 +356,12 @@ function computeInputDigest(input: ControlAssessmentInput, ruleset: Ruleset, rul
             validUntil: claim.validUntil,
           })),
       })),
+    // Impairment changes the answer, so it must change the digest. Omitting it
+    // would let two assessments with different states share an input digest,
+    // which is the one thing the digest exists to prevent.
+    impairments: [...(input.impairments ?? [])]
+      .sort((a, b) => a.predicate.localeCompare(b.predicate) || a.kind.localeCompare(b.kind))
+      .map((i) => ({ predicate: i.predicate, kind: i.kind, reason: i.reason })),
     organisationClaims: [...input.organisationClaims]
       .sort((a, b) => a.predicate.localeCompare(b.predicate))
       .map((claim) => ({
@@ -326,6 +418,9 @@ export function assessControl(ruleset: Ruleset, input: ControlAssessmentInput): 
     return {
       state: 'EXCEPTED',
       unknownReason: null,
+      degradedReason: null,
+      blockedReason: null,
+      impairment: null,
       rationale: `Control ${input.controlKey} is covered by an authorised exception expiring ${controlException.expiresAt}: ${controlException.justification}`,
       reasoning: [
         {
@@ -384,18 +479,27 @@ export function assessControl(ruleset: Ruleset, input: ControlAssessmentInput): 
       evidenceIds: result.evidenceIds,
     });
 
+    const impaired = applyImpairment(state, result.missingPredicates, input.impairments ?? []);
+
     return {
-      state,
+      state: impaired.state,
       unknownReason:
-        state === 'UNKNOWN'
+        impaired.state === 'UNKNOWN'
           ? unknownReasonFor(result.missingPredicates, claims, input.organisationClaims.length > 0)
           : null,
+      degradedReason:
+        impaired.state === 'DEGRADED' ? (impaired.impairment!.reason as DegradedReason) : null,
+      blockedReason:
+        impaired.state === 'BLOCKED' ? (impaired.impairment!.reason as BlockedReason) : null,
+      impairment: impaired.impairment,
       rationale:
-        state === 'SATISFIED'
+        impaired.state === 'SATISFIED'
           ? `${rule.title}: satisfied.`
-          : state === 'NOT_SATISFIED'
+          : impaired.state === 'NOT_SATISFIED'
             ? `${rule.failureTitle} ${rule.failureDescription}`
-            : `${rule.title}: cannot be determined. ${describeMissing(result.missingPredicates, claims)}`,
+            : impaired.impairment
+              ? `${rule.title}: ${impaired.impairment.detail}`
+              : `${rule.title}: cannot be determined. ${describeMissing(result.missingPredicates, claims)}`,
       reasoning,
       severity: rule.severity,
       claimIds: [...allClaimIds].sort(),
@@ -521,6 +625,14 @@ export function assessControl(ruleset: Ruleset, input: ControlAssessmentInput): 
     return {
       state: 'UNKNOWN',
       unknownReason: 'NO_EVIDENCE',
+      // Deliberately not DEGRADED even when a connector is impaired. Nothing of
+      // this kind has ever been observed, so there is no working mechanism that
+      // has broken — there is an asset class nobody has connected a source for.
+      // "Your connector is failing" would send an engineer to fix something
+      // that was never set up.
+      degradedReason: null,
+      blockedReason: null,
+      impairment: null,
       rationale:
         `${rule.title}: cannot be determined. Adericel has never observed any ` +
         `${rule.subjectKinds.join(' or ')} in this organisation, so it cannot say whether the ` +
@@ -566,24 +678,32 @@ export function assessControl(ruleset: Ruleset, input: ControlAssessmentInput): 
 
   const allMissing = [...new Set(unknown.flatMap((o) => o.missingPredicates))].sort();
 
+  const impaired = applyImpairment(state, allMissing, input.impairments ?? []);
+
   return {
-    state,
+    state: impaired.state,
     unknownReason:
-      state === 'UNKNOWN'
+      impaired.state === 'UNKNOWN'
         ? inScope.length === 0
           ? 'NO_EVIDENCE'
           : unknown.length === inScope.length && allMissing.length === 0
             ? 'RULE_INPUTS_MISSING'
             : 'INSUFFICIENT_EVIDENCE'
         : null,
+    degradedReason:
+      impaired.state === 'DEGRADED' ? (impaired.impairment!.reason as DegradedReason) : null,
+    blockedReason:
+      impaired.state === 'BLOCKED' ? (impaired.impairment!.reason as BlockedReason) : null,
+    impairment: impaired.impairment,
     rationale: buildRationale(
       rule,
-      state,
+      impaired.state,
       inScope.length,
       passing.length,
       failing.length,
       unknown.length,
       allMissing,
+      impaired.impairment,
     ),
     reasoning,
     severity: rule.severity,
@@ -655,6 +775,7 @@ function buildRationale(
   failing: number,
   unknown: number,
   missing: readonly string[],
+  impairment: PredicateImpairment | null = null,
 ): string {
   switch (state) {
     case 'SATISFIED':
@@ -663,6 +784,23 @@ function buildRationale(
       return `${rule.title}: ${passing} of ${inScope} subject(s) satisfy the control (${failing} failing, ${unknown} unknown).`;
     case 'NOT_SATISFIED':
       return `${rule.failureTitle} ${rule.failureDescription} ${failing} of ${inScope} subject(s) do not satisfy the control.`;
+    // Both carry the impairment's own detail rather than a generic sentence.
+    // "The source is impaired" tells an operator nothing they can act on; "the
+    // Entra credential expired on 12 September" tells them exactly what to fix,
+    // and it is the reason the detail field exists.
+    case 'DEGRADED':
+      return (
+        `${rule.title}: cannot be maintained. ${impairment?.detail ?? 'The source that supplies this control is impaired.'} ` +
+        `${unknown} of ${inScope} subject(s) could not be evaluated. This is a collection ` +
+        `fault, not a finding about the organisation — it says nothing about whether the ` +
+        `control is met.`
+      );
+    case 'BLOCKED':
+      return (
+        `${rule.title}: cannot be assessed. ${impairment?.detail ?? 'Adericel is not currently permitted to proceed.'} ` +
+        `${unknown} of ${inScope} subject(s) were not evaluated. This needs somebody with ` +
+        `authority rather than a repair.`
+      );
     case 'NOT_APPLICABLE':
       return `${rule.title}: no subjects of kind ${rule.subjectKinds.join(', ')} are in scope.`;
     case 'EXCEPTED':

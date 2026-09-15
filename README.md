@@ -262,7 +262,7 @@ feature list:
 
 ## Documentation
 
-- [Architecture decision records](./docs/adr/README.md) — forty-two decisions,
+- [Architecture decision records](./docs/adr/README.md) — forty-three decisions,
   each with what it costs
 - [Threat model](./docs/security/threat-model.md) — including what it does not cover
 - [Operations runbook](./docs/operations/runbook.md)

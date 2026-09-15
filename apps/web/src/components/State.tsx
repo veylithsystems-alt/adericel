@@ -50,6 +50,8 @@ export interface StateCounts {
   EXCEPTED: number;
   NOT_APPLICABLE: number;
   UNKNOWN: number;
+  DEGRADED: number;
+  BLOCKED: number;
 }
 
 /**
@@ -66,6 +68,8 @@ export function CountBar({ counts }: { counts: StateCounts }): ReactElement {
     counts.NOT_SATISFIED +
     counts.EXCEPTED +
     counts.UNKNOWN +
+    counts.DEGRADED +
+    counts.BLOCKED +
     counts.NOT_APPLICABLE;
 
   if (total === 0) {
@@ -74,6 +78,11 @@ export function CountBar({ counts }: { counts: StateCounts }): ReactElement {
 
   const segments: { key: string; tone: string; count: number }[] = [
     { key: 'NOT_SATISFIED', tone: 'failing', count: counts.NOT_SATISFIED },
+    // Impaired states sit beside unknown rather than inside it. A bar that
+    // folded a broken connector into the unknown segment would hide the one
+    // fact the MSP can act on today.
+    { key: 'DEGRADED', tone: 'impaired', count: counts.DEGRADED },
+    { key: 'BLOCKED', tone: 'impaired', count: counts.BLOCKED },
     { key: 'UNKNOWN', tone: 'unknown', count: counts.UNKNOWN },
     { key: 'PARTIALLY_SATISFIED', tone: 'exception', count: counts.PARTIALLY_SATISFIED },
     { key: 'EXCEPTED', tone: 'exception', count: counts.EXCEPTED },
@@ -113,7 +122,7 @@ export function Metric({
   value: string | number;
   label: string;
   note?: string;
-  tone?: 'proven' | 'failing' | 'exception' | 'unknown';
+  tone?: 'proven' | 'failing' | 'exception' | 'unknown' | 'impaired';
 }): ReactElement {
   const colour =
     tone === 'failing'

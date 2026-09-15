@@ -53,6 +53,7 @@ implications.
 | [0040](./ADR-0040-signed-passport-interchange.md)                   | A Passport is signed, and the signature is what a stranger checks | Accepted |
 | [0041](./ADR-0041-sovereign-inference.md)                           | Inference is local first, and leaving requires an author          | Accepted |
 | [0042](./ADR-0042-msp-only-distribution.md)                         | Every organisation belongs to an MSP                              | Accepted |
+| [0043](./ADR-0043-degraded-and-blocked.md)                          | A broken source is not an unknown                                 | Accepted |
 
 ## Writing a new ADR
 

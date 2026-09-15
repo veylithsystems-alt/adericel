@@ -15,6 +15,33 @@ export const ASSURANCE_STATES = [
   'EXCEPTED',
   'NOT_APPLICABLE',
   'UNKNOWN',
+  /**
+   * The mechanism that would establish this control is impaired.
+   *
+   * Distinct from UNKNOWN, and the distinction is the point. UNKNOWN says
+   * Adericel does not hold enough evidence. DEGRADED says the thing that would
+   * have supplied the evidence is broken: a connector that has started failing,
+   * a credential that has expired, a consent that has been withdrawn.
+   *
+   * They read identically on a dashboard and require completely different work.
+   * UNKNOWN is "connect something"; DEGRADED is "the connection you already
+   * made has stopped working". For an MSP that is the difference between a
+   * conversation with their customer and a ticket for their own engineer, and
+   * collapsing the two costs them the ability to tell which they are looking
+   * at (contract v3.1 §6).
+   */
+  'DEGRADED',
+  /**
+   * Something other than evidence prevents assessment.
+   *
+   * Authority, approval, consent, a dependency or a safety condition. The
+   * evidence path may be perfectly healthy; Adericel is not permitted to
+   * proceed, or is waiting on somebody who is.
+   *
+   * Separated from DEGRADED because nothing an engineer does will clear it. A
+   * BLOCKED control needs a person with authority, not a repair.
+   */
+  'BLOCKED',
 ] as const;
 
 export type AssuranceState = (typeof ASSURANCE_STATES)[number];
@@ -42,6 +69,54 @@ export const UNKNOWN_REASONS = [
 export type UnknownReason = (typeof UNKNOWN_REASONS)[number];
 export const unknownReasonSchema = z.enum(UNKNOWN_REASONS);
 
+/**
+ * Why a control is DEGRADED. Each names a repair somebody can carry out.
+ */
+export const DEGRADED_REASONS = [
+  /** The integration that supplies a required predicate is failing. */
+  'COLLECTION_FAILING',
+  /** The stored credential no longer authenticates. */
+  'CREDENTIAL_EXPIRED',
+  /** The customer withdrew consent, or an administrator revoked it. */
+  'CONSENT_WITHDRAWN',
+  /** The upstream source is unreachable or returning errors. */
+  'SOURCE_UNAVAILABLE',
+  /** Collection ran but returned only part of the expected estate. */
+  'PARTIAL_COLLECTION',
+  /** The source changed shape and normalisation no longer maps it. */
+  'SCHEMA_DRIFT',
+  /** The source is throttling us hard enough that collection cannot complete. */
+  'RATE_LIMITED',
+] as const;
+export type DegradedReason = (typeof DEGRADED_REASONS)[number];
+export const degradedReasonSchema = z.enum(DEGRADED_REASONS);
+
+/**
+ * Why a control is BLOCKED. Each names a person, not a repair.
+ */
+export const BLOCKED_REASONS = [
+  /** Adericel holds no authority to observe what this control needs. */
+  'AUTHORITY_MISSING',
+  /** An action this control depends on is waiting for a human approval. */
+  'APPROVAL_PENDING',
+  /** The customer has not yet granted the consent collection requires. */
+  'CONSENT_REQUIRED',
+  /** Another control or system this one depends on is itself unresolved. */
+  'DEPENDENCY_BLOCKED',
+  /** A safety precondition for assessing or acting is not met. */
+  'SAFETY_CONDITION_UNMET',
+  /**
+   * The integration or organisation is under containment.
+   *
+   * Assessment stops deliberately, and says so. A contained estate must not
+   * quietly report UNKNOWN as though nobody had looked — somebody decided not
+   * to look, and that decision is the fact worth surfacing.
+   */
+  'CONTAINED',
+] as const;
+export type BlockedReason = (typeof BLOCKED_REASONS)[number];
+export const blockedReasonSchema = z.enum(BLOCKED_REASONS);
+
 /** States that assert a positive or negative conclusion about reality. */
 export const DETERMINATE_STATES: readonly AssuranceState[] = [
   'SATISFIED',
@@ -58,6 +133,24 @@ export function isUnknown(state: AssuranceState): state is 'UNKNOWN' {
 }
 
 /**
+ * States in which Adericel has NOT substantiated a positive claim.
+ *
+ * This is the predicate almost every caller actually wants, and the reason it
+ * exists is a specific hazard introduced by widening the state set: code that
+ * asks `state === 'UNKNOWN'` to mean "not substantiated" silently starts
+ * treating DEGRADED and BLOCKED as though they were substantiated. That failure
+ * is invisible — it produces a more confident answer, not an error.
+ *
+ * Use this wherever the question is "may we rely on this?". Use `isUnknown`
+ * only where the question is specifically about absent evidence.
+ */
+export const UNSUBSTANTIATED_STATES: readonly AssuranceState[] = ['UNKNOWN', 'DEGRADED', 'BLOCKED'];
+
+export function isUnsubstantiated(state: AssuranceState): boolean {
+  return UNSUBSTANTIATED_STATES.includes(state);
+}
+
+/**
  * Aggregation precedence when rolling child states up to a parent
  * (control -> requirement -> framework -> organisation).
  *
@@ -67,6 +160,13 @@ export function isUnknown(state: AssuranceState): state is 'UNKNOWN' {
  */
 const AGGREGATION_PRECEDENCE: readonly AssuranceState[] = [
   'NOT_SATISFIED',
+  // DEGRADED and BLOCKED outrank UNKNOWN for the same reason NOT_SATISFIED
+  // outranks it: they are stronger facts. "The connector broke" and "we are not
+  // permitted to look" are both more informative, and more actionable, than
+  // "we do not know". They rank below NOT_SATISFIED because a known failure is
+  // stronger still.
+  'DEGRADED',
+  'BLOCKED',
   'UNKNOWN',
   'PARTIALLY_SATISFIED',
   'EXCEPTED',
@@ -83,6 +183,8 @@ export function emptyCounts(): AssuranceStateCounts {
     EXCEPTED: 0,
     NOT_APPLICABLE: 0,
     UNKNOWN: 0,
+    DEGRADED: 0,
+    BLOCKED: 0,
   };
 }
 
@@ -97,7 +199,13 @@ export interface AggregateResult {
   readonly counts: AssuranceStateCounts;
   /** Children that carry a real determination, i.e. excluding NOT_APPLICABLE. */
   readonly inScope: number;
-  /** Proportion of in-scope children with a determinate (non-UNKNOWN) state. */
+  /**
+   * Proportion of in-scope children Adericel has actually substantiated.
+   *
+   * DEGRADED and BLOCKED children count against coverage exactly as UNKNOWN
+   * does. A control Adericel is not permitted to assess is not covered, however
+   * good the reason.
+   */
   readonly coverage: number;
 }
 
@@ -121,8 +229,8 @@ export function aggregateAssurance(states: readonly AssuranceState[]): Aggregate
     };
   }
 
-  const determinate = inScope - counts.UNKNOWN;
-  const coverage = determinate / inScope;
+  const substantiated = inScope - counts.UNKNOWN - counts.DEGRADED - counts.BLOCKED;
+  const coverage = substantiated / inScope;
 
   for (const candidate of AGGREGATION_PRECEDENCE) {
     if (counts[candidate] > 0) {
@@ -178,6 +286,10 @@ export interface AssuranceIndex {
   readonly satisfactionOfKnown: number | null;
   readonly coverage: number;
   readonly unknownCount: number;
+  /** Controls whose evidence path is impaired. Reported separately from unknown. */
+  readonly degradedCount: number;
+  /** Controls Adericel is not permitted to assess. Reported separately again. */
+  readonly blockedCount: number;
   readonly failingCount: number;
 }
 
@@ -186,6 +298,8 @@ export function assuranceIndex(summary: AssuranceSummary): AssuranceIndex {
     satisfactionOfKnown: summary.satisfactionOfKnown,
     coverage: summary.coverage,
     unknownCount: summary.counts.UNKNOWN,
+    degradedCount: summary.counts.DEGRADED,
+    blockedCount: summary.counts.BLOCKED,
     failingCount: summary.counts.NOT_SATISFIED,
   };
 }
@@ -195,15 +309,23 @@ export function assuranceSeverityRank(state: AssuranceState): number {
   switch (state) {
     case 'NOT_SATISFIED':
       return 0;
-    case 'UNKNOWN':
+    // Ranked above UNKNOWN because they are actionable: a named repair and a
+    // named person respectively. An operator sorting worst-first should meet
+    // the things somebody can do something about before the ones nobody has
+    // looked at yet.
+    case 'DEGRADED':
       return 1;
-    case 'PARTIALLY_SATISFIED':
+    case 'BLOCKED':
       return 2;
-    case 'EXCEPTED':
+    case 'UNKNOWN':
       return 3;
-    case 'SATISFIED':
+    case 'PARTIALLY_SATISFIED':
       return 4;
-    case 'NOT_APPLICABLE':
+    case 'EXCEPTED':
       return 5;
+    case 'SATISFIED':
+      return 6;
+    case 'NOT_APPLICABLE':
+      return 7;
   }
 }

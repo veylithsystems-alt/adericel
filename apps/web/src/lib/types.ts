@@ -43,6 +43,8 @@ export interface StateCounts {
   EXCEPTED: number;
   NOT_APPLICABLE: number;
   UNKNOWN: number;
+  DEGRADED: number;
+  BLOCKED: number;
 }
 
 export interface PortfolioOrganisation {

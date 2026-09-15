@@ -216,7 +216,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Target**      | Sequence 1.                                                                                                                                                                             |
 | **State**       | `OPEN`                                                                                                                                                                                  |
 
-### RR-051 — Assurance states lack DEGRADED and BLOCKED
+### RR-051 — Assurance states lack DEGRADED and BLOCKED — **CLOSED 15 Sept 2026**
 
 | Field                | Value                                                                                                                                                                                                                                                            |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

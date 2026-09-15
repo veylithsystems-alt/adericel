@@ -1,5 +1,6 @@
 import {
   aggregateAssurance,
+  isUnsubstantiated,
   type AssessmentRecord,
   type AssessmentSubjectKind,
   type AssessmentTrigger,
@@ -865,7 +866,11 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
         outcome:
           aggregate.state === 'NOT_SATISFIED'
             ? 'FAIL'
-            : aggregate.state === 'UNKNOWN'
+            : // DEGRADED and BLOCKED report as UNKNOWN in the reasoning step,
+              // never as PASS. `isUnsubstantiated` rather than an equality
+              // check on UNKNOWN: a widened state set must not let a rollup
+              // quietly claim a pass it cannot support.
+              isUnsubstantiated(aggregate.state)
               ? 'UNKNOWN'
               : 'PASS',
         detail:
@@ -884,10 +889,12 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       {
         state: aggregate.state,
         unknownReason: aggregate.state === 'UNKNOWN' ? 'INSUFFICIENT_EVIDENCE' : null,
-        rationale:
-          aggregate.state === 'UNKNOWN'
-            ? `Cannot be determined: ${aggregate.counts.UNKNOWN} of ${aggregate.inScope} child subject(s) are unknown.`
-            : `Rolled up from ${aggregate.inScope} child subject(s); coverage ${(aggregate.coverage * 100).toFixed(0)}%.`,
+        rationale: isUnsubstantiated(aggregate.state)
+          ? `Cannot be determined: of ${aggregate.inScope} child subject(s), ` +
+            `${aggregate.counts.UNKNOWN} unknown, ${aggregate.counts.DEGRADED} degraded ` +
+            `(the source is impaired), ${aggregate.counts.BLOCKED} blocked (Adericel is not ` +
+            `permitted to look).`
+          : `Rolled up from ${aggregate.inScope} child subject(s); coverage ${(aggregate.coverage * 100).toFixed(0)}%.`,
         reasoning,
         claimIds: [],
         evidenceIds: [],

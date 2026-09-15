@@ -333,6 +333,37 @@ code,
 }
 
 /*
+ * Impaired: DEGRADED and BLOCKED.
+ *
+ * These belong on the same axis as Unknown, not on the good-to-bad one. All
+ * three say the same thing about the organisation — nothing. They differ only
+ * in why Adericel cannot tell you, and giving them a warning colour would put a
+ * fault in our collection on the same scale as a fault in the customer's
+ * security, which is precisely the confusion the state exists to prevent.
+ *
+ * So: the same hatch, turned the other way. Distinguishable at a glance from
+ * Unknown, unmistakably in the same family, and borrowing nothing from failing.
+ */
+.state--impaired {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    calc(var(--hatch-angle) * -1),
+    currentColor 0,
+    currentColor var(--hatch-line),
+    transparent var(--hatch-line),
+    transparent var(--hatch-pitch)
+  );
+}
+
+.state--impaired > * {
+  background: var(--surface);
+  padding: 0 0.35em;
+  border-radius: var(--radius-sm);
+}
+
+/*
  * The hatch would run straight through the label and make it unreadable, so the
  * text sits on its own small pad of the page ground. The pad is the surface
  * behind the tag, which is why it is a token rather than a literal.
@@ -400,6 +431,16 @@ code,
 }
 .count-bar__segment--muted {
   background: var(--rule);
+}
+.count-bar__segment--impaired {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--text-primary) 0,
+    var(--text-primary) 2px,
+    transparent 2px,
+    transparent 5px
+  );
+  border: var(--border-width) solid var(--text-primary);
 }
 .count-bar__segment--unknown {
   background-image: repeating-linear-gradient(
