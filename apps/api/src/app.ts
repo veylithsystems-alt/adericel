@@ -21,6 +21,7 @@ import { registerGraphRoutes } from './routes/graph.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
 import { registerVeylithRoutes } from './routes/veylith.js';
 import {
+  registerLoopRoutes,
   registerPortfolioRoutes,
   registerTriageRoutes,
   registerValueRoutes,
@@ -155,6 +156,7 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   registerPortfolioRoutes(server, app);
   registerValueRoutes(server, app);
   registerTriageRoutes(server, app);
+  registerLoopRoutes(server, app);
   registerObservabilityRoutes(server, app);
   registerWebhookRoutes(server, app);
 

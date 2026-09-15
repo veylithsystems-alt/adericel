@@ -49,6 +49,7 @@ implications.
 | [0036](./ADR-0036-no-silent-yes.md)                                 | No silent yes                                         | Accepted |
 | [0037](./ADR-0037-question-bank-boundary.md)                        | The bank holds questions, never answers               | Accepted |
 | [0038](./ADR-0038-post-submission-watch.md)                         | A submitted answer keeps being checked                | Accepted |
+| [0039](./ADR-0039-the-loop-is-an-object.md)                         | The loop is a recorded object                         | Accepted |
 
 ## Writing a new ADR
 

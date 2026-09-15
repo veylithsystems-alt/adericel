@@ -76,7 +76,7 @@ packages/
                   consistency checker. No silent yes, enforced as a property.
   triage/         The MSP exception queue and the connector coverage ladder.
                   What needs a person, ranked, and how far each customer got.
-  value/          The proof-of-value engine. Counts what Adericel did, prices
+  value/          The proof-of-value engine, and engineer capacity. Counts what Adericel did, prices
                   it only with durations the MSP supplied, and refuses to
                   produce a figure it cannot substantiate.
 

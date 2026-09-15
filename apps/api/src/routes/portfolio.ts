@@ -11,6 +11,8 @@ import {
 import type { AppContext } from '../context.js';
 import { audit, requireMsp, requirePrincipal } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
+import { measureCapacity, recordResponseEffort } from '../services/capacity.js';
+import { runLoopCycle } from '../services/operating-loop.js';
 import {
   buildValueReport,
   loadEffortModel,
@@ -786,6 +788,172 @@ export function registerTriageRoutes(server: FastifyInstance, app: AppContext): 
           return rank !== 0 ? rank : a.organisationName.localeCompare(b.organisationName);
         }),
       });
+    },
+  );
+}
+
+/**
+ * The loop, and what it costs a person.
+ *
+ * Two questions an MSP owner actually asks: is the machine running, and how
+ * many customers can one engineer carry. Both are answered from rows, and the
+ * second refuses to answer at all until the MSP has supplied what its own
+ * people's time costs.
+ */
+export function registerLoopRoutes(server: FastifyInstance, app: AppContext): void {
+  /** Run one pass of the loop across the portfolio, and record what it did. */
+  server.post(
+    '/v1/msps/:mspId/loop/cycles',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:manage');
+      const body = parseBody(
+        request,
+        z.object({ collect: z.boolean().default(true) }).default({ collect: true }),
+      );
+
+      const result = await runLoopCycle(app, mspId, {
+        trigger: 'MANUAL',
+        collect: body.collect,
+      });
+
+      await audit(app, request, {
+        action: 'loop:cycle',
+        resourceType: 'Msp',
+        resourceId: mspId,
+        metadata: {
+          cycleId: result.cycleId,
+          organisations: result.organisationsInScope,
+          skipped: result.organisationsSkipped.length,
+        },
+      });
+
+      return reply.status(201).send(result);
+    },
+  );
+
+  /** What the loop has been doing. A trend, not a snapshot. */
+  server.get(
+    '/v1/msps/:mspId/loop/cycles',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:read');
+      const query = parseQuery(
+        request,
+        z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) }),
+      );
+
+      const rows = await app.db.withPlatform(async (ctx) =>
+        ctx.many<Record<string, unknown>>(
+          `SELECT id, started_at, finished_at, trigger, organisations_in_scope,
+                  observations_collected, evidence_created, claims_asserted, changes_detected,
+                  determinations_made, determinations_unknown, exceptions_open,
+                  exceptions_needing_human, remediations_proposed, remediations_autonomous,
+                  remediations_approved, verifications_confirmed, verifications_refuted,
+                  stage_timings, organisations_skipped
+             FROM loop_cycles WHERE msp_id = $1 ORDER BY started_at DESC LIMIT $2`,
+          [mspId, query.limit],
+        ),
+      );
+
+      return reply.status(200).send({ cycles: rows });
+    },
+  );
+
+  /**
+   * How many customers one engineer can run.
+   *
+   * The number an MSP owner makes hiring decisions with. Refused rather than
+   * approximated when the MSP has not said what its own people's time costs:
+   * a figure a vendor invented about somebody else's payroll is worth nothing.
+   */
+  server.get(
+    '/v1/msps/:mspId/capacity',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:billing:read');
+      const query = parseQuery(
+        request,
+        z.object({ windowDays: z.coerce.number().int().min(1).max(365).default(30) }),
+      );
+
+      const result = await measureCapacity(app, mspId, query.windowDays);
+      return reply.status(200).send(result);
+    },
+  );
+
+  /** Record what answering one kind of exception costs this MSP. */
+  server.put(
+    '/v1/msps/:mspId/capacity/response-effort/:responseType',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:manage');
+      const { responseType } = parseParams(
+        request,
+        z.object({ responseType: z.enum(['DECIDE', 'CONFIGURE', 'INVESTIGATE', 'ASK_CUSTOMER']) }),
+      );
+      const body = parseBody(
+        request,
+        z.object({
+          minutes: z.number().min(0).max(600).nullable(),
+          source: z.enum(['MSP_MEASURED', 'MSP_ESTIMATED', 'INDUSTRY_REFERENCE', 'UNKNOWN']),
+          basis: z.string().min(3).max(500).nullable(),
+        }),
+      );
+      const principal = requirePrincipal(request);
+
+      const effort = await recordResponseEffort(
+        app,
+        mspId,
+        { ...body, responseType },
+        principal.principalType === 'USER' ? principal.principalId : null,
+      );
+
+      await audit(app, request, {
+        action: 'capacity:effort:record',
+        resourceType: 'Msp',
+        resourceId: mspId,
+        metadata: { responseType, source: body.source },
+      });
+
+      return reply.status(200).send(effort);
+    },
+  );
+
+  /** How many hours one engineer has for assurance work in a month. */
+  server.put(
+    '/v1/msps/:mspId/capacity/engineer-hours',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId } = parseParams(request, mspParam);
+      await requireMsp(app, request, mspId, 'msp:manage');
+      const body = parseBody(
+        request,
+        z.object({
+          hoursPerMonth: z.number().min(1).max(400).nullable(),
+          basis: z.string().min(3).max(500),
+        }),
+      );
+
+      await app.db.withPlatform(async (ctx) => {
+        await ctx.query(
+          `UPDATE msps SET engineer_hours_per_month = $2, engineer_hours_basis = $3 WHERE id = $1`,
+          [mspId, body.hoursPerMonth, body.basis],
+        );
+      });
+
+      await audit(app, request, {
+        action: 'capacity:hours:record',
+        resourceType: 'Msp',
+        resourceId: mspId,
+        metadata: { hoursPerMonth: body.hoursPerMonth },
+      });
+
+      return reply.status(200).send({ hoursPerMonth: body.hoursPerMonth, basis: body.basis });
     },
   );
 }

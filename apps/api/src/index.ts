@@ -8,3 +8,5 @@ export * from './services/health.js';
 export * from './surfaces.js';
 export * from './services/retention.js';
 export * from './services/erasure.js';
+export * from './services/operating-loop.js';
+export * from './services/capacity.js';
