@@ -38,13 +38,37 @@ export const SIGNUP_TOKEN_TTL_HOURS = 24;
 export const TRIAL_DAYS = 30;
 export const TRIAL_ORGANISATION_LIMIT = 5;
 
-export const signupRequestSchema = z.object({
-  email: z.string().email().max(320),
-  contactName: z.string().min(1).max(200),
-  accountKind: z.enum(['MSP', 'DIRECT']),
-  organisationName: z.string().min(1).max(200),
-  countryCode: z.string().length(2).optional(),
-});
+/**
+ * A signup creates an MSP. There is no other shape.
+ *
+ * Adericel is distributed through MSPs and only through MSPs (contract v3.0
+ * §2). An earlier version of this schema carried an `accountKind` of `MSP` or
+ * `DIRECT`, and a DIRECT signup provisioned an organisation with no MSP in the
+ * chain — a direct-to-SME acquisition path, reachable without authentication.
+ *
+ * It is removed rather than defaulted or configuration-gated. A capability that
+ * still exists behind a flag is a capability an MSP's technical reviewer will
+ * find, and "we can sell around you but promise not to" is a weaker answer than
+ * "we cannot". The field is gone from the request, the branch is gone from
+ * provisioning, and the database refuses an organisation without an MSP.
+ */
+export const signupRequestSchema = z
+  .object({
+    email: z.string().email().max(320),
+    contactName: z.string().min(1).max(200),
+    organisationName: z.string().min(1).max(200),
+    countryCode: z.string().length(2).optional(),
+  })
+  /**
+   * Strict, deliberately.
+   *
+   * Zod strips unknown keys by default, which would mean a client still sending
+   * `accountKind: 'DIRECT'` gets an MSP account and no indication that it asked
+   * for something else. Silently giving a caller a different thing from the one
+   * they requested is worse than refusing: they would go on believing a direct
+   * account exists. A caught test caught exactly this.
+   */
+  .strict();
 export type SignupRequest = z.infer<typeof signupRequestSchema>;
 
 export const signupCompletionSchema = z.object({
@@ -126,14 +150,13 @@ export async function requestSignup(
 
     return ctx.oneOrFail<{ id: string }>(
       `INSERT INTO signups
-         (email, contact_name, account_kind, organisation_name, country_code, token_hash,
+         (email, contact_name, organisation_name, country_code, token_hash,
           expires_at, requested_ip)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
       [
         request.email,
         request.contactName,
-        request.accountKind,
         request.organisationName,
         request.countryCode ?? null,
         tokenHash,
@@ -152,7 +175,6 @@ export async function requestSignup(
         to: request.email,
         contactName: request.contactName,
         organisationName: request.organisationName,
-        accountKind: request.accountKind,
         verifyUrl: `${app.config.api.publicUrl.replace(/\/+$/, '')}/signup/verify?token=${token}`,
         expiresInHours: SIGNUP_TOKEN_TTL_HOURS,
         correlationId: context.correlationId,
@@ -173,8 +195,8 @@ export interface SignupCompletion {
   readonly userId: string;
   readonly email: string;
   readonly displayName: string;
-  readonly accountKind: 'MSP' | 'DIRECT';
-  readonly mspId: string | null;
+  /** Never null. Every signup creates an MSP (contract v3.0 §2). */
+  readonly mspId: string;
   readonly organisationId: string;
   readonly organisationSlug: string;
   readonly controlsCreated: number;
@@ -200,12 +222,11 @@ export async function completeSignup(
       id: string;
       email: string;
       contact_name: string;
-      account_kind: 'MSP' | 'DIRECT';
       organisation_name: string;
       country_code: string | null;
       expires_at: Date;
     }>(
-      `SELECT id, email, contact_name, account_kind, organisation_name, country_code, expires_at
+      `SELECT id, email, contact_name, organisation_name, country_code, expires_at
        FROM signups WHERE token_hash = $1 AND status = 'PENDING'`,
       [tokenHash],
     ),
@@ -242,20 +263,20 @@ export async function completeSignup(
     );
     if (!claimed) return null;
 
-    let mspId: string | null = null;
-    if (signup!.account_kind === 'MSP') {
-      const msp = await ctx.oneOrFail<{ id: string }>(
-        `INSERT INTO msps (name, slug, contact_email)
-         VALUES ($1, $2, $3) RETURNING id`,
-        [
-          signup!.organisation_name,
-          await allocateMspSlug(ctx, signup!.organisation_name),
-          signup!.email,
-        ],
-        'MSP',
-      );
-      mspId = msp.id;
-    }
+    // Every signup creates an MSP. There is no branch here any more, and that
+    // is the point: an organisation without an MSP is a direct customer
+    // relationship, which this product does not have.
+    const msp = await ctx.oneOrFail<{ id: string }>(
+      `INSERT INTO msps (name, slug, contact_email)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [
+        signup!.organisation_name,
+        await allocateMspSlug(ctx, signup!.organisation_name),
+        signup!.email,
+      ],
+      'MSP',
+    );
+    const mspId: string = msp.id;
 
     const user = await ctx.oneOrFail<{ id: string }>(
       `INSERT INTO users (email, display_name, msp_id, status)
@@ -330,21 +351,19 @@ export async function completeSignup(
       );
     }
 
-    // The first user of an account owns it. Every other authority in the
+    // The first user of an account owns the MSP. Every other authority in the
     // account is granted by a person, never claimed by one.
-    if (identity!.mspId) {
-      await ctx.query(
-        `INSERT INTO grants (principal_type, principal_id, scope_type, scope_id, roles)
-         VALUES ('USER', $1, 'MSP', $2, ARRAY['MSP_OWNER']::text[])`,
-        [identity!.userId, identity!.mspId],
-      );
-    } else {
-      await ctx.query(
-        `INSERT INTO grants (principal_type, principal_id, scope_type, scope_id, roles)
-         VALUES ('USER', $1, 'ORGANISATION', $2, ARRAY['ORG_ADMIN']::text[])`,
-        [identity!.userId, organisation.id],
-      );
-    }
+    //
+    // There used to be a second branch here granting ORGANISATION scope when
+    // no MSP existed — the direct shape. Organisation-scoped owners still
+    // exist and are still supported; an MSP creates them for a customer who
+    // should see only their own estate. They are simply no longer something a
+    // signup can mint for itself.
+    await ctx.query(
+      `INSERT INTO grants (principal_type, principal_id, scope_type, scope_id, roles)
+       VALUES ('USER', $1, 'MSP', $2, ARRAY['MSP_OWNER']::text[])`,
+      [identity!.userId, identity!.mspId],
+    );
     await ctx.query(`UPDATE signups SET msp_id = $2, organisation_id = $3 WHERE id = $1`, [
       signup!.id,
       identity!.mspId,
@@ -355,7 +374,6 @@ export async function completeSignup(
   await app.db.withTenant(organisation.id, async (ctx) => {
     await seedOnboardingTasks(ctx, {
       organisationId: organisation.id,
-      accountKind: signup!.account_kind,
       nowIso: now,
     });
     await publish(
@@ -367,7 +385,6 @@ export async function completeSignup(
         subjectType: 'Organisation',
         subjectId: organisation.id,
         payload: {
-          accountKind: signup!.account_kind,
           organisationName: organisation.name,
           controlsCreated: organisation.controlsCreated,
           frameworks: organisation.frameworksAdopted,
@@ -384,7 +401,6 @@ export async function completeSignup(
     userId: identity!.userId,
     email: signup!.email,
     displayName: signup!.contact_name,
-    accountKind: signup!.account_kind,
     mspId: identity!.mspId,
     organisationId: organisation.id,
     organisationSlug: organisation.slug,

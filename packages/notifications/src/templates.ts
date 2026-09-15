@@ -17,17 +17,16 @@ export interface SignupVerificationContext {
   readonly to: string;
   readonly contactName: string;
   readonly organisationName: string;
-  readonly accountKind: 'MSP' | 'DIRECT';
   readonly verifyUrl: string;
   readonly expiresInHours: number;
   readonly correlationId?: string;
 }
 
 export function signupVerificationMessage(ctx: SignupVerificationContext): NotificationMessage {
+  // One shape only: Adericel is distributed through MSPs (contract v3.0 §2).
   const audience =
-    ctx.accountKind === 'MSP'
-      ? 'You will be set up as an operator account, so you can onboard the organisations you look after.'
-      : `You will be set up with a single organisation, ${ctx.organisationName}.`;
+    'You will be set up as an operator account, so you can onboard the organisations you look ' +
+    'after.';
 
   const text = [
     `Hello ${ctx.contactName},`,

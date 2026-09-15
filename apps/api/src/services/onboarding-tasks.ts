@@ -33,8 +33,6 @@ interface TaskSeed {
   readonly title: string;
   readonly description: string;
   readonly required: boolean;
-  /** Only seeded for this account shape; undefined means both. */
-  readonly onlyFor?: 'MSP' | 'DIRECT';
 }
 
 /**
@@ -115,7 +113,6 @@ const TASKS: readonly TaskSeed[] = [
       'own tenant, its own evidence and its own assurance state, and nothing crosses between ' +
       'them.',
     required: true,
-    onlyFor: 'MSP',
   },
 ];
 
@@ -123,15 +120,13 @@ export async function seedOnboardingTasks(
   ctx: TenantContext,
   options: {
     readonly organisationId: string;
-    readonly accountKind: 'MSP' | 'DIRECT';
     readonly nowIso: string;
   },
 ): Promise<number> {
-  const applicable = TASKS.filter(
-    (task) => task.onlyFor === undefined || task.onlyFor === options.accountKind,
-  );
+  // Every account is an MSP account, so every task applies. There used to be a
+  // filter here for a DIRECT shape that no longer exists (contract v3.0 §2).
   let position = 0;
-  for (const task of applicable) {
+  for (const task of TASKS) {
     position += 1;
     await ctx.query(
       `INSERT INTO onboarding_tasks
@@ -141,7 +136,7 @@ export async function seedOnboardingTasks(
       [options.organisationId, task.key, task.title, task.description, task.required, position],
     );
   }
-  return applicable.length;
+  return TASKS.length;
 }
 
 /**

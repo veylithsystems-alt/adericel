@@ -26,7 +26,7 @@ implications.
 | [0013](./ADR-0013-integration-architecture.md)                      | One connector contract for every integration                      | Accepted |
 | [0014](./ADR-0014-action-architecture.md)                           | Explicit action lifecycle with mandatory verification             | Accepted |
 | [0015](./ADR-0015-approval-four-eyes.md)                            | Four-eyes control is structural                                   | Accepted |
-| [0016](./ADR-0016-idempotency.md)                                   | Exactly-once external effects                                     | Accepted |
+| [0016](./ADR-0016-idempotency.md)                                   | At-most-once external effects                                     | Accepted |
 | [0017](./ADR-0017-no-single-score.md)                               | No single assurance score                                         | Accepted |
 | [0018](./ADR-0018-deployment.md)                                    | Self-hosted, container-first deployment                           | Accepted |
 | [0019](./ADR-0019-secrets.md)                                       | Secret handling and credential sealing                            | Accepted |
@@ -52,6 +52,7 @@ implications.
 | [0039](./ADR-0039-the-loop-is-an-object.md)                         | The loop is a recorded object                                     | Accepted |
 | [0040](./ADR-0040-signed-passport-interchange.md)                   | A Passport is signed, and the signature is what a stranger checks | Accepted |
 | [0041](./ADR-0041-sovereign-inference.md)                           | Inference is local first, and leaving requires an author          | Accepted |
+| [0042](./ADR-0042-msp-only-distribution.md)                         | Every organisation belongs to an MSP                              | Accepted |
 
 ## Writing a new ADR
 

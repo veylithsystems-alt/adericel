@@ -59,10 +59,13 @@ resolved before either is merged.
 
 **B3 — No residual-risk register exists** (§57), so known limitations are
 recorded only in prose scattered across 63 documents.
+_(Closed 15 Sept 2026 — see `RESIDUAL_RISK_REGISTER.md`.)_
 
 ### Major MSP-commercial blockers
 
 **C1 — A live direct-to-SME acquisition path exists in code.**
+_(Closed 15 Sept 2026 — removed at four layers; see ADR-0042 and RR-040.)_
+
 `apps/api/src/services/signup.ts:44` defines `accountKind: z.enum(['MSP',
 'DIRECT'])`. `POST /v1/signup` is public and unauthenticated, and a `DIRECT`
 signup creates an organisation with a null `msp_id` — an Adericel customer with

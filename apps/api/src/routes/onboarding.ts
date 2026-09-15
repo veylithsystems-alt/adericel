@@ -90,7 +90,7 @@ export function registerOnboardingRoutes(server: FastifyInstance, app: AppContex
       action: 'signup:complete',
       resourceType: 'Organisation',
       resourceId: completion.organisationId,
-      metadata: { accountKind: completion.accountKind, selfServe: true },
+      metadata: { mspId: completion.mspId, selfServe: true },
     });
 
     return reply.status(201).send({
@@ -100,7 +100,6 @@ export function registerOnboardingRoutes(server: FastifyInstance, app: AppContex
       account: {
         userId: completion.userId,
         email: completion.email,
-        accountKind: completion.accountKind,
         mspId: completion.mspId,
         organisationId: completion.organisationId,
         organisationSlug: completion.organisationSlug,

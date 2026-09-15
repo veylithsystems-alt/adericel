@@ -375,13 +375,34 @@ async function main(): Promise<void> {
     provisioned.push({ id: organisationId, slug: demo.slug, narrative: demo.narrative });
   }
 
+  /**
+   * Adericel assures itself, under Veylith as its own MSP.
+   *
+   * Every organisation belongs to an MSP (contract v3.0 §2), and this one is no
+   * exception: Veylith operates Adericel for Veylith, so Veylith is the MSP in
+   * that chain. Saying so is more honest than carving out a special case, and
+   * it means the dogfooding exercises the same path a customer does rather than
+   * a privileged one nobody else can reach.
+   */
+  logger.info({}, 'seeding Veylith as its own MSP');
+  const veylithMsp = await db.withPlatform(async (ctx) =>
+    ctx.oneOrFail<{ id: string }>(
+      `INSERT INTO msps (name, slug, contact_email)
+       VALUES ('Veylith Systems', 'veylith', 'operations@veylith.test')
+       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id`,
+      [],
+      'Veylith MSP',
+    ),
+  );
+
   logger.info({}, 'seeding the Adericel self-assurance organisation');
   const selfOrg = await db.withPlatform(async (ctx) =>
     ctx.one<{ id: string }>(`SELECT id FROM organisations WHERE slug = 'adericel'`),
   );
   if (!selfOrg) {
     const created = await provisionOrganisation(appContext, {
-      mspId: null,
+      mspId: veylithMsp.id,
       input: {
         name: 'Adericel',
         slug: 'adericel',

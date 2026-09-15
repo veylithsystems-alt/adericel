@@ -69,8 +69,10 @@ the commercial relationship.
 Payment providers retry, duplicate and reorder, and a subscription system that
 assumes otherwise corrupts itself quietly.
 
-- **Exactly once.** The event ledger insert is the idempotency gate and comes
-  first; a conflicting insert means the event has been seen, and the correct
+- **Applied once, enforced by the database.** A unique constraint on the event
+  ledger is the idempotency gate and comes first. This is a claim about applying
+  an event to local state, where a constraint makes it atomic — not about
+  delivery, which no network boundary makes exactly-once (ADR-0016); a conflicting insert means the event has been seen, and the correct
   response is 200 without acting — the provider retried because it did not get
   our 200, not because anything changed. A non-2xx would make it retry forever.
 - **In the provider's order.** An event stamped earlier than the last one

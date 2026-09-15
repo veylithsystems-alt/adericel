@@ -1,6 +1,15 @@
-# ADR-0016: Exactly-once external effects
+# ADR-0016: At-most-once external effects
 
-**Status:** Accepted · **Date:** 2026-09-09
+**Status:** Accepted · **Date:** 2026-09-09 · **Title corrected:** 2026-09-15
+
+> The original title read "Exactly-once external effects". The body of this ADR
+> has always said the opposite — see Alternatives, which states plainly that
+> exactly-once delivery does not exist across a network boundary — so the title
+> was an overclaim in a place people read without opening the document.
+>
+> Corrected under contract v3.0 §45. What this decision actually delivers is
+> at-most-once _effect_ through keyed operations, which is achievable and is
+> what the code does.
 
 ## Context
 

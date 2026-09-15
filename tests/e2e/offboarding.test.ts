@@ -336,9 +336,7 @@ describe.skipIf(!available)('offboarding', () => {
         url: '/v1/signup',
         payload: {
           email: 'direct-owner@test.invalid',
-          password: 'Direct-password-2026!',
           contactName: 'Direct Owner',
-          accountKind: 'DIRECT',
           organisationName: 'Direct Ltd',
         },
       });
@@ -350,10 +348,41 @@ describe.skipIf(!available)('offboarding', () => {
       });
       const body = completed.json() as {
         accessToken: string;
-        account: { organisationId: string };
+        account: { userId: string; organisationId: string };
       };
-      ownToken = body.accessToken;
       ownOrganisationId = body.account.organisationId;
+
+      /**
+       * Narrow this owner to the organisation itself.
+       *
+       * A signup creates an MSP-scoped owner (contract v3.0 §2), so the
+       * organisation-scoped case has to be constructed — which is exactly how
+       * it arises in life: an MSP grants a customer's own administrator access
+       * to their own estate and nothing else.
+       *
+       * The hazard under test is unchanged and is the reason this exists: that
+       * person closing their own organisation revokes their own access half way
+       * through, and an earlier version left the organisation mid-offboarding
+       * with its credentials destroyed and nobody signed in who could finish.
+       */
+      await harness.db.withPlatform(async (ctx) => {
+        await ctx.query(`UPDATE grants SET revoked_at = now() WHERE principal_id = $1`, [
+          body.account.userId,
+        ]);
+        await ctx.query(
+          `INSERT INTO grants (principal_type, principal_id, scope_type, scope_id, roles)
+           VALUES ('USER', $1, 'ORGANISATION', $2, ARRAY['ORG_ADMIN']::text[])`,
+          [body.account.userId, ownOrganisationId],
+        );
+      });
+
+      // Re-authenticate so the token carries the narrowed authority.
+      const signedIn = await harness.server.inject({
+        method: 'POST',
+        url: '/v1/auth/login',
+        payload: { email: 'direct-owner@test.invalid', password: 'Direct-password-2026!' },
+      });
+      ownToken = (signedIn.json() as { accessToken: string }).accessToken;
     });
 
     it('is organisation-scoped, which is what makes this different', async () => {

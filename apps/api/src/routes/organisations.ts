@@ -551,14 +551,25 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
     },
   );
 
-  /** Create a direct (non-MSP) organisation. Platform administrators only. */
+  /**
+   * Create an organisation under an MSP. Platform administrators only.
+   *
+   * `mspId` is required, and that is the whole change from the previous
+   * version of this route, which created an organisation with no MSP and
+   * described it in its own comment as "direct (non-MSP)".
+   *
+   * Every organisation in Adericel belongs to an MSP (contract v3.0 §2, §37).
+   * Veylith does not hold customer relationships; it supplies MSPs who do. A
+   * platform administrator provisioning on an MSP's behalf — during a
+   * migration, or when an MSP asks — still provisions under that MSP.
+   */
   server.post('/v1/organisations', { preHandler: server.authenticate }, async (request, reply) => {
     await requirePlatform(app, request, 'platform:admin');
-    const body = parseBody(request, organisationCreateSchema);
+    const body = parseBody(request, organisationCreateSchema.extend({ mspId: z.string().uuid() }));
     const principal = requirePrincipal(request);
 
     const created = await provisionOrganisation(app, {
-      mspId: null,
+      mspId: body.mspId,
       input: body,
       actor: principal.displayName,
       actorUserId: principal.principalType === 'USER' ? principal.principalId : null,
@@ -569,7 +580,7 @@ export function registerOrganisationRoutes(server: FastifyInstance, app: AppCont
       action: 'organisation:create',
       resourceType: 'Organisation',
       resourceId: created.id,
-      metadata: { direct: true },
+      metadata: { mspId: body.mspId, provisionedByPlatform: true },
     });
 
     return reply.status(201).send(created);

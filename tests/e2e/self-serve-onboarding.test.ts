@@ -68,7 +68,7 @@ describe.skipIf(!available)('self-serve onboarding', () => {
     await harness?.close();
   });
 
-  describe('a direct business customer, unattended', () => {
+  describe('an MSP signing itself up, unattended', () => {
     let accessToken: string;
     let organisationId: string;
     let integrationId: string;
@@ -80,7 +80,6 @@ describe.skipIf(!available)('self-serve onboarding', () => {
         payload: {
           email: 'founder@newco.test.invalid',
           contactName: 'Sam Founder',
-          accountKind: 'DIRECT',
           organisationName: 'Newco Limited',
           countryCode: 'GB',
         },
@@ -106,7 +105,6 @@ describe.skipIf(!available)('self-serve onboarding', () => {
         payload: {
           email: 'founder@newco.test.invalid',
           contactName: 'Sam Founder',
-          accountKind: 'DIRECT',
           organisationName: 'Newco Limited',
         },
       });
@@ -116,7 +114,6 @@ describe.skipIf(!available)('self-serve onboarding', () => {
         payload: {
           email: 'nobody-at-all@newco.test.invalid',
           contactName: 'Nobody',
-          accountKind: 'DIRECT',
           organisationName: 'Nowhere Ltd',
         },
       });
@@ -149,7 +146,9 @@ describe.skipIf(!available)('self-serve onboarding', () => {
       // A working assurance posture exists immediately: controls are in place,
       // and every one of them honestly reads UNKNOWN.
       expect(body.account.controlsCreated).toBeGreaterThan(0);
-      expect(body.account.mspId).toBeNull();
+      // An MSP was created. Every signup creates one: Adericel is distributed
+      // through MSPs and holds no direct customer relationships (v3.0 §2).
+      expect(body.account.mspId).not.toBeNull();
       expect(body.posture.state).toBe('UNKNOWN');
       expect(body.posture.explanation).toMatch(/has not observed your estate/i);
 
@@ -399,7 +398,6 @@ describe.skipIf(!available)('self-serve onboarding', () => {
         payload: {
           email: 'ops@partner.test.invalid',
           contactName: 'Jo Operator',
-          accountKind: 'MSP',
           organisationName: 'Partner IT Services',
           countryCode: 'GB',
         },
