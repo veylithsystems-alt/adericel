@@ -32,6 +32,7 @@ COPY packages/vaol/package.json          packages/vaol/
 COPY packages/value/package.json         packages/value/
 COPY packages/triage/package.json        packages/triage/
 COPY packages/questionnaire/package.json packages/questionnaire/
+COPY packages/inference/package.json packages/inference/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
 COPY packages/billing/package.json       packages/billing/
@@ -84,6 +85,7 @@ COPY --from=build /app/packages/vaol/dist          packages/vaol/dist/
 COPY --from=build /app/packages/value/dist         packages/value/dist/
 COPY --from=build /app/packages/triage/dist        packages/triage/dist/
 COPY --from=build /app/packages/questionnaire/dist packages/questionnaire/dist/
+COPY --from=build /app/packages/inference/dist packages/inference/dist/
 COPY --from=build /app/packages/actions/dist       packages/actions/dist/
 COPY --from=build /app/packages/integrations/dist  packages/integrations/dist/
 COPY --from=build /app/packages/billing/dist       packages/billing/dist/

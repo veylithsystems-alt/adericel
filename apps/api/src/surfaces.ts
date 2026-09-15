@@ -77,6 +77,11 @@ const COMMON_ROUTES = new Set([
   'GET /v1/connectors',
   'GET /v1/graph/schema',
   'GET /v1/plans',
+  // Where this deployment sends data when it reads a document. A property of
+  // the installation, identical for every caller, naming no organisation — and
+  // deliberately readable by a customer, because it is the answer to the
+  // question their solicitor asked.
+  'GET /v1/system/data-processing',
 ]);
 
 /**

@@ -51,6 +51,7 @@ implications.
 | [0038](./ADR-0038-post-submission-watch.md)                         | A submitted answer keeps being checked                            | Accepted |
 | [0039](./ADR-0039-the-loop-is-an-object.md)                         | The loop is a recorded object                                     | Accepted |
 | [0040](./ADR-0040-signed-passport-interchange.md)                   | A Passport is signed, and the signature is what a stranger checks | Accepted |
+| [0041](./ADR-0041-sovereign-inference.md)                           | Inference is local first, and leaving requires an author          | Accepted |
 
 ## Writing a new ADR
 

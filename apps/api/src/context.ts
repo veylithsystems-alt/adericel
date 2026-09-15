@@ -31,6 +31,7 @@ import {
   type PaymentProvider,
 } from '@adericel/billing';
 import { compilePolicy, DEFAULT_ACTION_POLICY, type CompiledPolicy } from '@adericel/policy';
+import { createInferenceRuntime, type InferenceRuntime } from '@adericel/inference';
 import { createBuiltInRegistry, type RulesetRegistry } from '@adericel/truth-engine';
 import type { CredentialUnsealer } from '@adericel/actions';
 
@@ -92,6 +93,16 @@ export interface AppContext {
    * downstream substitutes a content hash for a signature.
    */
   readonly issuerKeys: IssuerKeyring;
+  /**
+   * Inference, and where the data goes when it happens.
+   *
+   * Local first. The default deployment has no provider at all and is complete
+   * without one, because a model may only ever propose a candidate claim that a
+   * person confirms (ADR-0004). A provider that would take a customer's
+   * documents outside the operator's infrastructure does not start without a
+   * written acknowledgement (ADR-0041).
+   */
+  readonly inference: InferenceRuntime;
   readonly startedAtIso: string;
 }
 
@@ -106,6 +117,7 @@ export interface CreateContextOptions {
   readonly notifier?: Notifier;
   readonly payments?: PaymentProvider;
   readonly issuerKeys?: IssuerKeyring;
+  readonly inference?: InferenceRuntime;
 }
 
 /**
@@ -256,6 +268,11 @@ export function createAppContext(options: CreateContextOptions): AppContext {
     // signing configuration that is wrong should stop the process, not surface
     // at the moment a customer's insurer asks for a verifiable record.
     issuerKeys: options.issuerKeys ?? loadIssuerKeyring(config.passport),
+    // Throws when a provider would move data off the operator's infrastructure
+    // and nobody has said so in writing. At start-up, deliberately: the
+    // alternative is discovering it from the first document a customer uploads.
+    inference:
+      options.inference ?? createInferenceRuntime(config.inference, clock, options.fetchImpl),
     startedAtIso: clock.nowIso(),
   };
 }

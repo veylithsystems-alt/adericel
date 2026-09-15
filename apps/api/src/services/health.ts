@@ -94,6 +94,29 @@ export async function collectHealth(
   );
 
   components.push(
+    await check('inference', async () => {
+      const probe = await app.inference.client.probe();
+      if (!app.inference.client.available) {
+        // Not a fault and never reported as one. The default deployment has no
+        // model, and every assurance determination works without one: AI may
+        // only propose candidate claims a person confirms (ADR-0004).
+        return { status: 'HEALTHY', detail: probe.detail, latencyMs: null };
+      }
+      if (!probe.reachable || !probe.modelPresent) {
+        // DEGRADED rather than UNHEALTHY. Document reading stops; assurance
+        // does not. Calling this unhealthy would page somebody at 3am for a
+        // feature that refuses cleanly and tells the operator what to pull.
+        platformProblems.push(
+          `Inference is configured but not usable: ${probe.detail} Document extraction will ` +
+            'refuse rather than propose. No assurance determination is affected.',
+        );
+        return { status: 'DEGRADED', detail: probe.detail, latencyMs: null };
+      }
+      return { status: 'HEALTHY', detail: probe.detail, latencyMs: null };
+    }),
+  );
+
+  components.push(
     await check('integrations', async () => {
       const row = await app.db.withPlatform(async (ctx) =>
         ctx.oneOrFail<{ failed: string; degraded: string; total: string }>(

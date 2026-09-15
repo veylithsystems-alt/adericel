@@ -124,13 +124,41 @@ export const configSchema = z.object({
     enabled: booleanish.default(false),
   }),
 
-  ai: z.object({
-    enabled: booleanish.default(false),
-    provider: z.enum(['none', 'anthropic']).default('none'),
+  /**
+   * Inference. Local first, because that is the principle rather than a tier.
+   *
+   * Adericel reads penetration test reports, supplier certificates and
+   * insurance questionnaires — among the most sensitive documents an
+   * organisation owns. The ordinary path for reading them runs on hardware the
+   * operator controls and does not leave the building.
+   *
+   * The default is `none`, and `none` is a complete deployment: AI only ever
+   * proposes candidate claims a person must confirm (ADR-0004), so no
+   * assurance determination depends on a model existing. `ollama` is the
+   * intended step up from that. Anything that takes data outside the
+   * operator's infrastructure requires a written acknowledgement and will not
+   * start without one (ADR-0041).
+   */
+  inference: z.object({
+    provider: z.enum(['none', 'ollama', 'openai-compatible']).default('none'),
+    /** Where the model is. Never logged or reported: it can name an internal host. */
+    baseUrl: z.string().default('http://ollama:11434'),
+    model: z.string().default('llama3.1:8b'),
+    /** Empty for a local Ollama, which has no notion of a key. */
     apiKey: z.string().default(''),
-    model: z.string().default('claude-sonnet-5'),
-    maxOutputTokens: z.coerce.number().int().positive().default(4096),
-    requestTimeoutMs: z.coerce.number().int().positive().default(60_000),
+    /**
+     * Generous, because this is CPU inference on a shared VPS in the ordinary
+     * case and an eight-billion-parameter model reading a certificate is not
+     * quick. A refusal after two minutes is a correct answer; a refusal after
+     * ten seconds is a misconfiguration reported as a model failure.
+     */
+    requestTimeoutMs: z.coerce.number().int().positive().default(120_000),
+    maxOutputTokens: z.coerce.number().int().positive().default(2048),
+    /**
+     * The operator's own sentence, required before data may leave their
+     * infrastructure. Recorded verbatim and reported wherever the provider is.
+     */
+    externalAcknowledgement: z.string().default(''),
   }),
 
   billing: z.object({
@@ -309,13 +337,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdericelConfig
       webhookSigningSecret: env.N8N_WEBHOOK_SIGNING_SECRET,
       enabled: env.N8N_ENABLED,
     },
-    ai: {
-      enabled: env.AI_ENABLED,
-      provider: env.AI_PROVIDER,
-      apiKey: env.AI_API_KEY,
-      model: env.AI_MODEL,
-      maxOutputTokens: env.AI_MAX_OUTPUT_TOKENS,
-      requestTimeoutMs: env.AI_REQUEST_TIMEOUT_MS,
+    inference: {
+      provider: env.INFERENCE_PROVIDER,
+      baseUrl: env.INFERENCE_BASE_URL,
+      model: env.INFERENCE_MODEL,
+      apiKey: env.INFERENCE_API_KEY,
+      requestTimeoutMs: env.INFERENCE_REQUEST_TIMEOUT_MS,
+      maxOutputTokens: env.INFERENCE_MAX_OUTPUT_TOKENS,
+      externalAcknowledgement: env.INFERENCE_EXTERNAL_ACKNOWLEDGEMENT,
     },
     billing: {
       provider: env.BILLING_PROVIDER,

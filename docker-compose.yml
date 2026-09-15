@@ -402,11 +402,24 @@ services:
     expose:
       - '5678'
 
-  # ---------------------------------------------------------------------- AI
+  # --------------------------------------------------------------- inference
   #
-  # Entirely optional. Adericel is fully functional with this profile stopped:
-  # AI is disabled by default and can only ever produce candidate claims that a
-  # human must confirm (ADR-0004). Nothing in the assurance chain depends on it.
+  # Local inference. This is the sovereign path and the one Adericel is designed
+  # around: a customer's penetration test report is read on this host and does
+  # not leave it (ADR-0041).
+  #
+  # Entirely optional. Adericel is fully functional with this profile stopped —
+  # a model may only ever produce candidate claims a human confirms (ADR-0004),
+  # so nothing in the assurance chain depends on it. With the profile stopped,
+  # extraction refuses and says so; it never reports an empty document.
+  #
+  #   docker compose --profile core --profile ai up -d
+  #   docker compose exec ollama ollama pull llama3.1:8b
+  #
+  # Then set INFERENCE_PROVIDER=ollama and restart the API. The model is NOT
+  # pulled automatically: a 4.7 GB download starting on its own the first time
+  # somebody brings the stack up, on a VPS with metered bandwidth, is not a
+  # decision this file should make for an operator.
   ollama:
     image: ollama/ollama:0.12.3
     profiles: [ai]

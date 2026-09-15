@@ -74,6 +74,10 @@ packages/
                   queue, the business ledger, the commercial pipeline.
   questionnaire/  The questionnaire engine: answer states, renderers and the
                   consistency checker. No silent yes, enforced as a property.
+  inference/      Local-first inference. Sovereignty is a classification the code
+                  enforces, not a preference: an external provider does not start
+                  without a written acknowledgement. Extraction must quote the
+                  document, and the quote is checked.
   triage/         The MSP exception queue and the connector coverage ladder.
                   What needs a person, ranked, and how far each customer got.
   value/          The proof-of-value engine, and engineer capacity. Counts what Adericel did, prices
@@ -143,6 +147,41 @@ The suites are separated by what a failure would mean:
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
 tick there is not "a test broke"; it is a claim about isolation that no longer
 holds, and it should say so in the checks list without anyone having to open it.
+
+## Where your customers' documents go
+
+Nowhere, by default. `INFERENCE_PROVIDER=none` is the default and it is a
+complete deployment: assurance determinations come from the Truth Engine
+reading observed evidence, and no model participates in any of them at any
+setting.
+
+When you do want document reading, the intended path is a model on your own
+hardware:
+
+```bash
+docker compose --profile core --profile ai up -d
+docker compose exec ollama ollama pull llama3.1:8b
+```
+
+Sovereignty is a classification the code enforces rather than a preference in a
+document. Every provider is classed by where the data goes, the classification
+is exhaustive over the provider list and tested, and anything that would move a
+customer's documents outside infrastructure you control **refuses to start**
+without a written acknowledgement naming the operator and the jurisdiction. Not
+a checkbox — a sentence, recorded verbatim and reported at
+`/v1/system/data-processing`, which is the URL you give a customer whose
+solicitor asks.
+
+Extraction is grounded: every proposed value must quote the document, and
+Adericel checks the quote is actually there. A value that cannot show where it
+came from is dropped before anyone sees it — because a reviewer confirming a
+hundred supplier certificates will not open a hundred PDFs, and the one they do
+not open is the one that was invented.
+
+A model may propose. It may never conclude
+([ADR-0004](./docs/adr/ADR-0004-ai-truth-separation.md),
+[ADR-0041](./docs/adr/ADR-0041-sovereign-inference.md);
+[the operator's guide](./docs/operations/sovereign-inference.md)).
 
 ## Verifying a Passport without us
 
@@ -223,12 +262,14 @@ feature list:
 
 ## Documentation
 
-- [Architecture decision records](./docs/adr/README.md) — forty decisions,
+- [Architecture decision records](./docs/adr/README.md) — forty-one decisions,
   each with what it costs
 - [Threat model](./docs/security/threat-model.md) — including what it does not cover
 - [Operations runbook](./docs/operations/runbook.md)
 - [Issuer key lifecycle](./docs/operations/issuer-key-lifecycle.md) — generating,
   rotating, retiring and revoking the key that signs Passports
+- [Sovereign inference](./docs/operations/sovereign-inference.md) — running the
+  model on your own hardware, and answering "where does our data go"
 - [VPS sizing](./docs/operations/vps-sizing.md)
 - [Brand](./docs/product/brand/README.md)
 

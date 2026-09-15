@@ -9,6 +9,7 @@
   "exclude": ["src/**/*.test.ts", "dist", "node_modules"],
   "references": [
     { "path": "../../packages/shared" },
+    { "path": "../../packages/inference" },
     { "path": "../../packages/domain" },
     { "path": "../../packages/graph" },
     { "path": "../../packages/evidence" },

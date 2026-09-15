@@ -273,7 +273,7 @@ return extracted
       evidenceIds: [evidenceId],
       metadata: {
         extractedBy: 'n8n-document-processing',
-        model: $env.ADERICEL_AI_MODEL || 'unspecified',
+        model: $env.INFERENCE_MODEL || 'unspecified',
         requiresHumanConfirmation: true,
       },
     },

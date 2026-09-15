@@ -7,6 +7,7 @@ import type { AppContext } from '../context.js';
 import { requireOrganisation, requirePlatform } from '../middleware/request-context.js';
 import { parseParams, parseQuery, organisationParam } from '../middleware/validation.js';
 import { collectHealth } from '../services/health.js';
+import { describeInference } from '@adericel/inference';
 
 /**
  * Audit, events and health.
@@ -264,6 +265,46 @@ export function registerObservabilityRoutes(server: FastifyInstance, app: AppCon
       healthy: stats.deadLetter === 0 && (stats.oldestPendingAgeSeconds ?? 0) < 300,
     });
   });
+
+  /**
+   * Where this deployment sends data when it reads a document.
+   *
+   * Every MSP selling assurance to a UK SME is asked "where does our data go",
+   * usually by somebody with a solicitor. Today that is a conversation and a
+   * PDF. This makes it a field they can point at, produced by the running
+   * system rather than by marketing.
+   *
+   * Authenticated but not privileged: it describes the deployment, names no
+   * organisation and reads no tenant row, so an MSP can show it to a customer
+   * and a customer can check it themselves. It carries no endpoint and no key —
+   * an internal hostname is a small gift to somebody mapping the estate.
+   */
+  server.get(
+    '/v1/system/data-processing',
+    { preHandler: server.authenticate },
+    async (_request, reply) =>
+      reply.status(200).send({
+        inference: describeInference(app.inference),
+        /**
+         * Stated alongside, because the previous field is the one that gets
+         * quoted and this is the sentence that makes it safe to quote.
+         */
+        assurance:
+          'Assurance determinations are made by the Truth Engine from observed evidence. No ' +
+          'model participates in them, at any provider setting, including none. A model may ' +
+          'only ever propose a candidate claim that a named person confirms.',
+        /**
+         * The claim discipline that keeps this page honest.
+         *
+         * Somebody will otherwise screenshot a green "LOCAL_NETWORK" and put it
+         * in a tender response under a heading about GDPR.
+         */
+        limits:
+          'This records where inference happens. It is not a statement of legal compliance: ' +
+          'data protection depends on your agreements, your hosting and your processing, and ' +
+          'no field on this page establishes any of them.',
+      }),
+  );
 
   server.get('/v1/system/version', async (_request, reply) =>
     reply.status(200).send({
