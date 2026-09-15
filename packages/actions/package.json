@@ -23,6 +23,6 @@
     "@adericel/policy": "workspace:*",
     "@adericel/shared": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
-    "zod": "^4.1.11"
+    "zod": "^4.6.2"
   }
 }
