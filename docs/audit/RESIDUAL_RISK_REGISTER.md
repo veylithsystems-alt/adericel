@@ -19,7 +19,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 
 ## Release and continuity
 
-### RR-001 — The product exists only on an unmerged branch
+### RR-001 — The product exists only on an unmerged branch — **CLOSED 15 Sept 2026**
 
 | Field                | Value                                                                                                                                                |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Target**           | Immediate.                                                                                                                                           |
 | **State**            | `OPEN`                                                                                                                                               |
 
-### RR-002 — Duplicate implementation of Passport interchange in PR #3
+### RR-002 — Duplicate implementation of Passport interchange in PR #3 — **CLOSED 15 Sept 2026**
 
 | Field           | Value                                                                                                                                               |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -43,7 +43,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Target**      | Before merging PR #1.                                                                                                                               |
 | **State**       | `OPEN`                                                                                                                                              |
 
-### RR-003 — PR #2 proposes an out-of-contract product
+### RR-003 — PR #2 proposes an out-of-contract product — **CLOSED 15 Sept 2026**
 
 | Field           | Value                                                                                                                                    |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |

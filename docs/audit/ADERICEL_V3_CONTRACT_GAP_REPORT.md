@@ -38,6 +38,8 @@ The bad news is structural rather than technical.
 ### Major production blockers
 
 **B1 — The product does not exist on `main`.**
+_(Closed 15 Sept 2026 — PR #1 merged as `6a71426`; `main` now holds 473 files.)_
+
 `main` contains **two files**: `README.md` and one ADR. The entire product —
 62 commits, ~82,000 lines — exists only on a single unmerged working branch,
 via PR #1, open since 9 September. There is no release baseline, no tag, no
@@ -48,6 +50,8 @@ This is the single highest-severity finding in this report. It is not a code
 defect; it is the absence of the thing every other gate is supposed to protect.
 
 **B2 — There are two divergent implementations of the same feature.**
+_(Closed 15 Sept 2026 — PR #3 closed as superseded.)_
+
 PR #3 (`increment-1-passport-interchange` @ `cca47c5`) implements Passport
 interchange signing with `passport-signing.ts`, `issuer-keys.ts`, `signing.ts`
 and an ADR numbered **0039**. The working branch implements the same capability
