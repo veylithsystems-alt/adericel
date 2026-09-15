@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "dist", "node_modules"],
+  "references": [
+    { "path": "../shared" },
+    { "path": "../domain" },
+    { "path": "../graph" },
+    { "path": "../evidence" },
+    { "path": "../truth-engine" },
+    { "path": "../policy" },
+    { "path": "../integrations" }
+  ]
+}

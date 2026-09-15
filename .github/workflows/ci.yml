@@ -1,0 +1,290 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run on the same ref. The exception is the
+# default branch, where every commit's result is a record worth keeping.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22.22.2'
+  PNPM_VERSION: '10.33.0'
+
+jobs:
+  # Fast feedback: anything that does not need a database runs first and in one
+  # job, so a formatting mistake fails in a minute rather than after the full
+  # integration suite.
+  static:
+    name: Lint, format and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+
+  # The Truth Engine and the domain model are pure functions. They have no
+  # database and no clock, so they are tested in isolation and must stay that
+  # way — if this job ever needs a service container, the boundary has leaked.
+  unit:
+    name: Unit tests (no I/O)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:unit
+
+  # Tenancy and security are separated from the rest deliberately. A failure
+  # here is not "a test broke"; it is a claim about isolation or authorisation
+  # that no longer holds, and the job name should say so in the checks list.
+  isolation:
+    name: Tenant isolation and security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: adericel
+          POSTGRES_PASSWORD: adericel
+          POSTGRES_DB: adericel_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U adericel -d adericel_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://adericel:adericel@localhost:5432/adericel_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:tenancy
+      - run: pnpm test:security
+
+  integration:
+    name: Integration and end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: adericel
+          POSTGRES_PASSWORD: adericel
+          POSTGRES_DB: adericel_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U adericel -d adericel_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://adericel:adericel@localhost:5432/adericel_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:integration
+      - run: pnpm test:e2e
+
+  # Deliverable B is an artefact, not documentation. It has to be regenerable
+  # from source and identical to what is committed, or the file in the
+  # repository is not the file anything validated.
+  workflows:
+    name: n8n export
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Validation includes a drift check: it rebuilds the export and fails if
+      # the committed JSON differs.
+      - run: pnpm n8n:validate
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adericel-n8n-export
+          path: workflows/n8n/adericel.n8n.json
+          retention-days: 30
+
+  # The interface is built separately from the server packages because its
+  # failure mode is different: a type error here breaks a page, not the truth.
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm build:web
+
+  # Building the images in CI is the only way to know the Dockerfiles still
+  # work. They are not pushed here — publishing is a separate, deliberate act.
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API and worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: adericel/app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/Dockerfile.web
+          push: false
+          load: true
+          tags: adericel/web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Compose file is valid
+        run: |
+          docker compose --profile core --profile workflow --profile ai --profile backup \
+            config >/dev/null
+        env: &compose-env
+          POSTGRES_PASSWORD: ci-postgres-password
+          MINIO_ROOT_PASSWORD: ci-minio-password
+          AUTH_JWT_SECRET: ci-jwt-secret-value-that-is-long-enough-here
+          AUTH_CREDENTIAL_ENCRYPTION_KEY: ci-credential-encryption-key-32bytes!
+          API_PUBLIC_URL: https://ci.invalid
+          API_CORS_ORIGINS: https://ci.invalid
+          ADERICEL_DOMAIN: localhost
+          N8N_ENCRYPTION_KEY: ci-n8n-encryption-key-value-long-enough
+          NOTIFY_FROM_ADDRESS: no-reply@ci.invalid
+          NOTIFY_DRIVER: http-email
+          # An endpoint that does not resolve. The smoke test does not sign
+          # anyone up, and an undelivered notification is logged rather than
+          # fatal — so this proves the stack starts with a real driver
+          # configured without needing a mail provider in CI.
+          NOTIFY_HTTP_ENDPOINT: http://mail.invalid/email
+          NOTIFY_HTTP_AUTH_TOKEN: ci-not-a-real-token
+
+      # `docker compose config` proves the YAML expands. It does not prove the
+      # expanded values are usable by the programs that receive them, and that
+      # gap shipped a reverse proxy that refused its own configuration and left
+      # the product unreachable. Caddy is asked directly, with the values compose
+      # actually produces.
+      - name: Reverse proxy configuration is valid as the proxy receives it
+        run: |
+          docker run --rm \
+            -v "$PWD/infrastructure/docker/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e ADERICEL_DOMAIN=localhost \
+            -e N8N_DOMAIN="$(docker compose config 2>/dev/null \
+              | sed -n 's/^ *N8N_DOMAIN: *//p' | head -1)" \
+            caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile
+        env: *compose-env
+
+      # The one check that would have caught every deployment defect found so
+      # far: bring the stack up and ask it for a response. A build that succeeds
+      # and a deployment that serves traffic are different claims.
+      - name: Smoke deployment
+        run: |
+          set -euo pipefail
+          mkdir -p var/backup
+          docker tag adericel/app:ci adericel-api:latest
+          docker tag adericel/app:ci adericel-worker:latest
+          docker tag adericel/app:ci adericel-migrate:latest
+          docker tag adericel/web:ci adericel-web:latest
+          docker compose --profile core up -d --no-build
+
+          for attempt in $(seq 1 40); do
+            if curl -fsk https://localhost/health/ready >/dev/null 2>&1; then
+              echo "stack ready after ~$((attempt * 5))s"
+              break
+            fi
+            if [ "$attempt" -eq 40 ]; then
+              docker compose --profile core ps
+              docker compose --profile core logs --tail 80
+              echo "stack did not become ready" >&2
+              exit 1
+            fi
+            sleep 5
+          done
+
+          # Through the proxy, as a browser reaches it: the interface at the
+          # root and the API under /api, on one origin.
+          curl -fsk https://localhost/ -o /dev/null
+          curl -sk https://localhost/api/v1/rulesets | grep -q UNAUTHENTICATED
+
+          # Migrations are idempotent: a second run applies nothing. Every
+          # upgrade does this, and it failed for months without anyone noticing.
+          docker compose --profile core run --rm migrate | grep -q 'up to date'
+
+          # A backup, and a restore proven against it.
+          docker compose --profile core --profile backup run --rm backup
+          dump="$(ls var/backup/*.dump | head -1)"
+          docker compose --profile core --profile backup run --rm \
+            --entrypoint /scripts/restore.sh backup \
+            "/backup/$(basename "$dump")" adericel_restore_check
+        env: *compose-env
+
+      - name: Deployment logs on failure
+        if: failure()
+        run: docker compose --profile core logs --tail 200
+        env: *compose-env
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile core --profile backup down -v
+        env: *compose-env

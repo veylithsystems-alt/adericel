@@ -1,0 +1,6 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+workflows/n8n/adericel.n8n.json
+docs/api/openapi.generated.json

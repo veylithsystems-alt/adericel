@@ -1,0 +1,24 @@
+# CodeQL configuration.
+#
+# Two exclusions, both because they produced findings that were not about
+# Adericel's source and made the real ones harder to see.
+#
+# `dist` is compiled output of the very files already being scanned, so every
+# genuine finding appeared twice and every fix had to be verified twice. It also
+# contains the bundled web application, which reported a finding inside a
+# third-party router rather than in anything written here.
+#
+# Test files hold deliberately fake credentials — a Stripe webhook secret used
+# to prove signature verification rejects the wrong key, for instance. Flagging
+# those as hard-coded credentials trains the reader to skim the list, which is
+# the failure mode that lets a real one through.
+name: 'Adericel CodeQL'
+
+paths-ignore:
+  - '**/dist/**'
+  - '**/node_modules/**'
+  - '**/*.test.ts'
+  - 'apps/web/dist/**'
+
+queries:
+  - uses: security-extended

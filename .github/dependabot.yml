@@ -1,0 +1,37 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/London
+    open-pull-requests-limit: 5
+    # One pull request per ecosystem group rather than twenty. A wall of
+    # individual bumps does not get reviewed; it gets merged unread.
+    groups:
+      production:
+        dependency-type: production
+        update-types: ['minor', 'patch']
+      development:
+        dependency-type: development
+        update-types: ['minor', 'patch']
+    # Majors arrive on their own so they get read properly.
+    labels: ['dependencies']
+
+  - package-ecosystem: docker
+    directory: '/infrastructure/docker'
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Europe/London
+    labels: ['dependencies', 'infrastructure']
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: monthly
+      timezone: Europe/London
+    labels: ['dependencies', 'ci']

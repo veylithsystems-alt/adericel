@@ -1,0 +1,28 @@
+{
+  "name": "@adericel/actions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@adericel/domain": "workspace:*",
+    "@adericel/evidence": "workspace:*",
+    "@adericel/graph": "workspace:*",
+    "@adericel/integrations": "workspace:*",
+    "@adericel/policy": "workspace:*",
+    "@adericel/shared": "workspace:*",
+    "@adericel/truth-engine": "workspace:*",
+    "zod": "^4.1.11"
+  }
+}

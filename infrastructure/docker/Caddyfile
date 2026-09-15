@@ -1,0 +1,83 @@
+# Adericel edge proxy.
+#
+# One origin serves the interface and the API. That is a security decision, not
+# a convenience one: a single origin means the browser's session token is never
+# sent cross-origin, CORS stays closed, and there is exactly one place where TLS
+# terminates and request headers are normalised.
+#
+# Certificates are obtained automatically from Let's Encrypt on first start, so
+# port 80 must be reachable from the internet for the HTTP-01 challenge.
+
+{
+	email {$ACME_EMAIL:admin@localhost}
+	# Nothing needs the admin API in this deployment, and leaving it listening is
+	# an unauthenticated control plane on the container network.
+	admin off
+	servers {
+		# Adericel reads the client address for rate limiting and audit. Caddy
+		# only trusts forwarding headers from proxies it is told about; here it
+		# is the first hop, so it trusts none and uses the real connection.
+		trusted_proxies static private_ranges
+	}
+}
+
+{$ADERICEL_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# The interface loads no third-party script and makes no cross-origin
+		# request. Saying so removes a whole class of injection from being
+		# exploitable even if one were introduced.
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# The API is mounted at the root of its own service; the /api prefix exists
+	# only so one origin can serve both. Stripping it here mirrors what the Vite
+	# dev server does, so URLs are identical in development and production.
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:4000 {
+			# Evidence uploads and long assessment reads both outlive the default.
+			transport http {
+				read_timeout 120s
+			}
+		}
+	}
+
+	# Health endpoints, unprefixed, for uptime monitoring that should not have to
+	# know about the internal routing.
+	handle /health/* {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:8080
+	}
+}
+
+# n8n, on its own hostname. Separate from the Adericel origin on purpose: the
+# workflow editor is an operator tool with its own session, and a shared origin
+# would put it inside Adericel's CSP and cookie scope.
+#
+# Set N8N_DOMAIN to the hostname you actually use. Left unset it resolves to a
+# .localhost name, which Caddy serves over its internal CA and no public
+# certificate is requested for.
+{$N8N_DOMAIN:n8n.localhost} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+	reverse_proxy n8n:5678 {
+		transport http {
+			read_timeout 300s
+		}
+	}
+}

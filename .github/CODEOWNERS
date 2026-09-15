@@ -1,0 +1,27 @@
+# Every change is reviewed by the owner. This file exists so that the areas
+# where a mistake is most expensive are explicit rather than assumed.
+
+*                               @veylithsystems-alt
+
+# The Truth Engine and the domain vocabulary decide what Adericel is willing to
+# assert. A change here changes the product's central claim.
+/packages/truth-engine/         @veylithsystems-alt
+/packages/domain/               @veylithsystems-alt
+
+# Tenant isolation and authorisation. A regression here is a critical security
+# failure, not a bug.
+/database/migrations/           @veylithsystems-alt
+/packages/graph/src/db.ts       @veylithsystems-alt
+/apps/api/src/middleware/       @veylithsystems-alt
+/tests/tenancy/                 @veylithsystems-alt
+/tests/security/                @veylithsystems-alt
+
+# Deliverable B and the deployment surface.
+/workflows/n8n/                 @veylithsystems-alt
+/infrastructure/                @veylithsystems-alt
+/docker-compose.yml             @veylithsystems-alt
+/.github/workflows/             @veylithsystems-alt
+
+# Decisions on the record.
+/docs/adr/                      @veylithsystems-alt
+/docs/security/                 @veylithsystems-alt

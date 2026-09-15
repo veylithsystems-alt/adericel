@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adericel.com/schemas/adericel.issuer-key.v1.schema.json",
+  "title": "Adericel Issuer Public Key v1",
+  "description": "A published issuer public key. Safe to distribute; contains no private material. A verifier holding this key can establish the authenticity of any passport interchange envelope naming its keyId.",
+  "type": "object",
+  "required": ["keyId", "algorithm", "publicKey", "status", "issuer", "registeredAt"],
+  "additionalProperties": false,
+  "properties": {
+    "keyId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "minLength": 8,
+      "maxLength": 64,
+      "description": "Immutable. Rotation issues a new id and never reuses one, because a reused id would make a historical signature unverifiable in a way indistinguishable from tampering."
+    },
+    "algorithm": { "const": "Ed25519" },
+    "publicKey": {
+      "type": "string",
+      "minLength": 40,
+      "description": "Base64url SPKI DER."
+    },
+    "status": {
+      "enum": ["REGISTERED", "ACTIVE", "RETIRED", "REVOKED"],
+      "description": "RETIRED keys remain trusted for verification and are never destroyed: destroying one would make every passport it signed unverifiable, which looks exactly like forgery. REVOKED means signatures made by it are no longer to be relied upon, which is a different fact and calls for a different response."
+    },
+    "issuer": { "type": "string", "minLength": 1 },
+    "registeredAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "When an operator established this key, as they recorded it. Null when it is not known \u2014 a key derived from a configured signing key that was never added to the published keyring. Null rather than a made-up date: a provenance record that invents its own timestamp is worse than one that admits it has none."
+    },
+    "activatedAt": { "type": ["string", "null"], "format": "date-time" },
+    "retiredAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}
