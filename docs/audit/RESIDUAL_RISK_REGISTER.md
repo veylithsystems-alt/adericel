@@ -1,6 +1,6 @@
 # Adericel Residual Risk Register
 
-**Required by:** Contract v3.0 §57
+**Required by:** Contract v3.1 §38 (originally v3.0 §57)
 **Opened:** 15 September 2026
 **Owner of the register:** Veylith Systems (founder)
 
@@ -198,6 +198,88 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Impact**      | Low–Medium. The property holds today; nothing re-proves it on every change.                                                                                                                                                    |
 | **Mitigation**  | A mutation harness in CI for the enumerated critical invariants.                                                                                                                                                               |
 | **State**       | `OPEN`                                                                                                                                                                                                                         |
+
+---
+
+## New under contract v3.1
+
+> v3.1 added requirement families v3.0 did not contain. These entries derive
+> from `ADERICEL_V3.1_CONTRACT_GAP_REPORT.md`.
+
+### RR-050 — No truth-state vocabulary
+
+| Field           | Value                                                                                                                                                                                   |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description** | v3.1 §6 requires OBSERVED / VERIFIED / DERIVED / INTERPRETED / ASSUMED / TARGET as first-class states. Fragments exist (claim origins, collection methods); no unified vocabulary does. |
+| **Impact**      | Medium. Adericel cannot currently say what _kind_ of truth an assertion is — which is the question the Assurance Passport exists to answer.                                             |
+| **Mitigation**  | One domain module; INTERPRETED must never reach the Truth Engine.                                                                                                                       |
+| **Target**      | Sequence 1.                                                                                                                                                                             |
+| **State**       | `OPEN`                                                                                                                                                                                  |
+
+### RR-051 — Assurance states lack DEGRADED and BLOCKED
+
+| Field                | Value                                                                                                                                                                                                                                                            |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**      | v3.1 §6 requires both as peers of PASS/FAIL/UNKNOWN. The repository carries 6 states and expresses degradation as UNKNOWN with reason `COLLECTION_FAILED`.                                                                                                       |
+| **Impact**           | **High.** §6 states semantic distinctions must not be collapsed. Today a degraded connector is indistinguishable from an unassessed control, so an MSP cannot tell "we cannot see this" from "this is broken" — a connector ticket from a customer conversation. |
+| **Affected surface** | Truth Engine, domain model, Passport, triage.                                                                                                                                                                                                                    |
+| **Mitigation**       | Extend the enum; teach the engine to emit both. Cheapest now, before more code depends on the narrower set.                                                                                                                                                      |
+| **Target**           | Sequence 1.                                                                                                                                                                                                                                                      |
+| **State**            | `OPEN`                                                                                                                                                                                                                                                           |
+
+### RR-052 — No capability status lifecycle
+
+| Field           | Value                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Description** | v3.1 §6 requires DESIGNED → IMPLEMENTED → TESTED → VERIFIED → OPERATIONAL → PROVEN → PRODUCTION_READY → COMMERCIAL_VALIDATED → RETIRED, with no status inferable from another. Tracked by hand in audit documents. |
+| **Impact**      | Medium. §37 documentation integrity depends on it.                                                                                                                                                                 |
+| **Target**      | With the §36 release record.                                                                                                                                                                                       |
+| **State**       | `OPEN`                                                                                                                                                                                                             |
+
+### RR-053 — Support domain absent (now mandatory)
+
+| Field           | Value                                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Description** | v3.1 §20–26 specify 18 entities, 14 categories, 12 queues, 20 case states, prohibited transitions, entitlement validation, tenant-scoped diagnostics, knowledge lifecycle and AI drafting boundaries. None exists. |
+| **Impact**      | **High.** v3.1 §40 places support at Phase 5 and §20 calls it mandatory infrastructure. This reverses RR-025's earlier ACCEPTED state.                                                                             |
+| **Mitigation**  | SupportCase, states, entitlement gate and diagnostics first.                                                                                                                                                       |
+| **Target**      | Sequence 3.                                                                                                                                                                                                        |
+| **State**       | `OPEN` — **supersedes RR-025**, which is withdrawn                                                                                                                                                                 |
+
+### RR-054 — Commercial entitlement not separated from security containment
+
+| Field           | Value                                                                                                                                                                                         |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description** | v3.1 §16 requires ten commercial states and forbids commercial restriction becoming security containment or vice versa. The repository has five subscription states and no containment model. |
+| **Impact**      | Medium now, High once containment exists. ADR-0027 gets the principle right by convention; v3.1 requires it by type.                                                                          |
+| **Mitigation**  | Model both as distinct concerns when containment is built, not after.                                                                                                                         |
+| **Target**      | Sequence 2.                                                                                                                                                                                   |
+| **State**       | `OPEN`                                                                                                                                                                                        |
+
+### RR-055 — Backup claims not separated
+
+| Field           | Value                                                                                                                                                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description** | v3.1 §30 requires BACKUP_SUCCESS, RESTORE_SUCCESS, SERVICE_RECOVERY and BUSINESS_RECOVERY as distinct claims. CI proves backup and restore; the four are not modelled, and corruption detection is still unproven (RR-014). |
+| **Impact**      | Medium. A proven restore is not proven service recovery, and conflating them is the failure §30 names.                                                                                                                      |
+| **State**       | `OPEN`                                                                                                                                                                                                                      |
+
+### RR-056 — Test taxonomy incomplete
+
+| Field           | Value                                                                                                                                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description** | Of v3.1 §35's suites: five exist and are named; four exist unnamed (connector-contract, property, restore, questionnaire-partial); mutation testing is manual; load, soak, chaos, containment and support do not exist. |
+| **Impact**      | Medium. Naming the four is cosmetic; the absence of load, soak and chaos evidence means capacity claims cannot be made (§30).                                                                                           |
+| **Mitigation**  | Name what exists; automate mutation; then build the rest.                                                                                                                                                               |
+| **State**       | `OPEN`                                                                                                                                                                                                                  |
+
+### RR-057 — No SUPPORT user surface
+
+| Field           | Value                                                                                                    |
+| --------------- | -------------------------------------------------------------------------------------------------------- |
+| **Description** | v3.1 §32 names six surfaces. Five exist as pages (Assurance, Fix, Proof, Change, Ask). SUPPORT does not. |
+| **Impact**      | Low independently; gated behind RR-053.                                                                  |
+| **State**       | `OPEN`                                                                                                   |
 
 ---
 
