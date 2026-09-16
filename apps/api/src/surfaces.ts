@@ -92,6 +92,10 @@ const COMMON_ROUTES = new Set([
   // names no organisation, and deliberately readable by a customer — they are
   // entitled to know what happens to their record if they stop paying.
   'GET /v1/commercial/states',
+  // The support model: what each severity promises and which transitions are
+  // prohibited. Published deliberately — a customer is entitled to know that
+  // nobody can mark their S1 resolved without them. Names no organisation.
+  'GET /v1/support/model',
 ]);
 
 /**

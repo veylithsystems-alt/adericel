@@ -58,6 +58,7 @@ implications.
 | [0045](./ADR-0045-governed-containment.md)                          | Containment stops Adericel, not the customer                      | Accepted |
 | [0046](./ADR-0046-break-glass-and-grant-attenuation.md)             | Break-glass, and grants that mean what they say                   | Accepted |
 | [0047](./ADR-0047-commercial-is-not-security.md)                    | A commercial state is not a security state                        | Accepted |
+| [0048](./ADR-0048-support-domain.md)                                | Support is a disclosure surface, and it routes to the MSP         | Accepted |
 
 ## Writing a new ADR
 

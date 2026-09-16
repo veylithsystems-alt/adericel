@@ -78,6 +78,10 @@ packages/
                   preconditions. Pure. No level ever withholds an organisation's
                   own assurance record, and automation can enter containment but
                   never leave it.
+  support/        The support domain: case states and the transitions that are
+                  prohibited, MSP-first routing, the disclosure gate, and
+                  integrity-protected diagnostic bundles. Pure. Nothing about an
+                  organisation is disclosed before somebody is identified.
   inference/      Local-first inference. Sovereignty is a classification the code
                   enforces, not a preference: an external provider does not start
                   without a written acknowledgement. Extraction must quote the
@@ -217,6 +221,52 @@ unsigned. A hash is not a signature and nothing here calls it one.
 [ADR-0040](./docs/adr/ADR-0040-signed-passport-interchange.md) records why;
 [the key lifecycle](./docs/operations/issuer-key-lifecycle.md) is the procedure.
 
+## When something goes wrong
+
+Three separate things can stop the product doing something, and conflating any
+two of them is a bug with a customer on the end of it.
+
+**Security: containment (C0-C5).** A compromised credential, an integration
+behaving unexpectedly, an evidence-integrity failure. Containment stops
+_Adericel_ doing things — it does not stop customers knowing things, and **no
+level at any severity withholds an organisation's own assurance record**.
+Authority is earned per level: automation reaches C2 (enough to stop using a
+compromised credential), an MSP reaches C3 over its own customers, C4 and C5
+stop every estate and are Veylith's alone. Recovery needs authority,
+re-observation and verified findings; nothing above C2 recovers itself
+([ADR-0045](./docs/adr/ADR-0045-governed-containment.md)).
+
+**Commercial: ten entitlement states.** `DRAFT` · `TRIAL` · `ACTIVE` ·
+`PAST_DUE` · `PAYMENT_PLAN` · `COMMERCIAL_RESTRICTION` ·
+`COMMERCIAL_SUSPENSION` · `TERMINATED` · `ARCHIVED` · `UNKNOWN`. A commercial
+state is **not** a security state, and the separation is enforced rather than
+remembered: no shared vocabulary, no function between the two models, and a
+test that fails if one is ever added. A late invoice restricts nothing on day
+one; `UNKNOWN` keeps everything running, because an outage at a payment
+processor is not evidence that a customer stopped paying. Nothing about money
+can reach the Truth Engine
+([ADR-0047](./docs/adr/ADR-0047-commercial-is-not-security.md)).
+
+**Support: a case, and a door that is loud.** Adericel is delivered through
+MSPs, so an end customer's request goes to their MSP — enforced in routing and
+again in reassignment, because a backlog tidy-up is how that boundary actually
+gets crossed. Support is a disclosure surface: identity and entitlement are
+established before anything about an organisation is said, _including whether
+it exists_, and every disclosure decision is recorded where the organisation
+can read it — the refusals as well as the disclosures. Nobody can mark a
+customer's S1 resolved without the customer
+([ADR-0048](./docs/adr/ADR-0048-support-domain.md)).
+
+Where a Veylith engineer genuinely needs into a customer's estate, the route is
+break-glass: four hours maximum, a justification of substance, a second factor
+required even in an emergency, the MSP told at the time rather than from an
+audit log afterwards, visible in the customer's own audit trail, unextendable
+at any layer, and reviewed whether or not it turned out to have been warranted.
+It cannot confer authority over who can reach the estate afterwards, and it
+grants only the permissions actually asked for — grants carry an attenuation
+the database refuses to widen
+([ADR-0046](./docs/adr/ADR-0046-break-glass-and-grant-attenuation.md)).
+
 ## The n8n export
 
 `workflows/n8n/adericel.n8n.json` is one file: 25 workflows, 236 nodes, the
@@ -261,13 +311,27 @@ feature list:
   ([ADR-0007](./docs/adr/ADR-0007-tenant-isolation.md)). Two layers, because one
   is a single point of failure.
 - **No destruction of history.** Assessments, evidence records, events and the
-  audit log are append-only. You can ask what Adericel believed on a given date,
-  and why ([ADR-0010](./docs/adr/ADR-0010-temporal-model.md)).
+  audit log are append-only — as are containment events, break-glass grants,
+  commercial transitions and support case histories. You can ask what Adericel
+  believed on a given date, and why
+  ([ADR-0010](./docs/adr/ADR-0010-temporal-model.md)).
+- **No standing vendor access to your data.** A Veylith platform grant is
+  honoured on neither Adericel surface, so operating the platform confers no
+  access to any customer's assurance data or personal data. What exists instead
+  is break-glass: announced, time-limited, attenuated, and reviewed.
+- **No withholding a customer's record as a commercial lever.** Every one of
+  the ten commercial states permits reading and exporting the organisation's own
+  assurance record, including `TERMINATED`. Holding a compliance record hostage
+  over an invoice is not a lever.
+- **No talking to an MSP's customer behind their back.** Support routes to the
+  MSP by default and structurally cannot be reassigned past that boundary. The
+  direct-support entitlement table exists — §22 needs the gate regardless — and
+  ships empty, with no code path that fills it.
 
 ## Documentation
 
-- [Architecture decision records](./docs/adr/README.md) — forty-five decisions,
-  each with what it costs
+- [Architecture decision records](./docs/adr/README.md) — every consequential
+  decision, each with what it costs
 - [Threat model](./docs/security/threat-model.md) — including what it does not cover
 - [Operations runbook](./docs/operations/runbook.md)
 - [Issuer key lifecycle](./docs/operations/issuer-key-lifecycle.md) — generating,

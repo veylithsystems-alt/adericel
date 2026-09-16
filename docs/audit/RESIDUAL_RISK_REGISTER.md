@@ -313,6 +313,46 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 
 ## Closed
 
+### RR-065 — Support knowledge, AI drafting and most diagnostic collectors — **OPEN**
+
+| Field                | Value                                                                                                                                                                                                                                                    |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**      | §25 versioned knowledge, known issues and the AI drafting boundary are not built. Of the seven diagnostic sections, three collect (`INTEGRATION_HEALTH`, `IMPAIRMENT_STATE`, `PLATFORM_VERSIONS`); the other four return empty.                          |
+| **Impact**           | Medium. A bundle is less useful than it will be. It is not misleading: a declared section with no collector returns empty rather than being omitted, so the bundle says it asked and found nothing instead of letting a reader assume there was nothing. |
+| **Likelihood**       | Certain — this is a stated absence.                                                                                                                                                                                                                      |
+| **Affected surface** | Time to diagnose. Not disclosure: the unwritten collectors cannot leak what they do not gather.                                                                                                                                                          |
+| **Mitigation**       | Write the four remaining collectors against the same shaping discipline (named columns, no error text, no configuration). Knowledge and AI drafting after, behind the §5.3 boundary — a drafted reply is `AI_SUGGESTED` and never sent unreviewed.       |
+| **Owner**            | Engineering.                                                                                                                                                                                                                                             |
+| **Target**           | With the second support increment.                                                                                                                                                                                                                       |
+| **State**            | `OPEN` — support must not be described as AI-assisted until the drafting boundary exists.                                                                                                                                                                |
+
+### RR-066 — Proactive support has no producer
+
+| Field                | Value                                                                                                                                                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**      | §24. The `SYSTEM` requester kind exists and routes correctly — a case Adericel raises about what it observed goes to the MSP that owns the customer. Nothing calls it. Connector health, failed actions and integrity failures raise no case. |
+| **Impact**           | Medium, and it pairs with RR-060 (containment has no automatic triggers): both are the same missing wire from an existing signal to an existing consumer.                                                                                     |
+| **Likelihood**       | Certain — this is a stated absence.                                                                                                                                                                                                           |
+| **Affected surface** | Support is reactive. A customer notices before Adericel tells them, which is the opposite of the claim.                                                                                                                                       |
+| **Mitigation**       | Wire connector health, dead-lettered actions and evidence-integrity failures to `openCase` with `requesterKind: 'SYSTEM'`. The routing, the severity model and the record all exist; the producer does not.                                   |
+| **Owner**            | Engineering.                                                                                                                                                                                                                                  |
+| **Target**           | With the second support increment, alongside RR-060.                                                                                                                                                                                          |
+| **State**            | `OPEN` — support must not be described as proactive until closed.                                                                                                                                                                             |
+
+---
+
+### RR-067 — U1–U4, U8 — The support domain — **CLOSED 16 Sept 2026**
+
+| Field                  | Value                                                                                                                                                                                                                                                                                               |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**        | §20–26 was the largest capability gap in the v3.1 report: zero matches for `SupportCase` anywhere. Support is not optional — §20 makes it part of assurance infrastructure and Phase 5 of the build order.                                                                                          |
+| **Mitigation applied** | `packages/support` (case states + prohibited transitions, MSP-first routing, the disclosure gate, integrity-protected bundles), migration `0031` (five tables, three append-only triggers, RLS throughout), API service and routes. ADR-0048.                                                       |
+| **Evidence**           | 52 package tests, 10 security tests over the whole state × kind × requester cross product, 20 e2e. Eleven guards proved by mutation, each failing named tests.                                                                                                                                      |
+| **Findings en route**  | Two, both from running it: the version collector was refused by row-level security for reading the migration ledger (correctly — that table belongs to the runner, not the application); and a leak assertion was matching the bundle's own "carries no credentials" disclaimer rather than a leak. |
+| **Decision applied**   | D2 as recommended: the direct-support entitlement gate is built and granted to nobody, with a test asserting no `INSERT` into it exists anywhere in the application.                                                                                                                                |
+| **Residual**           | Knowledge and the remaining collectors (RR-065); the proactive producer (RR-066).                                                                                                                                                                                                                   |
+| **State**              | `CLOSED`                                                                                                                                                                                                                                                                                            |
+
 ### RR-063 — Commercial states are modelled but barely driven — **OPEN**
 
 | Field                | Value                                                                                                                                                                                                                                                                                                                    |

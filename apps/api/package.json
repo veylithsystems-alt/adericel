@@ -22,6 +22,7 @@
     "@adericel/notifications": "workspace:*",
     "@adericel/policy": "workspace:*",
     "@adericel/shared": "workspace:*",
+    "@adericel/support": "workspace:*",
     "@adericel/triage": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
     "@adericel/value": "workspace:*",

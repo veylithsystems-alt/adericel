@@ -63,6 +63,7 @@
     "@adericel/notifications": "workspace:*",
     "@adericel/policy": "workspace:*",
     "@adericel/shared": "workspace:*",
+    "@adericel/support": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
     "@adericel/vaol": "workspace:*",
     "@adericel/worker": "workspace:*",
