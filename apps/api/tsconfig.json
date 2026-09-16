@@ -10,6 +10,7 @@
   "references": [
     { "path": "../../packages/shared" },
     { "path": "../../packages/inference" },
+    { "path": "../../packages/containment" },
     { "path": "../../packages/domain" },
     { "path": "../../packages/graph" },
     { "path": "../../packages/evidence" },

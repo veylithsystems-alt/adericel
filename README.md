@@ -74,6 +74,10 @@ packages/
                   queue, the business ledger, the commercial pipeline.
   questionnaire/  The questionnaire engine: answer states, renderers and the
                   consistency checker. No silent yes, enforced as a property.
+  containment/    Governed containment C0-C5, its authority model and recovery
+                  preconditions. Pure. No level ever withholds an organisation's
+                  own assurance record, and automation can enter containment but
+                  never leave it.
   inference/      Local-first inference. Sovereignty is a classification the code
                   enforces, not a preference: an external provider does not start
                   without a written acknowledgement. Extraction must quote the
@@ -262,7 +266,7 @@ feature list:
 
 ## Documentation
 
-- [Architecture decision records](./docs/adr/README.md) — forty-four decisions,
+- [Architecture decision records](./docs/adr/README.md) — forty-five decisions,
   each with what it costs
 - [Threat model](./docs/security/threat-model.md) — including what it does not cover
 - [Operations runbook](./docs/operations/runbook.md)

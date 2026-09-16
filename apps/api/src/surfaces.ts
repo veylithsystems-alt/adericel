@@ -82,6 +82,10 @@ const COMMON_ROUTES = new Set([
   // deliberately readable by a customer, because it is the answer to the
   // question their solicitor asked.
   'GET /v1/system/data-processing',
+  // The containment vocabulary: what each level costs and what each trigger
+  // means. Reference data an operator reads while deciding under pressure,
+  // identical for every caller and naming no organisation.
+  'GET /v1/containment/levels',
 ]);
 
 /**
@@ -97,6 +101,11 @@ const OVERRIDES: Record<string, RouteClass> = {
   // tells an attacker something about load.
   'GET /v1/system/health': ['VEYLITH_INTERNAL'],
   'GET /v1/system/outbox': ['VEYLITH_INTERNAL'],
+  // Platform-scale containment stops every estate, so it belongs to Veylith
+  // alone. An MSP reaches C1-C3 over its own customers through the
+  // organisation-scoped routes; C4 and C5 are not one partner's to declare.
+  'POST /v1/system/containment': ['VEYLITH_INTERNAL'],
+  'POST /v1/system/containment/recover': ['VEYLITH_INTERNAL'],
 };
 
 const ALL_SURFACES: Surface[] = [...SURFACES];

@@ -55,6 +55,7 @@ implications.
 | [0042](./ADR-0042-msp-only-distribution.md)                         | Every organisation belongs to an MSP                              | Accepted |
 | [0043](./ADR-0043-degraded-and-blocked.md)                          | A broken source is not an unknown                                 | Accepted |
 | [0044](./ADR-0044-truth-state.md)                                   | How firmly we know it, separately from what we concluded          | Accepted |
+| [0045](./ADR-0045-governed-containment.md)                          | Containment stops Adericel, not the customer                      | Accepted |
 
 ## Writing a new ADR
 

@@ -57,7 +57,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 
 ## Security
 
-### RR-010 — No containment capability (C0–C5)
+### RR-010 — No containment capability (C0–C5) — **CLOSED 16 Sept 2026**
 
 | Field                | Value                                                                                                                                      |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -70,7 +70,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Target**           | Before first production MSP.                                                                                                               |
 | **State**            | `OPEN`                                                                                                                                     |
 
-### RR-011 — No break-glass access
+### RR-011 — No break-glass access — **WITHDRAWN, superseded by RR-061**
 
 | Field           | Value                                                                                                                                                                                                                                      |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -246,7 +246,7 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Target**      | Sequence 3.                                                                                                                                                                                                        |
 | **State**       | `OPEN` — **supersedes RR-025**, which is withdrawn                                                                                                                                                                 |
 
-### RR-054 — Commercial entitlement not separated from security containment
+### RR-054 — Commercial entitlement not separated from security containment — **CLOSED 16 Sept 2026**
 
 | Field           | Value                                                                                                                                                                                         |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -280,6 +280,31 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Description** | v3.1 §32 names six surfaces. Five exist as pages (Assurance, Fix, Proof, Change, Ask). SUPPORT does not. |
 | **Impact**      | Low independently; gated behind RR-053.                                                                  |
 | **State**       | `OPEN`                                                                                                   |
+
+---
+
+### RR-060 — Containment has no automatic triggers
+
+| Field                | Value                                                                                                                                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**      | C0–C5, the 16 triggers and the authority model are implemented and tested. Nothing detects a compromised credential, a scope anomaly or an evidence-integrity failure and raises containment automatically.    |
+| **Impact**           | Medium. Containment is an operator capability: it works when somebody notices. The automatic path exists in the authority model (AUTOMATIC may reach C2) and has no caller.                                    |
+| **Likelihood**       | Certain — this is a stated absence, not a risk of one.                                                                                                                                                         |
+| **Affected surface** | Incident response latency.                                                                                                                                                                                     |
+| **Mitigation**       | Wire detectors: credential failure from connector health, scope anomaly from the manifest boundary, evidence-integrity failure from the hash check. Each already produces the signal; none raises containment. |
+| **Owner**            | Engineering.                                                                                                                                                                                                   |
+| **Target**           | With the support domain (Phase 5), which is where connector health becomes a case.                                                                                                                             |
+| **State**            | `OPEN` — and must not be described as autonomous containment until closed.                                                                                                                                     |
+
+### RR-061 — No break-glass access
+
+| Field           | Value                                                                                                                                                                                   |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description** | §28 requires emergency access that is scoped, time-limited, logged and revocable. Containment gives Veylith a governed way to _restrict_; there is still no governed way to _reach in_. |
+| **Impact**      | **High.** Emergency access still happens outside the application with database credentials — unattributed and untimed.                                                                  |
+| **Mitigation**  | Time-limited, scoped, audited grant with mandatory justification, on the same append-only pattern containment now uses.                                                                 |
+| **Target**      | Next.                                                                                                                                                                                   |
+| **State**       | `OPEN` — **supersedes RR-011**, which is withdrawn in favour of this sharper statement.                                                                                                 |
 
 ---
 

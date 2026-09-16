@@ -44,6 +44,9 @@
       "path": "./packages/inference"
     },
     {
+      "path": "./packages/containment"
+    },
+    {
       "path": "./apps/api"
     },
     {
