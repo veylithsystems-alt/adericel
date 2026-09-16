@@ -21,6 +21,9 @@ importers:
       '@adericel/autonomy':
         specifier: workspace:*
         version: link:packages/autonomy
+      '@adericel/containment':
+        specifier: workspace:*
+        version: link:packages/containment
       '@adericel/domain':
         specifier: workspace:*
         version: link:packages/domain

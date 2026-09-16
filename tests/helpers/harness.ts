@@ -330,7 +330,8 @@ export async function seedTenant(
       `INSERT INTO subscriptions (msp_id, plan_key, status, price_per_organisation_minor,
                                   current_period_start, current_period_end)
        VALUES ($1, 'standard', 'ACTIVE', 19900, now(), now() + interval '1 month')
-       ON CONFLICT (msp_id) WHERE msp_id IS NOT NULL AND status <> 'CANCELLED' DO NOTHING`,
+       ON CONFLICT (msp_id) WHERE msp_id IS NOT NULL
+            AND status NOT IN ('TERMINATED', 'ARCHIVED') DO NOTHING`,
       [row.id],
     );
     return row.id;

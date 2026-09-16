@@ -148,7 +148,8 @@ async function main(): Promise<void> {
           current_period_start, current_period_end)
        VALUES ($1, 'standard', 'ACTIVE', 'GBP', 19900, 100, $2::timestamptz,
                $2::timestamptz + interval '1 month')
-       ON CONFLICT (msp_id) WHERE msp_id IS NOT NULL AND status <> 'CANCELLED'
+       ON CONFLICT (msp_id) WHERE msp_id IS NOT NULL
+            AND status NOT IN ('TERMINATED', 'ARCHIVED')
        DO UPDATE SET status = 'ACTIVE'`,
       [row.id, now],
     );

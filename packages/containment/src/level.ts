@@ -186,8 +186,28 @@ export function isAtLeast(a: ContainmentLevel, b: ContainmentLevel): boolean {
   return ORDER[a] >= ORDER[b];
 }
 
+/**
+ * The definition of a level, or a refusal.
+ *
+ * The guard is not decoration. Types stop at the process boundary, and the
+ * value reaching here may have come from a database column, an API body, or —
+ * the case that matters — a caller who confused a commercial state for a
+ * security one (§16). Without it, `definitionOf('COMMERCIAL_SUSPENSION')`
+ * returns `undefined` and the caller crashes one line later on a property
+ * read, which reads as a bug in containment rather than as the category error
+ * it is.
+ *
+ * It refuses by name, so the message says what was actually wrong.
+ */
 export function definitionOf(level: ContainmentLevel): ContainmentLevelDefinition {
-  return CONTAINMENT_DEFINITIONS[level];
+  const definition = CONTAINMENT_DEFINITIONS[level];
+  if (!definition) {
+    throw new Error(
+      `${String(level)} is not a containment level. Containment is C0-C5 and is a security ` +
+        'state; commercial states (§16) are a separate concern and never map onto one.',
+    );
+  }
+  return definition;
 }
 
 /**

@@ -15,6 +15,7 @@ import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerActionRoutes } from './routes/actions.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerPassportRoutes } from './routes/passport.js';
+import { registerCommercialRoutes } from './routes/commercial.js';
 import { registerContainmentRoutes } from './routes/containment.js';
 import { registerBreakGlassRoutes } from './routes/break-glass.js';
 import { registerBillingRoutes } from './routes/billing.js';
@@ -151,6 +152,7 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   registerOnboardingRoutes(server, app);
   registerPassportRoutes(server, app);
   registerContainmentRoutes(server, app);
+  registerCommercialRoutes(server, app);
   registerBreakGlassRoutes(server, app);
   registerBillingRoutes(server, app);
   registerFindingRoutes(server, app);

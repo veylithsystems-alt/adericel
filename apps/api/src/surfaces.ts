@@ -86,6 +86,12 @@ const COMMON_ROUTES = new Set([
   // means. Reference data an operator reads while deciding under pressure,
   // identical for every caller and naming no organisation.
   'GET /v1/containment/levels',
+  // The commercial vocabulary: what each state costs a customer and which
+  // moves are legal from where. Reference data an operator reads while
+  // deciding what to do about an unpaid invoice. Identical for every caller,
+  // names no organisation, and deliberately readable by a customer — they are
+  // entitled to know what happens to their record if they stop paying.
+  'GET /v1/commercial/states',
 ]);
 
 /**

@@ -313,6 +313,32 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 
 ## Closed
 
+### RR-063 — Commercial states are modelled but barely driven — **OPEN**
+
+| Field                | Value                                                                                                                                                                                                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Description**      | The ten §16 states exist, are enforced and are reachable through the MSP routes. Only `ACTIVE`, `PAST_DUE`, `TERMINATED` and `UNKNOWN` are ever set automatically (by a provider webhook). `DRAFT`, `PAYMENT_PLAN`, `COMMERCIAL_RESTRICTION`, `COMMERCIAL_SUSPENSION` and `ARCHIVED` only move when a person moves them. |
+| **Impact**           | Low, and partly deliberate: restriction and suspension are decisions somebody must make, and a dunning timer that suspends customers unattended is worse than none. `ARCHIVED` is the real gap — nothing advances a terminated account when its retention window elapses.                                                |
+| **Likelihood**       | Certain — this is a stated absence.                                                                                                                                                                                                                                                                                      |
+| **Affected surface** | Retention hygiene; terminated accounts sit in `TERMINATED` indefinitely.                                                                                                                                                                                                                                                 |
+| **Mitigation**       | A scheduled job advancing `TERMINATED` → `ARCHIVED` once retention elapses, using the existing retention policy rather than a new clock. Dunning stays advisory: it proposes, a person decides.                                                                                                                          |
+| **Owner**            | Engineering.                                                                                                                                                                                                                                                                                                             |
+| **Target**           | With the support domain (Phase 5).                                                                                                                                                                                                                                                                                       |
+| **State**            | `OPEN` — the model must not be described as a lifecycle until the terminal step runs on its own.                                                                                                                                                                                                                         |
+
+---
+
+### RR-064 — E1/E2 — Commercial model and its separation from containment — **CLOSED 16 Sept 2026**
+
+| Field                  | Value                                                                                                                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**        | Five subscription states did both jobs. `SUSPENDED` meant an unpaid invoice to one reader and a compromised tenant to another; 0028 had already flagged the same word carrying both meanings on `organisations.status`.                                                   |
+| **Mitigation applied** | Ten states with names that say which kind they are (`COMMERCIAL_SUSPENSION`, `TERMINATED`), one enum shared with `SubscriptionStatus`, `commercial_transitions` append-only with mandatory reason and prior customer notification, migration `0030`. ADR-0047.            |
+| **Evidence**           | `tests/security/commercial-separation.test.ts` (8), `packages/domain/src/commercial.test.ts` (15), `tests/e2e/commercial-states.test.ts` (11). A `containmentForCommercialState` helper fails exactly one; a billing field on `ControlAssessmentInput` fails exactly one. |
+| **Findings en route**  | `definitionOf()` returned `undefined` for an unrecognised level rather than refusing, so a commercial state reaching containment crashed on a property read one line later — a category error presenting as a containment bug. It now refuses by name.                    |
+| **Residual**           | Automation of the terminal states — see RR-063.                                                                                                                                                                                                                           |
+| **State**              | `CLOSED`                                                                                                                                                                                                                                                                  |
+
 ### RR-061 — No break-glass access — **CLOSED 16 Sept 2026**
 
 | Field                  | Value                                                                                                                                                                                                                                                                                          |

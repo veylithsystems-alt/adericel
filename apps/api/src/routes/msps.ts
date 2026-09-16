@@ -6,6 +6,7 @@ import {
   organisationCreateSchema,
   resolveControlConfiguration,
   type BaselineControlDefinition,
+  type CommercialState,
   type OrganisationControlOverride,
 } from '@adericel/domain';
 import { AdericelError } from '@adericel/shared';
@@ -65,7 +66,8 @@ export function registerMspRoutes(server: FastifyInstance, app: AppContext): voi
       }>(
         `SELECT plan_key, status, currency, price_per_organisation_minor, organisation_limit,
                 trial_ends_at, current_period_end
-         FROM subscriptions WHERE msp_id = $1 AND status <> 'CANCELLED'`,
+         FROM subscriptions WHERE msp_id = $1
+            AND status NOT IN ('TERMINATED', 'ARCHIVED')`,
         [mspId],
       );
       return { msp, counts, subscription };
@@ -169,7 +171,8 @@ export function registerMspRoutes(server: FastifyInstance, app: AppContext): voi
             organisation_limit: number | null;
           }>(
             `SELECT status, trial_ends_at, organisation_limit
-             FROM subscriptions WHERE msp_id = $1 AND status <> 'CANCELLED'`,
+             FROM subscriptions WHERE msp_id = $1
+            AND status NOT IN ('TERMINATED', 'ARCHIVED')`,
             [mspId],
           );
           const used = await ctx.oneOrFail<{ count: string }>(
@@ -188,8 +191,7 @@ export function registerMspRoutes(server: FastifyInstance, app: AppContext): voi
           }
           return checkOrganisationEntitlement(
             {
-              status: subscription.status as
-                'TRIAL' | 'ACTIVE' | 'PAST_DUE' | 'SUSPENDED' | 'CANCELLED',
+              status: subscription.status as CommercialState,
               trialEndsAt: subscription.trial_ends_at?.toISOString() ?? null,
             },
             Number(used.count),

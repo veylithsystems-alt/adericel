@@ -55,6 +55,7 @@
     "@adericel/actions": "workspace:*",
     "@adericel/api": "workspace:*",
     "@adericel/autonomy": "workspace:*",
+    "@adericel/containment": "workspace:*",
     "@adericel/domain": "workspace:*",
     "@adericel/evidence": "workspace:*",
     "@adericel/graph": "workspace:*",

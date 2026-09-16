@@ -261,7 +261,7 @@ describe.skipIf(!available)('offboarding', () => {
       // Cancel billing, the last required step.
       await harness.db.withPlatform(async (ctx) => {
         await ctx.query(
-          `UPDATE subscriptions SET status = 'CANCELLED' WHERE organisation_id = $1`,
+          `UPDATE subscriptions SET status = 'TERMINATED' WHERE organisation_id = $1`,
           [tenant.organisationId],
         );
       });
@@ -419,7 +419,7 @@ describe.skipIf(!available)('offboarding', () => {
 
       await harness.db.withPlatform(async (ctx) => {
         await ctx.query(
-          `UPDATE subscriptions SET status = 'CANCELLED' WHERE organisation_id = $1`,
+          `UPDATE subscriptions SET status = 'TERMINATED' WHERE organisation_id = $1`,
           [ownOrganisationId],
         );
       });
