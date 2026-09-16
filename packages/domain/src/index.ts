@@ -16,3 +16,4 @@ export * from './conflict.js';
 export * from './surface.js';
 export * from './personal-data.js';
 export * from './truth-state.js';
+export * from './break-glass.js';

@@ -296,19 +296,33 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Target**           | With the support domain (Phase 5), which is where connector health becomes a case.                                                                                                                             |
 | **State**            | `OPEN` — and must not be described as autonomous containment until closed.                                                                                                                                     |
 
-### RR-061 — No break-glass access
+### RR-062 — Break-glass has no automatic review enforcement
 
-| Field           | Value                                                                                                                                                                                   |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Description** | §28 requires emergency access that is scoped, time-limited, logged and revocable. Containment gives Veylith a governed way to _restrict_; there is still no governed way to _reach in_. |
-| **Impact**      | **High.** Emergency access still happens outside the application with database credentials — unattributed and untimed.                                                                  |
-| **Mitigation**  | Time-limited, scoped, audited grant with mandatory justification, on the same append-only pattern containment now uses.                                                                 |
-| **Target**      | Next.                                                                                                                                                                                   |
-| **State**       | `OPEN` — **supersedes RR-011**, which is withdrawn in favour of this sharper statement.                                                                                                 |
+| Field                | Value                                                                                                                                                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**      | Every break-glass grant carries `review_required`, and `outstandingBreakGlass()` reports how many are unreviewed and how old the oldest is. Nothing acts on that number: no reminder, no escalation, no bar on opening another. |
+| **Impact**           | Medium. A mandatory review nobody chases becomes a formality, and a formality is indistinguishable from no review at the point somebody asks how the access was governed.                                                       |
+| **Likelihood**       | Certain — this is a stated absence, not a risk of one.                                                                                                                                                                          |
+| **Affected surface** | Assurance over Veylith's own support access.                                                                                                                                                                                    |
+| **Mitigation**       | Surface the count on the Veylith control room, escalate on age, and require the backlog to be cleared before non-emergency grants. The signal exists; it has no consumer.                                                       |
+| **Owner**            | Engineering.                                                                                                                                                                                                                    |
+| **Target**           | With the support domain (Phase 5), where a review becomes a case with an owner.                                                                                                                                                 |
+| **State**            | `OPEN` — break-glass must not be described as "reviewed" until closed. It is _recorded_ and _review-required_.                                                                                                                  |
 
 ---
 
 ## Closed
+
+### RR-061 — No break-glass access — **CLOSED 16 Sept 2026**
+
+| Field                  | Value                                                                                                                                                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**        | §28 required emergency access that is scoped, time-limited, logged and revocable. Containment gave Veylith a governed way to _restrict_; there was no governed way to _reach in_, so it happened outside the application with database credentials.                                            |
+| **Mitigation applied** | `break_glass_grants` + migration `0029`. An ordinary grant with a four-hour ceiling, ≥30-character justification, mandatory second factor, no authority-conferring permissions, MSP notified at the time, visible to the organisation through its own RLS scope, append-only. ADR-0046.        |
+| **Evidence**           | `tests/e2e/break-glass.test.ts` (16 tests); `packages/domain/src/break-glass.ts`. Non-extendable, non-rewritable and non-deletable are asserted against the live database, not the service.                                                                                                    |
+| **Findings en route**  | Three, each fixed rather than noted: the grant conveyed the whole `BREAK_GLASS` role instead of the permissions requested (→ `grants.attenuated_to`); a second window after natural expiry hit a unique violation and a 500; and the "before" baseline in the confers-access test was vacuous. |
+| **Residual**           | Review enforcement — see RR-062.                                                                                                                                                                                                                                                               |
+| **State**              | `CLOSED` — supersedes RR-011.                                                                                                                                                                                                                                                                  |
 
 ### RR-040 — Direct-to-SME path in code — **CLOSED 15 Sept 2026**
 

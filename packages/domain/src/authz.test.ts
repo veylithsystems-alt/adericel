@@ -410,3 +410,188 @@ describe('accessibleOrganisationIds', () => {
     expect(accessibleOrganisationIds(p, AT)).toEqual(['org-1']);
   });
 });
+
+/**
+ * Grant attenuation.
+ *
+ * The roles set the ceiling; an attenuation sets a floor beneath it. Every
+ * property here is one the authority model would otherwise get wrong in the
+ * direction that matters — quietly conveying more than was asked for.
+ */
+describe('attenuated grants', () => {
+  const ORG = 'org-attenuated';
+
+  it('conveys a permission that is both in the role and in the narrowing', () => {
+    const p = principal({
+      grants: [
+        {
+          scopeType: 'ORGANISATION',
+          scopeId: ORG,
+          roles: ['ORG_ADMIN'],
+          expiresAt: null,
+          attenuatedTo: ['org:read', 'org:assessment:read'],
+        },
+      ],
+    });
+    expect(
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: ORG },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
+    ).toBe(true);
+  });
+
+  it('refuses a permission the role carries but the narrowing omits', () => {
+    // The whole point. ORG_ADMIN can write claims; this grant may not, because
+    // whoever issued it did not ask for that.
+    const p = principal({
+      grants: [
+        {
+          scopeType: 'ORGANISATION',
+          scopeId: ORG,
+          roles: ['ORG_ADMIN'],
+          expiresAt: null,
+          attenuatedTo: ['org:read'],
+        },
+      ],
+    });
+    expect(permissionsForRoles(['ORG_ADMIN']).has('org:claim:write')).toBe(true);
+    expect(
+      authorise(
+        p,
+        { permission: 'org:claim:write', organisationId: ORG },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
+    ).toBe(false);
+  });
+
+  it('never widens: a narrowing cannot name a permission into existence', () => {
+    // ORG_READONLY does not carry org:action:execute. Listing it in the
+    // narrowing must not be a way to acquire it — an attenuation subtracts and
+    // only subtracts. If this ever passes, the intersection has become a union.
+    const p = principal({
+      grants: [
+        {
+          scopeType: 'ORGANISATION',
+          scopeId: ORG,
+          roles: ['ORG_READONLY'],
+          expiresAt: null,
+          attenuatedTo: ['org:read', 'org:action:execute', 'org:member:manage'],
+        },
+      ],
+    });
+    for (const permission of ['org:action:execute', 'org:member:manage'] as const) {
+      expect(permissionsForRoles(['ORG_READONLY']).has(permission)).toBe(false);
+      expect(
+        authorise(p, { permission, organisationId: ORG }, { atIso: AT, surface: 'ADERICEL_CLIENT' })
+          .allowed,
+      ).toBe(false);
+    }
+  });
+
+  it('conveys nothing when narrowed to an empty list', () => {
+    // "Somebody asked for a narrowing and named nothing" reads as nothing, not
+    // as everything. The alternative is a falsy-empty-array bug that hands over
+    // the full role in exactly the case where care was being taken.
+    const p = principal({
+      grants: [
+        {
+          scopeType: 'ORGANISATION',
+          scopeId: ORG,
+          roles: ['ORG_ADMIN'],
+          expiresAt: null,
+          attenuatedTo: [],
+        },
+      ],
+    });
+    expect(
+      authorise(
+        p,
+        { permission: 'org:read', organisationId: ORG },
+        { atIso: AT, surface: 'ADERICEL_CLIENT' },
+      ).allowed,
+    ).toBe(false);
+  });
+
+  it('leaves an un-attenuated grant exactly as it was', () => {
+    // The ordinary case is every grant written before attenuation existed.
+    // Absent and null both mean "the roles convey what they carry".
+    for (const attenuatedTo of [undefined, null]) {
+      const p = principal({
+        grants: [
+          {
+            scopeType: 'ORGANISATION',
+            scopeId: ORG,
+            roles: ['ORG_ADMIN'],
+            expiresAt: null,
+            ...(attenuatedTo === undefined ? {} : { attenuatedTo }),
+          },
+        ],
+      });
+      expect(
+        authorise(
+          p,
+          { permission: 'org:claim:write', organisationId: ORG },
+          { atIso: AT, surface: 'ADERICEL_CLIENT' },
+        ).allowed,
+      ).toBe(true);
+    }
+  });
+
+  it('applies on MSP and platform scopes too, not only organisation grants', () => {
+    // Attenuation lives in `conveys`, which every scope goes through. If it
+    // were implemented per-branch, one of these would be missed.
+    const msp = principal({
+      grants: [
+        {
+          scopeType: 'MSP',
+          scopeId: 'msp-1',
+          roles: ['MSP_ADMIN'],
+          expiresAt: null,
+          attenuatedTo: ['msp:read'],
+        },
+      ],
+    });
+    expect(
+      authorise(
+        msp,
+        { permission: 'msp:read', mspId: 'msp-1' },
+        { atIso: AT, surface: 'ADERICEL_MSP' },
+      ).allowed,
+    ).toBe(true);
+    expect(
+      authorise(
+        msp,
+        { permission: 'msp:member:manage', mspId: 'msp-1' },
+        { atIso: AT, surface: 'ADERICEL_MSP' },
+      ).allowed,
+    ).toBe(false);
+
+    const platform = principal({
+      grants: [
+        {
+          scopeType: 'PLATFORM',
+          scopeId: null,
+          roles: ['PLATFORM_ADMIN'],
+          expiresAt: null,
+          attenuatedTo: ['platform:read'],
+        },
+      ],
+    });
+    expect(
+      authorise(
+        platform,
+        { permission: 'platform:read' },
+        { atIso: AT, surface: 'VEYLITH_INTERNAL' },
+      ).allowed,
+    ).toBe(true);
+    expect(
+      authorise(
+        platform,
+        { permission: 'platform:admin' },
+        { atIso: AT, surface: 'VEYLITH_INTERNAL' },
+      ).allowed,
+    ).toBe(false);
+  });
+});

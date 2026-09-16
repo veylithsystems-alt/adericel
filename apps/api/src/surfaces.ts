@@ -106,6 +106,12 @@ const OVERRIDES: Record<string, RouteClass> = {
   // organisation-scoped routes; C4 and C5 are not one partner's to declare.
   'POST /v1/system/containment': ['VEYLITH_INTERNAL'],
   'POST /v1/system/containment/recover': ['VEYLITH_INTERNAL'],
+  // Emergency access is opened by Veylith over an organisation it has no
+  // standing authority over. The organisation sees every grant through its own
+  // audit trail; this is the operator's side of it.
+  'POST /v1/system/break-glass': ['VEYLITH_INTERNAL'],
+  'POST /v1/system/break-glass/:id/close': ['VEYLITH_INTERNAL'],
+  'GET /v1/system/break-glass': ['VEYLITH_INTERNAL'],
 };
 
 const ALL_SURFACES: Surface[] = [...SURFACES];
