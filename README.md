@@ -104,10 +104,40 @@ infrastructure/        Dockerfiles, edge proxy, deployment.
 tests/                 unit · integration · tenancy · security · e2e
 ```
 
-The last two packages are the company rather than the product. Adericel does not
-depend on them — a customer running it on their own infrastructure gets the
-assurance platform and none of Veylith's commercial machinery, and a test
-asserts that separation holds.
+### Adericel is the product; Veylith is the company that operates it
+
+`vaol/` is the company layer — Veylith's own autonomy gate, exception queue,
+business ledger and commercial pipeline. It is **not** part of what a customer
+receives, and that is enforced rather than intended:
+
+- `ADERICEL_COMPANY_LAYER` defaults to **off**. An unset flag means a customer
+  deployment, because the cost of being wrong that way is a Veylith operator
+  seeing a 404, and the cost of being wrong the other way is a customer's
+  database holding Veylith's commercial pipeline.
+- With it off, the company routes are **not registered at all** — absent rather
+  than refused. There is nothing to probe.
+- The company layer is reached through `await import()` inside that branch, so
+  there is no static import path from the product to it. A static import would
+  put it in the module graph of every deployment, meaning a product build could
+  not ship without it even though it never ran it.
+- Migrations are layered. `pnpm db:migrate:product` applies the product schema
+  and skips the `veylith.*` tables entirely. The classification lives in
+  `database/migrations/layers.json` and cannot drift: a test derives it from the
+  SQL and fails in both directions.
+- `docker build --target product` builds an image with the company layer's
+  compiled output removed, so setting the flag on a product image fails loudly
+  rather than quietly working.
+
+`value/` is **product**, not company, despite an earlier version of this
+sentence saying otherwise. It counts what Adericel did and prices it only with
+durations the MSP supplied — that is the MSP's own argument to their client at
+renewal, and withholding it from a self-hosted deployment would be withholding
+the argument for the deployment.
+
+The separation was previously claimed here and asserted by a test that looked at
+`packages/` only, which is exactly where the dependency was not: `apps/api`
+imported the company layer at startup and registered its routes unconditionally.
+See [ADR-0049](./docs/adr/ADR-0049-product-and-company-layers.md).
 
 ## Running it
 

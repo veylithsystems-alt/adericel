@@ -313,6 +313,34 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 
 ## Closed
 
+### RR-071 — Company-layer migrations 0018–0020 already applied on existing installs
+
+| Field                | Value                                                                                                                                                                                                                                                           |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**      | Layered migrations stop the `veylith.*` schema being created on new product installs. A database that was migrated before ADR-0049 already has it, and nothing removes it.                                                                                      |
+| **Impact**           | Low today — there are no customer installs yet, so no customer database holds it. It becomes Medium the day one exists and was provisioned from an older image.                                                                                                 |
+| **Likelihood**       | Certain for any pre-ADR-0049 database.                                                                                                                                                                                                                          |
+| **Affected surface** | A customer's database would hold empty Veylith tables. Empty, because the routes that write them were never reachable without the company layer's own principals — but present, and present is what a data-protection question asks about.                      |
+| **Mitigation**       | A product-layer migration that drops the `veylith` schema when it is empty and refuses when it is not, so it can never destroy a company deployment. Deliberately not written blind: it is a destructive migration and deserves a real install to test against. |
+| **Owner**            | Engineering.                                                                                                                                                                                                                                                    |
+| **Target**           | Before the first customer self-hosts.                                                                                                                                                                                                                           |
+| **State**            | `OPEN`                                                                                                                                                                                                                                                          |
+
+---
+
+### RR-072 — The product/company separation was claimed but not enforced — **CLOSED 17 Sept 2026**
+
+| Field                  | Value                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**        | The README stated that a customer self-hosting Adericel "gets the assurance platform and none of Veylith's commercial machinery, and a test asserts that separation holds". The test asserted it over `packages/` only; the dependency was in `apps/`.                                    |
+| **Impact**             | **High.** `apps/api` imported the company layer at startup, registered `/v1/veylith/*` unconditionally, and migrations created the `veylith.*` schema on every install. A customer would have held Veylith's commercial pipeline, backed it up, and exposed it with their DB credentials. |
+| **Mitigation applied** | `ADERICEL_COMPANY_LAYER`, default off, enforced at four layers: routes not registered, no static import path, `MIGRATION_LAYER=product` skips the company schema, and a `product` Docker target that removes the company layer's compiled output. ADR-0049.                               |
+| **Evidence**           | `tests/unit/architecture.test.ts` (no static path; every dynamic import guarded; default off across seven spellings), `tests/unit/migration-layers.test.ts` (manifest cannot drift either way), `tests/e2e/product-separation.test.ts` (8 tests, both sides of the switch).               |
+| **Findings en route**  | The README also described `packages/value` as company machinery. It is product — the MSP's own proof-of-value argument to their client — and gating it would have withheld the argument for the deployment. Corrected rather than enforced.                                               |
+| **Verified**           | A clean database migrated with `MIGRATION_LAYER=product`: 77 Adericel tables, no `veylith` schema, no company migration in the ledger.                                                                                                                                                    |
+| **Residual**           | Pre-existing databases still carry the schema — see RR-071.                                                                                                                                                                                                                               |
+| **State**              | `CLOSED`                                                                                                                                                                                                                                                                                  |
+
 ### RR-065 — Support knowledge, AI drafting and most diagnostic collectors — **OPEN**
 
 | Field                | Value                                                                                                                                                                                                                                                    |

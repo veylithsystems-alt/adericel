@@ -118,6 +118,19 @@ export const PREDICATE_MAP: Partial<Record<ObservationKind, readonly PredicateMa
     m('diskEncrypted', 'device.disk.encrypted', 'boolean'),
     m('firewallEnabled', 'device.firewall.enabled', 'boolean'),
     m('autorunDisabled', 'device.autorun_disabled', 'boolean'),
+    // Device unlocking, and brute-force protection. Cyber Essentials accepts
+    // either a limit on attempts or a throttle between them, so both arrive and
+    // the rule decides — a connector that reported only one would quietly
+    // convert an estate using the other into a failure.
+    m('lockRequired', 'device.lock.required', 'boolean'),
+    m('lockMaxAttempts', 'device.lock.max_attempts', 'number'),
+    m('lockTimeoutSeconds', 'device.lock.timeout_seconds', 'number'),
+    m('automaticUpdatesEnabled', 'device.updates.automatic_enabled', 'boolean'),
+    m('webProtectionEnabled', 'device.endpoint_protection.web_protection_enabled', 'boolean'),
+    // A count, not a list. The inventory itself is estate detail that belongs
+    // in the graph rather than inside a claim value, and a claim carrying four
+    // hundred application names is a claim nothing can compare.
+    m('installedApplicationCount', 'device.software.inventory', 'number'),
     m('osSupported', 'device.os.supported', 'boolean'),
     m('osVersion', 'device.os.version', 'string'),
     m('lastPatchedAt', 'device.patch.last_applied_at', 'string'),
@@ -153,6 +166,12 @@ export const PREDICATE_MAP: Partial<Record<ObservationKind, readonly PredicateMa
       'organisation',
     ),
     m('adminCount', 'organisation.identity.admin_count', 'number', 'organisation'),
+    // Distinct from breach screening. A banned-password check blocks passwords
+    // that are common; breach screening blocks passwords that are known to have
+    // leaked. Cyber Essentials asks for the first, and collapsing them would
+    // let a tenant with neither look like a tenant with one.
+    m('passwordCommonBlocked', 'organisation.password.common_blocked', 'boolean', 'organisation'),
+    m('defaultCredentialsPresent', 'asset.default_credentials_present', 'boolean', 'organisation'),
     m('loggingEnabled', 'organisation.logging.enabled', 'boolean', 'organisation'),
     m('logRetentionDays', 'organisation.logging.retention_days', 'number', 'organisation'),
     m('lastRestoreTestAt', 'organisation.backup.last_restore_test_at', 'string', 'organisation'),

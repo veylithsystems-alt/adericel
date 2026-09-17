@@ -59,6 +59,7 @@ implications.
 | [0046](./ADR-0046-break-glass-and-grant-attenuation.md)             | Break-glass, and grants that mean what they say                   | Accepted |
 | [0047](./ADR-0047-commercial-is-not-security.md)                    | A commercial state is not a security state                        | Accepted |
 | [0048](./ADR-0048-support-domain.md)                                | Support is a disclosure surface, and it routes to the MSP         | Accepted |
+| [0049](./ADR-0049-product-and-company-layers.md)                    | Adericel is the product; Veylith is the company that operates it  | Accepted |
 
 ## Writing a new ADR
 

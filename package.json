@@ -46,7 +46,8 @@
     "n8n:validate": "tsx --conditions=development workflows/n8n/validate.ts",
     "brand:build": "tsx --conditions=development scripts/build-brand-assets.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test",
+    "db:migrate:product": "MIGRATION_LAYER=product tsx scripts/migrate.ts up"
   },
   "dependencies": {
     "pg": "^8.16.3"
