@@ -48,7 +48,8 @@
     "verify:restore": "tsx scripts/verify-restore.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm test",
     "db:migrate:product": "MIGRATION_LAYER=product tsx scripts/migrate.ts up",
-    "docs:operating-model": "tsx scripts/generate-operating-model.ts"
+    "docs:operating-model": "tsx scripts/generate-operating-model.ts",
+    "docs:capability-status": "tsx scripts/generate-capability-status.ts"
   },
   "dependencies": {
     "@adericel/resolution": "workspace:*",

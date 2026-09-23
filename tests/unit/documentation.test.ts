@@ -139,3 +139,51 @@ describe('the data protection documents describe the code that exists', () => {
     }
   });
 });
+
+describe('the residual-risk register', () => {
+  const REGISTER = 'docs/audit/RESIDUAL_RISK_REGISTER.md';
+  const register = readFileSync(join(ROOT, REGISTER), 'utf8');
+
+  /** Each `### RR-nnn` entry and its body. */
+  function entries(section: string): readonly { heading: string; body: string }[] {
+    return section
+      .split(/(?=^### RR-)/m)
+      .filter((block) => block.startsWith('### RR-'))
+      .map((block) => ({ heading: block.split('\n')[0] ?? '', body: block }));
+  }
+
+  it('files no open risk under the heading that says it is closed', () => {
+    /**
+     * Found by adding RR-073 and noticing it landed in the wrong section
+     * alongside four others that were already there.
+     *
+     * A register that files an open risk under "Closed" is worse than no
+     * register: somebody reading it to decide whether a risk was dealt with
+     * gets the answer "yes" from the heading and "no" from the row, and the
+     * heading is what they skim. §37 is about exactly this kind of claim.
+     */
+    const closed = register.split(/^## Closed$/m)[1];
+    expect(closed, `${REGISTER} has no "## Closed" section`).toBeDefined();
+
+    const misfiled = entries(closed ?? '')
+      .filter((entry) => /\|\s*\*\*State\*\*\s*\|\s*`OPEN`/.test(entry.body))
+      .map((entry) => entry.heading);
+
+    expect(misfiled, `Open risks filed under "## Closed":\n${misfiled.join('\n')}`).toEqual([]);
+  });
+
+  it('gives every entry a state, because an entry without one asserts nothing', () => {
+    const stateless = entries(register)
+      .filter((entry) => !/\|\s*\*\*State\*\*\s*\|/.test(entry.body))
+      .map((entry) => entry.heading);
+    expect(stateless).toEqual([]);
+  });
+
+  it('numbers every entry uniquely', () => {
+    const numbers = entries(register).map(
+      (entry) => /### (RR-\d+)/.exec(entry.heading)?.[1] ?? entry.heading,
+    );
+    const duplicated = numbers.filter((number, index) => numbers.indexOf(number) !== index);
+    expect(duplicated).toEqual([]);
+  });
+});
