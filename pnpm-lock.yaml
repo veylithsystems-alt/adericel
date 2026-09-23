@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@adericel/resolution':
+        specifier: workspace:*
+        version: link:packages/resolution
       pg:
         specifier: ^8.16.3
         version: 8.23.0
@@ -421,6 +424,18 @@ importers:
       '@adericel/truth-engine':
         specifier: workspace:*
         version: link:../truth-engine
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
+  packages/resolution:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: ^4.1.11
         version: 4.5.4

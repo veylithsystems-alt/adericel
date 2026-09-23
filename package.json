@@ -47,9 +47,11 @@
     "brand:build": "tsx --conditions=development scripts/build-brand-assets.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm test",
-    "db:migrate:product": "MIGRATION_LAYER=product tsx scripts/migrate.ts up"
+    "db:migrate:product": "MIGRATION_LAYER=product tsx scripts/migrate.ts up",
+    "docs:operating-model": "tsx scripts/generate-operating-model.ts"
   },
   "dependencies": {
+    "@adericel/resolution": "workspace:*",
     "pg": "^8.16.3"
   },
   "devDependencies": {

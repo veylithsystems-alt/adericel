@@ -82,6 +82,11 @@ packages/
                   prohibited, MSP-first routing, the disclosure gate, and
                   integrity-protected diagnostic bundles. Pure. Nothing about an
                   organisation is disclosed before somebody is identified.
+  resolution/     What to do about an UNKNOWN. Classifies it, weighs how much it
+                  matters, routes it to whoever can actually close it, and says
+                  how many control assessments resolving it would make
+                  decidable — as a count over the graph, never a confidence
+                  percentage. Pure.
   inference/      Local-first inference. Sovereignty is a classification the code
                   enforces, not a preference: an external provider does not start
                   without a written acknowledgement. Extraction must quote the
@@ -357,6 +362,29 @@ feature list:
   MSP by default and structurally cannot be reassigned past that boundary. The
   direct-support entitlement table exists — §22 needs the gate regardless — and
   ships empty, with no code path that fills it.
+
+## For an MSP evaluating this
+
+Four documents written for the conversation an MSP actually has, rather than for
+an engineer reading the source:
+
+- [**MSP operating model**](./docs/product/MSP_OPERATING_MODEL.md) — who decides
+  what, who owns the evidence, where an escalation goes, what the client must
+  approve, what each account state means, and how offboarding works.
+  **Generated from the system**: rendered from
+  [`operating-model.ts`](./packages/domain/src/operating-model.ts), checked
+  against the authority and surface models, and CI fails if it drifts. A diagram
+  drawn by hand is true on the day it is drawn.
+- [**Trust and deployment pack**](./docs/product/TRUST_AND_DEPLOYMENT_PACK.md) —
+  the thirteen questions a UK MSP and their client ask before putting an estate
+  into this, each answered with the place in the code where it is enforced, and
+  a closing section on what it does not claim.
+- [**Framework packs**](./docs/product/FRAMEWORK_PACKS.md) — what a pack is, the
+  eight things every pack must report, and the sentence that governs all of
+  them: using a framework pack is not certification and is not legal compliance.
+- [**Commercial boundary**](./docs/product/COMMERCIAL_BOUNDARY.md) — the six
+  positions on Adericel versus Veylith Systems, each with the build target,
+  migration flag or test that enforces it.
 
 ## Documentation
 

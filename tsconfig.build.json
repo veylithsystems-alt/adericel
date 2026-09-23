@@ -50,6 +50,9 @@
       "path": "./packages/support"
     },
     {
+      "path": "./packages/resolution"
+    },
+    {
       "path": "./apps/api"
     },
     {

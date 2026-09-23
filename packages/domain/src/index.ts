@@ -12,6 +12,7 @@ export * from './autonomy.js';
 export * from './events.js';
 export * from './tenancy.js';
 export * from './commercial.js';
+export * from './operating-model.js';
 export * from './billing.js';
 export * from './conflict.js';
 export * from './surface.js';

@@ -4,3 +4,8 @@ coverage
 pnpm-lock.yaml
 workflows/n8n/adericel.n8n.json
 docs/api/openapi.generated.json
+
+# Generated documents. The generator is the single authority on their
+# formatting: if Prettier also reformats them, the two disagree and the drift
+# check fails on alternate runs — which it did, once.
+docs/product/MSP_OPERATING_MODEL.md
