@@ -96,6 +96,10 @@ const COMMON_ROUTES = new Set([
   // prohibited. Published deliberately — a customer is entitled to know that
   // nobody can mark their S1 resolved without them. Names no organisation.
   'GET /v1/support/model',
+  // The resolution vocabulary: what each kind of unknown means and how
+  // materiality is banded. Reference data an operator reads while working a
+  // queue. Names no organisation.
+  'GET /v1/resolution/model',
 ]);
 
 /**

@@ -54,6 +54,74 @@ behaviour rather than just the parameters.
 
 ---
 
+## What to do about an `UNKNOWN`
+
+Being honest about what is not known is the first idea, and on its own it is
+only half a product. An MSP told that forty controls are undecided has been
+handed the cost of finding out, not relieved of it. So every undecided control
+carries eight things, and none of them is optional:
+
+|                                          | Where it comes from                                |
+| ---------------------------------------- | -------------------------------------------------- |
+| Why it is unknown                        | `kind` and `becauseUnknown`                        |
+| What evidence would resolve it           | `resolvedBy`                                       |
+| Who can actually provide that            | `owner` and `ownerDetail`                          |
+| How material it is                       | `materiality`, with every reason that put it there |
+| What happens if nobody resolves it       | `ifUnresolved`                                     |
+| Which sort of gap it is                  | one of six `kind`s                                 |
+| The next recommended action              | `nextAction`, imperative, addressed to its owner   |
+| How much uncertainty resolving it clears | `uncertaintyReduction`, as counts                  |
+
+`GET /v1/organisations/:id/unknowns` returns that queue, ranked, with the items
+nobody can action separated out rather than mixed in. Six things about it are
+deliberate:
+
+**The six kinds answer "what does a person do next", not "what went wrong".**
+`MISSING` means nothing has been observed. `STALE` means it was, and the
+observation is too old. `CONTRADICTORY` means two sources disagree and
+collecting harder will produce more disagreement, not less. `UNCOLLECTABLE`
+means the path exists and is broken — a repair, and usually the best-value item
+in the queue. `OUT_OF_SCOPE` means no connector would ever change it.
+`AWAITING_DECISION` means a named person owes a consent, an approval or an
+authority, and collecting harder is precisely the wrong instinct. Every reason
+the engine can produce maps to exactly one kind, and
+[the map is total by construction](./packages/resolution/src/kind.ts) — adding a
+reason without deciding what a person does about it does not compile.
+
+**Fan-out is computed, because it is the thing an operator cannot see.**
+Severity is on the screen already. "This one device-management gap is why five
+controls are dark" is not. The queue builds a predicate-to-controls map across
+the whole organisation, routes each item on its widest gap, and a MEDIUM control
+blocking five outranks a lone CRITICAL — which is the correct order and the
+opposite of what working by severity produces.
+
+**A never-assessed control appears.** It has no row in the current-state
+projection at all, so a queue read from that projection would report a freshly
+onboarded organisation as having nothing undecided. That is the single most
+dangerous sentence this product could produce, and
+[`resolution-queue.test.ts`](./tests/e2e/resolution-queue.test.ts) exists to
+stop it.
+
+**The numbers are counts, never confidence.** Every figure carries the sentence
+saying so. "Resolving this makes six assessments decidable" is a fact about the
+graph. "73% confident" is a fabrication dressed as precision, and there is
+nowhere in this product to write it.
+
+**Nothing is ranked `BLOCKING` without a date somebody typed.** Urgency comes
+from `organisation_commitments` — a certification assessment, an insurer's
+renewal, a questionnaire deadline — recorded by a named person and never
+inferred. A queue that assumed a deadline would mark everything blocking, and an
+operator would learn to ignore the ranking, which is worse than no ranking
+because it looks like one. Where no commitment is recorded, the queue says so in
+its own `limitations`.
+
+**An item nobody can action is capped, not hidden.** It stays out of the work
+queue, because an unactionable item in a backlog teaches an operator to distrust
+the backlog. It is still returned, because a CRITICAL control nobody can observe
+is a real hole in the assurance position and belongs in a report.
+
+---
+
 ## What is in this repository
 
 ```
@@ -82,10 +150,12 @@ packages/
                   prohibited, MSP-first routing, the disclosure gate, and
                   integrity-protected diagnostic bundles. Pure. Nothing about an
                   organisation is disclosed before somebody is identified.
-  resolution/     What to do about an UNKNOWN. Classifies it, weighs how much it
-                  matters, routes it to whoever can actually close it, and says
-                  how many control assessments resolving it would make
-                  decidable — as a count over the graph, never a confidence
+  resolution/     What to do about an UNKNOWN. Sorts it into one of six kinds by
+                  what a person does next, weighs how much it matters, routes it
+                  to whoever can actually close it — including the client, when
+                  a person owes a decision rather than a source owing data — and
+                  says how many control assessments resolving it would make
+                  decidable, as a count over the graph and never a confidence
                   percentage. Pure.
   inference/      Local-first inference. Sovereignty is a classification the code
                   enforces, not a preference: an external provider does not start

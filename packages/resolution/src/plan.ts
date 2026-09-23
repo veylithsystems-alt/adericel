@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import type { DegradedReason, UnknownReason } from '@adericel/domain';
+import type { BlockedReason, DegradedReason, UnknownReason } from '@adericel/domain';
 import {
   KIND_MEANING,
+  KIND_OF_BLOCKED_REASON,
   KIND_OF_DEGRADED_REASON,
   KIND_OF_REASON,
   isActionable,
@@ -83,9 +84,17 @@ export interface UnknownItemInput {
   readonly controlId: string;
   readonly controlKey: string;
   readonly controlTitle: string;
-  /** Exactly one of these is set, matching the engine's own output. */
+  /** At most one of these is set, matching the engine's own output. */
   readonly unknownReason: UnknownReason | null;
   readonly degradedReason: DegradedReason | null;
+  /**
+   * Set when the control is BLOCKED: a person owes a decision.
+   *
+   * Carried separately from `unknownReason` because the two lead to opposite
+   * actions. An unknown says look harder; a block says stop looking and go and
+   * ask somebody.
+   */
+  readonly blockedReason: BlockedReason | null;
   /** Canonical predicates the rule needed and did not get. */
   readonly missingPredicates: readonly string[];
   /**
@@ -149,6 +158,23 @@ const UNCERTAINTY_CAVEAT =
   'whatever the evidence says.';
 
 function reasonSentence(input: UnknownItemInput): string {
+  if (input.blockedReason !== null) {
+    switch (input.blockedReason) {
+      case 'AUTHORITY_MISSING':
+        return 'Adericel holds no authority to observe what this control needs. Nothing has been collected because nobody granted permission to look, which is not the same as nothing being there.';
+      case 'APPROVAL_PENDING':
+        return 'An action this control depends on is waiting for a human approval. The work is queued, not failed.';
+      case 'CONSENT_REQUIRED':
+        return 'The client has not granted the consent collection requires, so Adericel has deliberately not looked.';
+      case 'DEPENDENCY_BLOCKED':
+        return 'Another control or system this one depends on is itself unresolved, so this cannot be decided until that one is.';
+      case 'SAFETY_CONDITION_UNMET':
+        return 'A safety precondition for assessing this is not met, so assessment was stopped on purpose rather than attempted and failed.';
+      case 'CONTAINED':
+        return 'This estate or integration is under containment. Somebody decided to stop looking, and that decision — not an absence of evidence — is why this is undecided.';
+    }
+  }
+
   if (input.degradedReason !== null) {
     switch (input.degradedReason) {
       case 'CREDENTIAL_EXPIRED':
@@ -203,6 +229,85 @@ function describePredicates(predicates: readonly string[]): string {
   return `\`${predicates[0]}\` and ${predicates.length - 1} other predicates`;
 }
 
+/**
+ * Who owes the decision, per blocked reason.
+ *
+ * Data rather than a switch, so adding a `BlockedReason` without deciding who
+ * resolves it does not compile. The split between CLIENT and MSP is the one
+ * that matters operationally: an MSP cannot grant itself authority over a
+ * customer's estate, and presenting `CONSENT_REQUIRED` as MSP work would send
+ * an engineer to do something they are not permitted to do.
+ */
+const BLOCKED_ROUTING: Readonly<
+  Record<
+    BlockedReason,
+    { owner: ResolutionOwner; ownerDetail: string; resolvedBy: string; nextAction: string }
+  >
+> = {
+  AUTHORITY_MISSING: {
+    owner: 'CLIENT',
+    ownerDetail:
+      'The authority to observe this belongs to the client. The MSP cannot grant itself ' +
+      'access to a customer estate, and Adericel will not act as though it had.',
+    resolvedBy:
+      'A recorded grant of authority from the client covering what this control needs to ' +
+      'observe.',
+    nextAction:
+      'Ask the client to grant the access this control requires, and record who granted it. ' +
+      'Do not widen an existing connector to work around it.',
+  },
+  APPROVAL_PENDING: {
+    owner: 'MSP',
+    ownerDetail:
+      'An approval is sitting in a queue. Whoever holds it can release this today, and ' +
+      'nothing else needs to happen first.',
+    resolvedBy: 'The pending approval being decided, either way.',
+    nextAction:
+      'Find the pending approval and decide it. A refusal resolves this as cleanly as an ' +
+      'approval does — what leaves the control undecided is nobody looking.',
+  },
+  CONSENT_REQUIRED: {
+    owner: 'CLIENT',
+    ownerDetail:
+      'Collection needs the client’s consent and does not have it. Adericel has deliberately ' +
+      'not looked.',
+    resolvedBy: 'Consent recorded by a named person at the client.',
+    nextAction:
+      'Ask the client for the consent collection requires, and record who gave it. Until they ' +
+      'do, this control stays undecided by design.',
+  },
+  DEPENDENCY_BLOCKED: {
+    owner: 'MSP',
+    ownerDetail:
+      'Something this control depends on is itself unresolved. Working this item directly ' +
+      'will not move it.',
+    resolvedBy: 'The control or system this depends on reaching a determinate state.',
+    nextAction:
+      'Resolve the dependency first. This item will clear on its own once that one does, so ' +
+      'do not spend time on it now.',
+  },
+  SAFETY_CONDITION_UNMET: {
+    owner: 'MSP',
+    ownerDetail:
+      'A precondition for assessing this safely is not met. Adericel stopped rather than ' +
+      'proceeding, which is the intended behaviour.',
+    resolvedBy: 'The safety precondition being met, or a recorded decision to waive it.',
+    nextAction:
+      'Establish the missing precondition, or record a decision that assessment may proceed ' +
+      'without it and why. Do not disable the check.',
+  },
+  CONTAINED: {
+    owner: 'MSP',
+    ownerDetail:
+      'Containment is in force and is why this is undecided. That is a decision somebody ' +
+      'made, not a fault — and lifting it is also a decision.',
+    resolvedBy: 'Containment being lifted, or the containment being recorded as the position.',
+    nextAction:
+      'Decide whether containment still applies. If it does, record that this control is ' +
+      'undecided because of containment rather than leaving it in the work queue.',
+  },
+};
+
 function ownerOf(
   input: UnknownItemInput,
   kind: UnknownKind,
@@ -212,6 +317,14 @@ function ownerOf(
   resolvedBy: string;
   nextAction: string;
 } {
+  if (kind === 'AWAITING_DECISION' && input.blockedReason !== null) {
+    // Checked before `attestationOnly`: a contained estate is contained
+    // whether or not the predicate could also come from a person, and telling
+    // an operator to go and collect an attestation from a client who has
+    // withdrawn consent would be the wrong instruction confidently given.
+    return BLOCKED_ROUTING[input.blockedReason];
+  }
+
   if (kind === 'OUT_OF_SCOPE') {
     return {
       owner: 'NOBODY',
@@ -303,13 +416,40 @@ function ownerOf(
   };
 }
 
-export function planResolution(input: UnknownItemInput): ResolutionPlan {
+export function planResolution(raw: UnknownItemInput): ResolutionPlan {
+  /**
+   * An omitted reason is the same as an absent one.
+   *
+   * The three reason fields are required by the interface, and a caller
+   * spreading a partial over an object literal can still hand us `undefined` —
+   * TypeScript does not always catch it, and a row read from JSON never will.
+   * Left unnormalised, `undefined !== null` is true and the plan comes out
+   * carrying no kind at all: a response an operator cannot read, produced
+   * without an error anybody would see.
+   */
+  const input: UnknownItemInput = {
+    ...raw,
+    unknownReason: raw.unknownReason ?? null,
+    degradedReason: raw.degradedReason ?? null,
+    blockedReason: raw.blockedReason ?? null,
+  };
+
+  /**
+   * Blocked first, then degraded, then unknown.
+   *
+   * The order is the order of confidence. A blocked reason names a person and a
+   * decision; a degraded reason names a repair; an unknown reason names an
+   * absence. If a row somehow carries more than one, the most specific
+   * statement about what to do next is the one worth acting on.
+   */
   const kind =
-    input.degradedReason !== null
-      ? KIND_OF_DEGRADED_REASON[input.degradedReason]
-      : input.unknownReason !== null
-        ? KIND_OF_REASON[input.unknownReason]
-        : 'MISSING';
+    input.blockedReason !== null
+      ? KIND_OF_BLOCKED_REASON[input.blockedReason]
+      : input.degradedReason !== null
+        ? KIND_OF_DEGRADED_REASON[input.degradedReason]
+        : input.unknownReason !== null
+          ? KIND_OF_REASON[input.unknownReason]
+          : 'MISSING';
 
   const actionable = isActionable(kind);
   const verdict = assessMateriality({ ...input.materialityInput, actionable });

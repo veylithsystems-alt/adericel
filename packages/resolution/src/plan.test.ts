@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { UNKNOWN_REASONS, DEGRADED_REASONS } from '@adericel/domain';
-import { KIND_MEANING, KIND_OF_DEGRADED_REASON, KIND_OF_REASON, UNKNOWN_KINDS } from './kind.js';
+import { UNKNOWN_REASONS, DEGRADED_REASONS, BLOCKED_REASONS } from '@adericel/domain';
+import {
+  KIND_MEANING,
+  KIND_OF_BLOCKED_REASON,
+  KIND_OF_DEGRADED_REASON,
+  KIND_OF_REASON,
+  UNKNOWN_KINDS,
+} from './kind.js';
 import { assessMateriality, MATERIALITY } from './materiality.js';
 import { orderResolutionQueue, planResolution, type UnknownItemInput } from './plan.js';
 
@@ -21,6 +27,7 @@ function item(overrides: Partial<UnknownItemInput> = {}): UnknownItemInput {
     controlTitle: 'Multi-factor authentication is applied to cloud services',
     unknownReason: 'NO_EVIDENCE',
     degradedReason: null,
+    blockedReason: null,
     missingPredicates: ['identity.mfa.enforced'],
     supplyingConnector: 'microsoft-entra',
     connectorConfigured: false,
@@ -49,6 +56,9 @@ describe('every unknown is classified, and the classification is total', () => {
     }
     for (const reason of DEGRADED_REASONS) {
       expect(UNKNOWN_KINDS, reason).toContain(KIND_OF_DEGRADED_REASON[reason]);
+    }
+    for (const reason of BLOCKED_REASONS) {
+      expect(UNKNOWN_KINDS, reason).toContain(KIND_OF_BLOCKED_REASON[reason]);
     }
   });
 
@@ -388,5 +398,102 @@ describe('the queue an operator actually works', () => {
     expect(work).toEqual([]);
     expect(notActionable).toEqual([]);
     expect(summary).toMatch(/0 unknown\(s\) can be resolved/);
+  });
+});
+
+describe('a control nobody is looking at, because somebody has not decided', () => {
+  /**
+   * BLOCKED is the state that most invites the wrong action.
+   *
+   * A blocked control looks identical to a missing one from the outside: no
+   * evidence, no determination. The difference is that the collection path is
+   * fine and a person is the bottleneck — so "configure the connector" is
+   * confidently wrong advice, and following it wastes an engineer's afternoon
+   * while the client waits to be asked a question nobody asked them.
+   */
+  it('treats every blocked reason as a decision, never as a repair', () => {
+    for (const reason of BLOCKED_REASONS) {
+      expect(KIND_OF_BLOCKED_REASON[reason], reason).toBe('AWAITING_DECISION');
+    }
+  });
+
+  it('never tells an operator to collect harder when consent was never given', () => {
+    const plan = planResolution(item({ unknownReason: null, blockedReason: 'CONSENT_REQUIRED' }));
+    expect(plan.kind).toBe('AWAITING_DECISION');
+    expect(plan.owner).toBe('CLIENT');
+    expect(plan.nextAction).toMatch(/consent/i);
+    // The words that would send somebody to the wrong place.
+    expect(plan.nextAction).not.toMatch(/configure|re-run|reauthoris/i);
+  });
+
+  it('does not let the MSP grant itself authority over a customer estate', () => {
+    const plan = planResolution(item({ unknownReason: null, blockedReason: 'AUTHORITY_MISSING' }));
+    expect(plan.owner).toBe('CLIENT');
+    expect(plan.ownerDetail).toMatch(/cannot grant itself/i);
+    expect(plan.nextAction).toMatch(/Do not widen an existing connector/);
+  });
+
+  it('points a pending approval at whoever holds it, and accepts a refusal', () => {
+    const plan = planResolution(item({ unknownReason: null, blockedReason: 'APPROVAL_PENDING' }));
+    expect(plan.owner).toBe('MSP');
+    // A refusal resolves the unknown as cleanly as an approval. A queue that
+    // only counted approvals would push an operator towards approving.
+    expect(plan.nextAction).toMatch(/refusal resolves this as cleanly/i);
+  });
+
+  it('tells an operator not to work a dependency-blocked item directly', () => {
+    const plan = planResolution(item({ unknownReason: null, blockedReason: 'DEPENDENCY_BLOCKED' }));
+    expect(plan.nextAction).toMatch(/Resolve the dependency first/);
+    expect(plan.nextAction).toMatch(/do not spend time on it now/i);
+  });
+
+  it('presents containment as a decision that was made, not as a fault', () => {
+    const plan = planResolution(item({ unknownReason: null, blockedReason: 'CONTAINED' }));
+    expect(plan.becauseUnknown).toMatch(/Somebody decided to stop looking/);
+    expect(plan.ownerDetail).toMatch(/not a fault/i);
+  });
+
+  it('does not escalate an item where somebody has already been asked', () => {
+    // Asking again is not progress. Escalating or accepting the risk is, and
+    // the plan says so rather than raising the band on every pass.
+    const plan = planResolution(
+      item({
+        unknownReason: null,
+        blockedReason: 'APPROVAL_PENDING',
+        materialityInput: {
+          severity: 'MEDIUM',
+          controlsAffected: 1,
+          blocksCommitment: false,
+          daysUntilCommitment: null,
+          awaitingPerson: true,
+          actionable: true,
+        },
+      }),
+    );
+    expect(plan.materiality).toBe('LOW');
+    expect(plan.materialityBecause.join(' ')).toMatch(/Chasing again is not new work/);
+  });
+
+  it('blames itself only when the engine really gave no reason', () => {
+    /**
+     * The defect sentence — "the engine reported UNKNOWN without naming a
+     * reason, which is itself a defect worth reporting" — is the right thing
+     * to say when Adericel genuinely produced a reasonless UNKNOWN, and a
+     * false accusation against ourselves in every other case.
+     *
+     * A caller that omits a reason field rather than passing null must not
+     * trigger it, and must not produce a plan carrying no kind at all.
+     */
+    const withoutBlocked = planResolution(
+      // Deliberately omitting the field a caller might forget, the way a
+      // partial fixture or a JSON row does.
+      { ...item(), blockedReason: undefined } as unknown as UnknownItemInput,
+    );
+    expect(UNKNOWN_KINDS).toContain(withoutBlocked.kind);
+    expect(withoutBlocked.kind).toBe('MISSING');
+    expect(withoutBlocked.becauseUnknown).not.toMatch(/defect worth reporting/);
+
+    const genuinelyReasonless = planResolution(item({ unknownReason: null }));
+    expect(genuinelyReasonless.becauseUnknown).toMatch(/defect worth reporting/);
   });
 });

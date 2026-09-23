@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { DegradedReason, UnknownReason } from '@adericel/domain';
+import type { BlockedReason, DegradedReason, UnknownReason } from '@adericel/domain';
 
 /**
  * What kind of not-knowing this is.
@@ -9,10 +9,11 @@ import type { DegradedReason, UnknownReason } from '@adericel/domain';
  * of these are one credential away from resolution and which are questions
  * nobody can answer from a system at all.
  *
- * The ten `UnknownReason` values the Truth Engine produces are precise about
- * mechanism. These five are about **what a person does next**, which is a
- * different question and the one an operator is actually asking. Each reason
- * maps to exactly one kind, so the mapping is total and cannot drift.
+ * The `UnknownReason`, `DegradedReason` and `BlockedReason` values the Truth
+ * Engine produces are precise about mechanism. These six are about **what a
+ * person does next**, which is a different question and the one an operator is
+ * actually asking. Every reason in all three vocabularies maps to exactly one
+ * kind, so the mapping is total and cannot drift.
  */
 export const UNKNOWN_KINDS = [
   /**
@@ -52,6 +53,17 @@ export const UNKNOWN_KINDS = [
    * the queue: one broken credential typically darkens several controls.
    */
   'UNCOLLECTABLE',
+  /**
+   * A named person owes a decision, and nothing moves until they make it.
+   *
+   * The one kind where collecting harder is precisely the wrong instinct. A
+   * BLOCKED control is not a gap in observation — somebody has withheld
+   * consent, an approval is sitting in a queue, or containment is deliberately
+   * in force. Reporting that as "no evidence" would send an engineer to fix a
+   * connector that is working perfectly, and would hide the fact that the
+   * organisation is waiting on one of its own people.
+   */
+  'AWAITING_DECISION',
 ] as const;
 export type UnknownKind = (typeof UNKNOWN_KINDS)[number];
 export const unknownKindSchema = z.enum(UNKNOWN_KINDS);
@@ -93,6 +105,23 @@ export const KIND_OF_DEGRADED_REASON: Readonly<Record<DegradedReason, UnknownKin
 };
 
 /**
+ * Every `BlockedReason`, classified.
+ *
+ * All of them are decisions rather than repairs — BLOCKED exists in the
+ * vocabulary precisely because "a person has not decided yet" is a different
+ * fact from "nobody has looked yet", and collapsing the two is how an MSP ends
+ * up chasing a credential when what they needed was a signature.
+ */
+export const KIND_OF_BLOCKED_REASON: Readonly<Record<BlockedReason, UnknownKind>> = {
+  AUTHORITY_MISSING: 'AWAITING_DECISION',
+  APPROVAL_PENDING: 'AWAITING_DECISION',
+  CONSENT_REQUIRED: 'AWAITING_DECISION',
+  DEPENDENCY_BLOCKED: 'AWAITING_DECISION',
+  SAFETY_CONDITION_UNMET: 'AWAITING_DECISION',
+  CONTAINED: 'AWAITING_DECISION',
+};
+
+/**
  * Kinds that no amount of effort inside Adericel will close.
  *
  * Kept as data because it decides whether an item belongs in a work queue at
@@ -118,4 +147,8 @@ export const KIND_MEANING: Readonly<Record<UnknownKind, string>> = {
   UNCOLLECTABLE:
     'The collection path exists and is not working. This is a repair, and it usually ' +
     'darkens more than one control.',
+  AWAITING_DECISION:
+    'A named person owes a decision — a consent, an approval, or an authority that was ' +
+    'never granted. Nothing collects until they make it, and collecting harder will not ' +
+    'help.',
 };
