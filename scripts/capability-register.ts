@@ -232,7 +232,7 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
           'SURVIVED with a non-zero exit',
       ),
       VERIFIED(
-        'Nineteen recorded mutations all killed by their named tests, run by CI rather than by ' +
+        'Twenty-one recorded mutations all killed by their named tests, run by CI rather than by ' +
           'hand. The runner refuses a dirty working tree, restores every file it touched ' +
           'including artefacts a suite regenerated, and reports a stale or ambiguous match as ' +
           'an error rather than a pass',

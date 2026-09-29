@@ -295,6 +295,26 @@ export const MUTATIONS: readonly Mutation[] = [
     needsDatabase: true,
   },
   {
+    id: 'crosswalk-caveat-dropped',
+    invariant:
+      'Every crosswalk lead states that it does not determine the requirement, not just the ' +
+      'first one.',
+    file: 'packages/crosswalk/src/coverage.ts',
+    find: '      doesNotDetermine: DOES_NOT_DETERMINE,',
+    replace: "      doesNotDetermine: '',",
+    suite: 'packages/crosswalk/src/crosswalk.test.ts',
+    mustFail: ['says on every single lead that it does not determine the requirement'],
+  },
+  {
+    id: 'readme-names-a-missing-script',
+    invariant: 'The README never tells a reader to run a command that does not exist.',
+    file: 'README.md',
+    find: 'pnpm test:mutation    #',
+    replace: 'pnpm test:mutants     #',
+    suite: 'tests/unit/documentation.test.ts',
+    mustFail: ['names no script that does not exist'],
+  },
+  {
     id: 'register-cites-missing-path',
     invariant: 'Every evidence path the capability register cites must exist.',
     file: 'scripts/capability-register.ts',

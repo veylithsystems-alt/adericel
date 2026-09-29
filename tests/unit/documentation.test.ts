@@ -267,3 +267,47 @@ describe('documentation distinguishes what is built from what is not', () => {
     }
   });
 });
+
+describe('the README tells a reader to run things that exist', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const scripts = Object.keys(
+    (
+      JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts,
+  );
+
+  /** Every `pnpm <name>` the README names, deduplicated. */
+  const invoked = [
+    ...new Set(
+      [...readme.matchAll(/(?:^|[\s`])pnpm\s+((?:[a-z]+:)?[a-z][a-z0-9:-]*)/g)].map(
+        (m) => m[1] ?? '',
+      ),
+    ),
+  ].filter((name) => name !== '');
+
+  it('names commands to check', () => {
+    // A guard on the guard: if the pattern stops matching, the check below would
+    // pass by finding nothing to verify.
+    expect(invoked.length).toBeGreaterThan(5);
+  });
+
+  it('names no script that does not exist', () => {
+    /**
+     * The failure this prevents is small and corrosive: a script is renamed, the
+     * README keeps telling people to run the old name, and the first thing a new
+     * reader does with this repository does not work. "Documentation matches
+     * implementation" is one of the ten completion conditions, and a command is
+     * the most literal form of it.
+     */
+    const passthrough = new Set(['install', 'dlx', 'exec', 'run', 'add', 'why', 'audit', 'store']);
+    const unknown = invoked.filter((name) => !scripts.includes(name) && !passthrough.has(name));
+    expect(
+      unknown,
+      `The README tells a reader to run scripts that are not in package.json:\n  ${unknown.join(
+        '\n  ',
+      )}`,
+    ).toEqual([]);
+  });
+});

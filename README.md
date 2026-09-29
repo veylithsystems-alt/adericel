@@ -133,6 +133,44 @@ is a real hole in the assurance position and belongs in a report.
 
 ---
 
+## One observation, several frameworks, and no false equivalence
+
+An MSP whose customer holds Cyber Essentials and ISO 27001 is answering two
+schemes from one estate. The obviously valuable feature is to answer the second
+from the first's evidence. It is also the feature that would make this product
+worthless, so it is worth being precise about what is offered.
+
+A **crosswalk** here is a directed statement: this requirement in this framework
+at this version, related to that one, with a rationale, a confidence band, the
+conditions under which it holds, and who asserted it. Directed, because a
+symmetric pair is itself an equivalence claim — pair Cyber Essentials
+`access.mfa_on_cloud_services` with ISO 27001 `A.5.17` and a symmetric table says
+each satisfies the other. It does not: the first goes part of the way towards the
+second, and the second says nothing about whether the first's specific condition
+was met. `reverseOf()` returns null for every directed relation, so a screen
+showing "what maps to this requirement" has to query for crosswalks whose
+destination it is rather than flipping the ones whose source it is.
+
+**A crosswalk never establishes an assurance state.** `stateFromCrosswalks()`
+returns `UNKNOWN` whatever the crosswalks say, `EQUIVALENT` included, and it
+exists so that the refusal is something a future contributor finds rather than an
+absence they have to notice. What a crosswalk produces is a place to look for
+evidence that already exists, with an honest statement of how far that gets you —
+and every lead carries the sentence saying it does not determine anything, on
+every lead, because a caveat shown once at the top of a list is a caveat that gets
+truncated in a table cell.
+
+`UNRELATED` is a recordable relation, which sounds like pedantry and is not:
+without it, "no crosswalk exists" and "somebody read both requirements and found
+no relationship" are the same empty result, and they lead to completely different
+work.
+
+**The layer holds no data yet.** A mapping between two published schemes has to be
+read from the schemes; writing one from recollection would produce a confident
+rationale with no basis, which is precisely what the confidence band and the
+provenance field exist to prevent. That is recorded as an open risk rather than
+quietly left blank.
+
 ## What is in this repository
 
 ```
@@ -271,11 +309,12 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Nineteen are recorded. They include: a control scoped out of assessment
+Twenty-one are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
-which would report a freshly onboarded organisation as having nothing undecided.
+which would report a freshly onboarded organisation as having nothing undecided. One of
+them breaks this README, by renaming a command it tells you to run.
 
 Three things about the runner are deliberate. It refuses to start on a dirty
 working tree, because a crash would otherwise leave a mutated file
@@ -288,23 +327,31 @@ mutation applied somewhere unintended would report a survival that means nothing
 ## Verifying it
 
 ```bash
-pnpm verify        # lint, typecheck, and the full test suite
-pnpm n8n:validate  # structural and safety validation of the n8n export
+pnpm verify           # lint, typecheck, and the full test suite
+pnpm test:mutation    # break each guard and confirm its tests fail
+pnpm n8n:validate     # structural and safety validation of the n8n export
+pnpm release:position # where this tree stands against the ten completion conditions
 ```
 
 The suites are separated by what a failure would mean:
 
-| Suite              | A failure here means                                           |
-| ------------------ | -------------------------------------------------------------- |
-| `test:unit`        | The Truth Engine or the domain model computed the wrong answer |
-| `test:tenancy`     | One organisation's data was reachable from another             |
-| `test:security`    | Authentication or authorisation did not hold                   |
-| `test:integration` | A component boundary is wrong                                  |
-| `test:e2e`         | The product does not do what it claims end to end              |
+| Suite              | A failure here means                                              |
+| ------------------ | ----------------------------------------------------------------- |
+| `test:unit`        | The Truth Engine or the domain model computed the wrong answer    |
+| `test:tenancy`     | One organisation's data was reachable from another                |
+| `test:security`    | Authentication or authorisation did not hold                      |
+| `test:integration` | A component boundary is wrong                                     |
+| `test:e2e`         | The product does not do what it claims end to end                 |
+| `test:mutation`    | A guard has rotted: its test would pass with the invariant broken |
 
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
 tick there is not "a test broke"; it is a claim about isolation that no longer
 holds, and it should say so in the checks list without anyone having to open it.
+
+`test:mutation` is deliberately **not** part of `pnpm verify`. It edits source
+files and restores them, so it refuses to run on a dirty working tree — which is
+the normal state while you are working. Run it before you push; CI runs it on
+every push against a fresh checkout.
 
 ## Where your customers' documents go
 
