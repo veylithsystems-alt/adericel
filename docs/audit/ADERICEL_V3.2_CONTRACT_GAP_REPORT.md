@@ -47,7 +47,7 @@ been built from a guess at them.
 
 ## 3. Requirements this audit found unmet
 
-### R1 — Framework crosswalks are absent — **RED**
+### R1 — Framework crosswalks — **CLOSED, layer empty**
 
 v3.2 requires a framework-independent control and requirement layer with
 crosswalks preserving **source framework, destination framework, mapping
@@ -55,17 +55,38 @@ rationale, confidence, applicability, version and provenance**, and is explicit
 that the system "must never imply equivalence where the underlying requirements
 differ".
 
-The repository has the framework-independent layer: `controls` carry a
-`ruleset_key`/`rule_key` and map to `requirements` through `control_requirements`
-with a `coverage` fraction. That is a control-to-requirement mapping within one
-framework. There is **no framework-to-framework crosswalk at all** — no table,
-no type, no code — so today the same observation satisfying a Cyber Essentials
-requirement and an ISO 27001 requirement is expressed only by writing two
-controls.
+Built as `packages/crosswalk` with migration `0033`. Three decisions carry it:
 
-The risk is the one the contract names: the cheap implementation is a mapping
-table with no rationale and no confidence, which reads as equivalence. Recorded
-as RR-076 and scheduled next.
+**Every crosswalk is directed.** The obvious implementation is a join table of
+requirement pairs, and a pair is symmetric — symmetry _is_ the equivalence claim
+the contract forbids. Pair Cyber Essentials `access.mfa_on_cloud_services` with
+ISO 27001 `A.5.17` and the table says each satisfies the other; in fact the first
+goes part of the way towards the second and the second says nothing about the
+first. `reverseOf()` returns null for every directed relation, so a caller
+wanting "what maps to this requirement" has to query for crosswalks whose
+destination it is rather than flipping the ones whose source it is.
+
+**A crosswalk never establishes an assurance state.** `stateFromCrosswalks()`
+returns UNKNOWN whatever the crosswalks say, including EQUIVALENT. This is the
+boundary that makes the layer safe to have: the commercially attractive feature
+is "answer ISO 27001 automatically from your Cyber Essentials evidence", and it
+is the feature that would make every determination in the product rest on
+somebody's opinion about two paragraphs of prose. What can honestly be sold is
+the expensive part removed — knowing which evidence to reach for — with the
+determination still made properly.
+
+**Confidence is banded, not scored.** Four named bands, each requiring a stated
+reason. A figure like 0.85 would be quoted as though somebody could say what
+distinguishes it from 0.8.
+
+`UNRELATED` was added during the build: without it, "no crosswalk exists" and
+"somebody assessed the pair and found no relationship" are the same empty result
+and lead to different work.
+
+**The layer holds no data.** A crosswalk between two published schemes has to be
+read from the schemes; writing one from recollection would produce a confident
+rationale with no basis, which is what the `confidence` and `provenance` fields
+exist to prevent. Recorded as RR-078, blocked on source material.
 
 ### R2 — A conflict does not expose its consequence — **AMBER**
 
@@ -111,10 +132,9 @@ requirements as far as this repository can establish them, and is **not
 production ready** — by the contract's own definition, since no capability is
 attested `PROVEN` and no release record exists.
 
-Three requirements are unmet and one is unauditable. None of the four is a
+Two requirements are unmet, one is closed with its data layer empty, and one is unauditable. None of the four is a
 weakening of an established invariant; all four are additions v3.1 did not ask
 for.
 
-The recommended order is R1 (crosswalks, because it is structural and gets more
-expensive with every framework added), then R2 (conflict consequence, because
-the computation already exists), then R3.
+R1 is done. The remaining order is R2 (conflict consequence, because the
+fan-out computation already exists and can supply it), then R3.

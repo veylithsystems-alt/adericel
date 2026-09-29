@@ -161,6 +161,13 @@ packages/
                   prohibited, MSP-first routing, the disclosure gate, and
                   integrity-protected diagnostic bundles. Pure. Nothing about an
                   organisation is disclosed before somebody is identified.
+  crosswalk/      Directed statements relating a requirement in one framework to
+                  a requirement in another, each carrying its rationale,
+                  confidence band, applicability, versions and provenance. Never
+                  symmetric except where two requirements genuinely ask the same
+                  thing, because a symmetric mapping is an equivalence claim. A
+                  crosswalk says where evidence may already exist and never
+                  establishes an assurance state. Pure.
   resolution/     What to do about an UNKNOWN. Sorts it into one of six kinds by
                   what a person does next, weighs how much it matters, routes it
                   to whoever can actually close it — including the client, when
