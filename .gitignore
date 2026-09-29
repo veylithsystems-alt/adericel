@@ -14,3 +14,6 @@ tmp/
 var/
 storage/local/
 docs/api/openapi.generated.json
+
+# Written by the mutation runner and deleted after each run.
+.mutation-report.json

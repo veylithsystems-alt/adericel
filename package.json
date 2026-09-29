@@ -50,7 +50,8 @@
     "db:migrate:product": "MIGRATION_LAYER=product tsx scripts/migrate.ts up",
     "docs:operating-model": "tsx scripts/generate-operating-model.ts",
     "docs:capability-status": "tsx scripts/generate-capability-status.ts",
-    "release:position": "tsx scripts/release-position.ts"
+    "release:position": "tsx scripts/release-position.ts",
+    "test:mutation": "tsx scripts/mutation-test.ts"
   },
   "dependencies": {
     "@adericel/resolution": "workspace:*",

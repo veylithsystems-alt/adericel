@@ -258,6 +258,33 @@ single 16 GB VPS. The working is in
 [docs/operations/vps-sizing.md](./docs/operations/vps-sizing.md), including what
 that machine will not do.
 
+## Every guard, proved by breaking it on every build
+
+A test that would still pass with its guard removed proves nothing. A suite
+arrives at that state gradually — a condition widens, an assertion is replaced
+by a weaker one that still passes — and because nothing fails, nobody looks.
+
+So every invariant this repository claims is "proved by deliberately breaking
+it" is recorded in [`tests/mutation/registry.ts`](./tests/mutation/registry.ts)
+as the exact edit that breaks it and the exact tests that must then fail.
+`pnpm test:mutation` applies each one, runs only the suite that should care, and
+reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
+rotted, not that the mutation is wrong. CI runs it on every push.
+
+Nineteen are recorded. They include: a control scoped out of assessment
+presenting outwardly as `PROVEN`; a build signing off a release condition that
+needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
+an assurance state; and the resolution queue reading only the state projection,
+which would report a freshly onboarded organisation as having nothing undecided.
+
+Three things about the runner are deliberate. It refuses to start on a dirty
+working tree, because a crash would otherwise leave a mutated file
+indistinguishable from work in progress. It restores everything it touched,
+including files a suite regenerated as a side effect — found the hard way, when a
+mutated path ended up written into a committed generated document. And a `find`
+that matches zero or several places is an error rather than a warning, because a
+mutation applied somewhere unintended would report a survival that means nothing.
+
 ## Verifying it
 
 ```bash

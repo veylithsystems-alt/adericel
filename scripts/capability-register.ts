@@ -221,6 +221,26 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
     ],
   },
   {
+    key: 'mutation-harness',
+    title: 'Every claimed guard, proved by breaking it on every build',
+    attestations: [
+      DESIGNED('Contract: security and privacy claims require executable tests where possible'),
+      IMPLEMENTED('tests/mutation/registry.ts; scripts/mutation-test.ts'),
+      TESTED(
+        'tests/unit/mutation-registry.test.ts checks the registry is well formed; the runner ' +
+          'itself was exercised against a deliberately unguarded mutation and reported it as ' +
+          'SURVIVED with a non-zero exit',
+      ),
+      VERIFIED(
+        'Nineteen recorded mutations all killed by their named tests, run by CI rather than by ' +
+          'hand. The runner refuses a dirty working tree, restores every file it touched ' +
+          'including artefacts a suite regenerated, and reports a stale or ambiguous match as ' +
+          'an error rather than a pass',
+      ),
+      OPERATIONAL('A required CI job on every push'),
+    ],
+  },
+  {
     key: 'white-label',
     title: 'White-label presentation for MSPs',
     attestations: [DESIGNED('Contract §38')],

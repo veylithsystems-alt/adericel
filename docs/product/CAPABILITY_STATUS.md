@@ -50,6 +50,7 @@ pipeline is not evidence of any of them, and
 | Sovereign inference | `VERIFIED` | — | 4 |
 | Adericel builds without Veylith Systems | `OPERATIONAL` | — | 3 |
 | Backup and restore | `OPERATIONAL` | `VERIFIED` | 3 |
+| Every claimed guard, proved by breaking it on every build | `OPERATIONAL` | — | 3 |
 | White-label presentation for MSPs | `DESIGNED` | — | 7 |
 | SBOM and signed releases | `DESIGNED` | — | 7 |
 
@@ -157,6 +158,16 @@ Backup and restore is attested to OPERATIONAL. VERIFIED has no attestation, so t
 - **IMPLEMENTED** (check) — infrastructure/docker/backup/restore.sh; scripts/verify-restore.ts
 - **TESTED** (check) — tests/integration/backup-restore.test.ts
 - **OPERATIONAL** (check) — CI job `images` restores a real dump and asserts the schema afterwards
+
+### Every claimed guard, proved by breaking it on every build
+
+Every claimed guard, proved by breaking it on every build is attested to OPERATIONAL. 3 further status(es) remain unestablished, and nothing here implies them.
+
+- **DESIGNED** (person) — Contract: security and privacy claims require executable tests where possible
+- **IMPLEMENTED** (check) — tests/mutation/registry.ts; scripts/mutation-test.ts
+- **TESTED** (check) — tests/unit/mutation-registry.test.ts checks the registry is well formed; the runner itself was exercised against a deliberately unguarded mutation and reported it as SURVIVED with a non-zero exit
+- **VERIFIED** (check) — Nineteen recorded mutations all killed by their named tests, run by CI rather than by hand. The runner refuses a dirty working tree, restores every file it touched including artefacts a suite regenerated, and reports a stale or ambiguous match as an error rather than a pass
+- **OPERATIONAL** (check) — A required CI job on every push
 
 ### White-label presentation for MSPs
 

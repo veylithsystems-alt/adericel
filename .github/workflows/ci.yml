@@ -123,6 +123,43 @@ jobs:
       - run: pnpm test:integration
       - run: pnpm test:e2e
 
+  # Every invariant this repository claims is "proved by deliberately breaking
+  # it" is recorded as the edit that breaks it and the test that must then fail.
+  # A test that would still pass with its guard removed proves nothing, and a
+  # suite arrives at that state gradually — a condition widens, an assertion is
+  # replaced by a weaker one that still passes, and nothing fails so nobody
+  # looks. This is the job that notices.
+  mutation:
+    name: Mutation testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: adericel
+          POSTGRES_PASSWORD: adericel
+          POSTGRES_DB: adericel_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U adericel -d adericel_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://adericel:adericel@localhost:5432/adericel_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The runner refuses to start on a dirty tree, because it edits source
+      # files and restores them. A fresh checkout is clean by definition.
+      - run: pnpm test:mutation
+
   # Deliverable B is an artefact, not documentation. It has to be regenerable
   # from source and identical to what is committed, or the file in the
   # repository is not the file anything validated.
