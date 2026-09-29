@@ -49,7 +49,8 @@
     "verify": "pnpm lint && pnpm typecheck && pnpm test",
     "db:migrate:product": "MIGRATION_LAYER=product tsx scripts/migrate.ts up",
     "docs:operating-model": "tsx scripts/generate-operating-model.ts",
-    "docs:capability-status": "tsx scripts/generate-capability-status.ts"
+    "docs:capability-status": "tsx scripts/generate-capability-status.ts",
+    "release:position": "tsx scripts/release-position.ts"
   },
   "dependencies": {
     "@adericel/resolution": "workspace:*",

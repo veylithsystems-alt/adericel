@@ -49,6 +49,92 @@ export type AssuranceState = (typeof ASSURANCE_STATES)[number];
 export const assuranceStateSchema = z.enum(ASSURANCE_STATES);
 
 /**
+ * The four states a customer or an assessor is shown.
+ *
+ * Contract v3.2 requires the outward vocabulary `PROVEN`, `FAILING`,
+ * `EXCEPTION` and `UNKNOWN`. The eight `ASSURANCE_STATES` above are the
+ * internal lattice, and they are deliberately more precise: an MSP acting on a
+ * queue needs DEGRADED separated from BLOCKED, and PARTIALLY_SATISFIED
+ * separated from both.
+ *
+ * WHY THIS IS A MAPPING AND NOT A RENAME
+ *
+ * Renaming the internal states to match would destroy the distinctions the
+ * operating surfaces are built on, and it would falsify history: every
+ * assessment on record was made under the vocabulary in force at the time, and
+ * migration 0027 refused to rewrite the historical record for exactly this
+ * reason. So the contract's four states are a derived view, computed here and
+ * nowhere else.
+ *
+ * WHY THIS FUNCTION IS A SECURITY BOUNDARY
+ *
+ * It is the last place an internal state becomes an outward claim, so it is the
+ * last place `UNKNOWN` could quietly become a pass. Everything indeterminate —
+ * UNKNOWN, DEGRADED, BLOCKED, and PARTIALLY_SATISFIED — resolves to `UNKNOWN`
+ * here, and nothing resolves to `PROVEN` but `SATISFIED`.
+ */
+export const HEADLINE_STATES = ['PROVEN', 'FAILING', 'EXCEPTION', 'UNKNOWN'] as const;
+export type HeadlineState = (typeof HEADLINE_STATES)[number];
+export const headlineStateSchema = z.enum(HEADLINE_STATES);
+
+/**
+ * Every assurance state's outward form. Total by construction, so adding an
+ * assurance state without deciding what a customer is told does not compile.
+ */
+export const HEADLINE_OF_STATE: Readonly<Record<AssuranceState, HeadlineState>> = {
+  SATISFIED: 'PROVEN',
+  NOT_SATISFIED: 'FAILING',
+  EXCEPTED: 'EXCEPTION',
+
+  /**
+   * Not PROVEN, and not FAILING either.
+   *
+   * Some subjects meet the control and some do not, which is a statement about
+   * the estate rather than about the control. Calling it PROVEN would assert
+   * something untrue of part of the estate; calling it FAILING would assert
+   * something untrue of the rest. The honest outward answer is that the
+   * organisation does not have a single answer yet.
+   */
+  PARTIALLY_SATISFIED: 'UNKNOWN',
+
+  /**
+   * NOT_APPLICABLE reads outward as UNKNOWN rather than as PROVEN.
+   *
+   * A control that does not apply has not been satisfied — there was nothing to
+   * satisfy. Mapping it to PROVEN is the single most tempting way to inflate a
+   * headline figure, and it is how scope decisions turn into compliance claims.
+   * Callers that need to exclude it from a denominator should read the
+   * assurance state, which still says NOT_APPLICABLE.
+   */
+  NOT_APPLICABLE: 'UNKNOWN',
+
+  UNKNOWN: 'UNKNOWN',
+  DEGRADED: 'UNKNOWN',
+  BLOCKED: 'UNKNOWN',
+};
+
+export function headlineOf(state: AssuranceState): HeadlineState {
+  return HEADLINE_OF_STATE[state];
+}
+
+/**
+ * Assurance states that must never present as PROVEN.
+ *
+ * Kept as data so the invariant can be asserted directly rather than inferred
+ * from the map. Every state here is one where Adericel does not hold a
+ * positive, complete determination.
+ */
+export const NEVER_PROVEN_STATES: readonly AssuranceState[] = [
+  'PARTIALLY_SATISFIED',
+  'NOT_SATISFIED',
+  'EXCEPTED',
+  'NOT_APPLICABLE',
+  'UNKNOWN',
+  'DEGRADED',
+  'BLOCKED',
+];
+
+/**
  * Why an assurance state is UNKNOWN. Recording the reason is what makes an
  * unknown actionable — "no integration connected" and "the evidence we hold
  * contradicts itself" require completely different responses.

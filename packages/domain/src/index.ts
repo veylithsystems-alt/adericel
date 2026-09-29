@@ -20,3 +20,4 @@ export * from './personal-data.js';
 export * from './truth-state.js';
 export * from './break-glass.js';
 export * from './capability.js';
+export * from './release-gate.js';

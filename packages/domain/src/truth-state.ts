@@ -41,6 +41,31 @@ export const TRUTH_STATES = [
   'TARGET',
   /** Insufficient, unavailable, contradictory, stale or unverifiable. */
   'UNKNOWN',
+  /**
+   * The mechanism that would have established it is impaired.
+   *
+   * Contract v3.2 lists DEGRADED, BLOCKED and FAILED among the provenance
+   * states, and they are not produced by a claim: a claim has an origin and a
+   * status, whereas these three describe what happened to the collection or
+   * the authority around it. `truthStateOfClaim` therefore never returns them,
+   * and a test asserts that rather than leaving it to be noticed.
+   *
+   * They are in this vocabulary because a recipient reading a truth state is
+   * entitled to the difference between "nobody has looked" and "what would
+   * have looked is broken".
+   */
+  'DEGRADED',
+  /** Something other than evidence prevented establishment: authority, consent, approval. */
+  'BLOCKED',
+  /**
+   * An attempt was made to establish it and the attempt failed.
+   *
+   * Distinct from UNKNOWN, which is silence, and from DEGRADED, which is a
+   * broken path. FAILED means the operation ran and returned a failure — which
+   * is information, and is the state an execution outcome lands in when
+   * verification establishes that the thing did not work.
+   */
+  'FAILED',
 ] as const;
 
 export type TruthState = (typeof TRUTH_STATES)[number];
@@ -58,6 +83,16 @@ export const AUTHORITATIVE_TRUTH_STATES: readonly TruthState[] = [
   'VERIFIED',
   'DERIVED',
 ];
+
+/**
+ * Truth states no claim can carry, because they are not properties of a claim.
+ *
+ * DEGRADED, BLOCKED and FAILED come from the collection and authority layers.
+ * Listing them explicitly means `truthStateOfClaim` can be asserted never to
+ * produce one, which is what stops a broken connector from being recorded as
+ * though somebody had asserted something.
+ */
+export const NON_CLAIM_TRUTH_STATES: readonly TruthState[] = ['DEGRADED', 'BLOCKED', 'FAILED'];
 
 export function isAuthoritative(state: TruthState): boolean {
   return AUTHORITATIVE_TRUTH_STATES.includes(state);
@@ -170,5 +205,23 @@ export const TRUTH_STATE_PRESENTATION: Readonly<Record<TruthState, TruthStatePre
   UNKNOWN: {
     label: 'Unknown',
     meaning: 'Adericel cannot establish this. Not the same as false.',
+  },
+  DEGRADED: {
+    label: 'Degraded',
+    meaning:
+      'The source that would have established this is impaired. Something was connected and ' +
+      'has stopped working, which is a repair rather than a gap.',
+  },
+  BLOCKED: {
+    label: 'Blocked',
+    meaning:
+      'Adericel was not permitted to establish this, or is waiting on somebody who must ' +
+      'decide first. The evidence path may be perfectly healthy.',
+  },
+  FAILED: {
+    label: 'Failed',
+    meaning:
+      'An attempt was made and it failed. That is information: it is not silence, and it is ' +
+      'not a broken path.',
   },
 };

@@ -9,3 +9,8 @@ docs/api/openapi.generated.json
 # formatting: if Prettier also reformats them, the two disagree and the drift
 # check fails on alternate runs — which it did, once.
 docs/product/MSP_OPERATING_MODEL.md
+docs/product/CAPABILITY_STATUS.md
+
+# A lossy text extraction of the contract PDF. Formatting it would edit a
+# transcript of somebody else's document.
+docs/contract/v3.2-extracted.txt

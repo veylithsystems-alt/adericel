@@ -24,6 +24,17 @@ diagonal hatch rather than a colour, because a colour is an opinion.
 An organisation with twenty-one unknown controls and zero findings does not have
 a clean bill of health. Adericel says so, in those words, on the screen.
 
+Outwardly there are four states — `PROVEN`, `FAILING`, `EXCEPTION`, `UNKNOWN` —
+and internally eight, because an MSP working a queue needs `DEGRADED` (the
+source broke) separated from `BLOCKED` (a person owes a decision). The join
+between them is
+[one total mapping](./packages/domain/src/assurance.ts), and it is a security
+boundary: it is the last place an internal state becomes an outward claim, so it
+is the last place `UNKNOWN` could become a pass. Nothing maps to `PROVEN` but
+`SATISFIED` — not a partially satisfied control, and deliberately not a control
+somebody scoped out, which is the cheapest way there is to inflate a headline
+figure.
+
 **2. AI output is not organisational truth.**
 
 Language models are useful for reading a policy document and proposing what it
@@ -394,6 +405,45 @@ n8n orchestrates. It does not decide. No assurance state is computed in a
 workflow, and every state change goes through the API where authorisation and
 audit apply ([ADR-0012](./docs/adr/ADR-0012-n8n-role.md)).
 
+## When a feature is finished
+
+The contract's definition, not ours: a feature is not complete because code
+exists. It is complete when ten conditions hold — architecture is coherent,
+security boundaries are tested, privacy implications are addressed, failure
+modes are explicit, auditability exists where required, documentation matches
+implementation, tests pass, recovery implications are understood, operational
+behaviour is observable, and no unsupported claims are introduced.
+
+Those ten are [modelled](./packages/domain/src/release-gate.ts) rather than kept
+in a checklist, because a checklist is satisfied by being read. Four things
+about the model are deliberate:
+
+**An unassessed condition blocks.** The tempting default is "no evidence either
+way, so treat it as fine", and it is how a gate becomes a formality: the
+conditions nobody can measure automatically quietly pass, and those are privacy
+implications, failure modes and unsupported claims.
+
+**Four conditions cannot be claimed by a pipeline.** If all ten were automatable
+the gate would collapse into "the tests passed", which is condition seven
+restated nine times. A build that asserted privacy implications had been
+addressed would be signing on somebody's behalf.
+
+**There is no score.** Nine of ten is not ninety per cent complete; it is
+incomplete with one named reason, and the reason is the useful output.
+
+**`pnpm release:position`** prints where the working tree stands and
+deliberately produces no record. Run it and it will tell you, among other
+things, that `tests pass` is not established — because that script does not run
+the suite, and reporting a pass it did not observe is the exact failure the gate
+exists to catch.
+
+Alongside it, [capability status](./docs/product/CAPABILITY_STATUS.md) records
+what state each capability is in, with an independent attestation per status.
+`PROVEN`, `PRODUCTION_READY` and `COMMERCIAL_VALIDATED` are refused to any
+automated attestation — each is a claim about the world outside this repository,
+and a green pipeline is not evidence of any of them. No capability holds one
+today.
+
 ## Things this product will not do
 
 Recorded here because a list of deliberate absences is more informative than a
@@ -458,6 +508,13 @@ an engineer reading the source:
 
 ## Documentation
 
+- [The controlling contract](./docs/contract/README.md) — what Adericel is built
+  to, and exactly which parts of the supplied document could not be read
+- [Contract v3.2 gap report](./docs/audit/ADERICEL_V3.2_CONTRACT_GAP_REPORT.md) —
+  every requirement checked against the code, including the three that are unmet
+  and the one that cannot be audited
+- [Capability status](./docs/product/CAPABILITY_STATUS.md) — generated; what
+  state each capability is in and what establishes it
 - [Architecture decision records](./docs/adr/README.md) — every consequential
   decision, each with what it costs
 - [Threat model](./docs/security/threat-model.md) — including what it does not cover
