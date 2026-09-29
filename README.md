@@ -444,6 +444,14 @@ things, that `tests pass` is not established — because that script does not ru
 the suite, and reporting a pass it did not observe is the exact failure the gate
 exists to catch.
 
+Every document in [`docs/product`](./docs/product) — the ones written for
+somebody outside the build — declares which of six states it is in:
+`IMPLEMENTED`, `TESTED`, `PLANNED`, `ASSUMED`, `EXTERNALLY_DEPENDENT` or
+`LEGALLY_PENDING`. A document in a state that is not yet a capability has to say
+so in its opening lines, because a reader skims the prose and not the header.
+That is why the framework-packs document opens by telling you the pack model is
+not built.
+
 Alongside it, [capability status](./docs/product/CAPABILITY_STATUS.md) records
 what state each capability is in, with an independent attestation per status.
 `PROVEN`, `PRODUCTION_READY` and `COMMERCIAL_VALIDATED` are refused to any

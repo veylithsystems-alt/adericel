@@ -293,3 +293,42 @@ export function gateVerdict(record: ReleaseRecord): GateVerdict {
           `invariant(s) block it${unassessed.length > 0 ? `, ${unassessed.length} of them never assessed` : ''}.`,
   };
 }
+
+/**
+ * A documentation state, as a document declares it.
+ *
+ * `**Documentation state:** IMPLEMENTED` on its own line. A marker rather than
+ * front matter because these documents are read on GitHub and in a text editor
+ * as often as they are rendered, and a reader should see the label without
+ * knowing the convention.
+ */
+const STATE_MARKER = /^\*\*Documentation state:\*\*\s*([A-Z_]+)\s*$/m;
+
+export function declaredDocumentationState(markdown: string): DocumentationState | null {
+  const found = STATE_MARKER.exec(markdown)?.[1];
+  return found !== undefined && (DOCUMENTATION_STATES as readonly string[]).includes(found)
+    ? (found as DocumentationState)
+    : null;
+}
+
+/**
+ * WHAT WAS TRIED HERE AND REMOVED
+ *
+ * A check that flagged forward-looking promises about the product — "Adericel
+ * will…", "the system will…" — on the theory that an unlabelled promise in a
+ * document describing working software is the contract's "target presented as
+ * an implemented capability".
+ *
+ * Run across every document in the repository it produced eleven hits and not
+ * one was real. "Adericel can be trusted, because it will say when it does not
+ * know" and "it will refuse rather than degrade" describe behaviour that exists
+ * today: English uses the future tense for a deterministic system's reliable
+ * behaviour, which is exactly the voice this product is written in. The rest
+ * were about people ("an MSP will ask") or were negative promises.
+ *
+ * Eleven exceptions would have been needed to make it pass, and a check that
+ * needs an exception per instance is not a check. The requirement is met by
+ * `declaredDocumentationState` instead, which is what the contract actually
+ * asks for: that documentation **distinguish** the six states, not that prose
+ * be policed for verb tense.
+ */

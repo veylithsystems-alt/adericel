@@ -1,5 +1,9 @@
 # Framework packs, and what they are careful not to claim
 
+**Documentation state:** PLANNED
+
+_This document describes how framework packs are to work. One pack exists (Cyber Essentials); the pack model itself is not built, and nothing here should be read as a working capability._
+
 A framework pack maps a published framework onto Adericel's canonical
 predicates, so an MSP can maintain continuous readiness between assessments
 rather than rebuilding a position from scratch each time somebody asks.

@@ -3,6 +3,10 @@
 
 # Capability status
 
+**Documentation state:** IMPLEMENTED
+
+_Generated from the register on every run, and CI fails if the committed file differs._
+
 What state each capability in Adericel is actually in, and what establishes
 it.
 

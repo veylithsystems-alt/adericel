@@ -1,6 +1,11 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  DOCUMENTATION_STATES,
+  NOT_YET_CAPABILITY_STATES,
+  declaredDocumentationState,
+} from '@adericel/domain';
 
 /**
  * Documentation that matches the code.
@@ -185,5 +190,80 @@ describe('the residual-risk register', () => {
     );
     const duplicated = numbers.filter((number, index) => numbers.indexOf(number) !== index);
     expect(duplicated).toEqual([]);
+  });
+});
+
+describe('documentation distinguishes what is built from what is not', () => {
+  const PRODUCT_DOCS = 'docs/product';
+
+  /**
+   * Contract v3.2: "Documentation must distinguish: implemented; tested;
+   * planned; assumed; externally dependent; legally pending. Never present a
+   * target as an implemented capability."
+   *
+   * Applied to `docs/product` specifically: those are the documents written for
+   * somebody outside the build to read, so they are where an unlabelled target
+   * does real damage. An ADR is a decision record and says so by being one; a
+   * runbook describes an operation somebody is performing.
+   *
+   * WHAT WAS TRIED AND ABANDONED
+   *
+   * Scanning prose for forward-looking promises about the product. Across the
+   * whole repository it produced eleven hits and not one was real — English uses
+   * the future tense for a deterministic system's reliable behaviour ("it will
+   * refuse rather than degrade"), which is the voice this product is written in.
+   * Eleven exceptions would have been needed, and a check needing an exception
+   * per instance is not a check. The note in `release-gate.ts` records it so it
+   * is not attempted again as though it were new.
+   */
+  const productDocs = readdirSync(join(ROOT, PRODUCT_DOCS)).filter((name) => name.endsWith('.md'));
+
+  it('has product documents to check', () => {
+    // A guard on the guard: if the directory moves, the loops below would pass
+    // by iterating nothing.
+    expect(productDocs.length).toBeGreaterThan(3);
+  });
+
+  it('declares a recognised state on every customer-facing document', () => {
+    const undeclared = productDocs.filter(
+      (name) =>
+        declaredDocumentationState(readFileSync(join(ROOT, PRODUCT_DOCS, name), 'utf8')) === null,
+    );
+    expect(
+      undeclared,
+      `These documents declare no documentation state:\n${undeclared.join('\n')}\n` +
+        `Add one of: ${DOCUMENTATION_STATES.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('says plainly, in any document that is not yet a capability, that it is not one', () => {
+    /**
+     * The rule the contract is actually protecting. A document labelled PLANNED
+     * whose body reads like a description of working software has satisfied the
+     * letter of the label and none of its purpose — a reader skims the prose,
+     * not the header.
+     */
+    for (const name of productDocs) {
+      const text = readFileSync(join(ROOT, PRODUCT_DOCS, name), 'utf8');
+      const state = declaredDocumentationState(text);
+      if (state === null || !NOT_YET_CAPABILITY_STATES.includes(state)) continue;
+
+      // The caveat must be near the top, where a reader meets it before the
+      // body rather than after being persuaded by it.
+      const opening = text.split('\n').slice(0, 12).join('\n');
+      expect(opening, `${name} is ${state} and does not say so in its opening`).toMatch(
+        /not (?:built|a working capability)|should (?:not )?be read as/i,
+      );
+    }
+  });
+
+  it('labels the generated documents from their generators, not by hand', () => {
+    // A marker added by hand to a generated file is removed by the next run,
+    // and the drift check would then fail for a reason nobody expects.
+    for (const name of ['CAPABILITY_STATUS.md', 'MSP_OPERATING_MODEL.md']) {
+      const text = readFileSync(join(ROOT, PRODUCT_DOCS, name), 'utf8');
+      expect(text, name).toMatch(/Do not edit by hand/);
+      expect(declaredDocumentationState(text), name).not.toBeNull();
+    }
   });
 });

@@ -26,13 +26,13 @@ them.
 
 ## 1. What v3.2 added over v3.1, and what was done about it
 
-| Requirement                                                                                                  | Class     | Evidence                                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ten completion conditions ("A feature is not complete because code exists")                                  | **GREEN** | `packages/domain/src/release-gate.ts`; 15 tests; three guards proved by mutation. v3.1's audit counted these without naming them, which is why the gate waited (RR-073).        |
-| Eight non-regression invariants ("No change may weaken…")                                                    | **GREEN** | `NON_REGRESSION_INVARIANTS`; an unaffirmed invariant blocks a release, because silence is not an affirmation.                                                                   |
-| Four headline truth states `PROVEN` / `FAILING` / `EXCEPTION` / `UNKNOWN`                                    | **GREEN** | `HEADLINE_OF_STATE` in `packages/domain/src/assurance.ts`. A mapping, not a rename: renaming would destroy the internal distinctions and falsify assessments already on record. |
-| Ten provenance states, including `DEGRADED`, `BLOCKED`, `FAILED`                                             | **GREEN** | `TRUTH_STATES`. Three were missing. `NON_CLAIM_TRUTH_STATES` records that no claim can carry them, since they describe collection and authority rather than assertion.          |
-| Six documentation states (implemented / tested / planned / assumed / externally dependent / legally pending) | **AMBER** | `DOCUMENTATION_STATES` exists and `NOT_YET_CAPABILITY_STATES` names the four that are not yet a capability. Nothing yet enforces that prose in `docs/` carries one. See RR-074. |
+| Requirement                                                                                                  | Class     | Evidence                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ten completion conditions ("A feature is not complete because code exists")                                  | **GREEN** | `packages/domain/src/release-gate.ts`; 15 tests; three guards proved by mutation. v3.1's audit counted these without naming them, which is why the gate waited (RR-073).             |
+| Eight non-regression invariants ("No change may weaken…")                                                    | **GREEN** | `NON_REGRESSION_INVARIANTS`; an unaffirmed invariant blocks a release, because silence is not an affirmation.                                                                        |
+| Four headline truth states `PROVEN` / `FAILING` / `EXCEPTION` / `UNKNOWN`                                    | **GREEN** | `HEADLINE_OF_STATE` in `packages/domain/src/assurance.ts`. A mapping, not a rename: renaming would destroy the internal distinctions and falsify assessments already on record.      |
+| Ten provenance states, including `DEGRADED`, `BLOCKED`, `FAILED`                                             | **GREEN** | `TRUTH_STATES`. Three were missing. `NON_CLAIM_TRUTH_STATES` records that no claim can carry them, since they describe collection and authority rather than assertion.               |
+| Six documentation states (implemented / tested / planned / assumed / externally dependent / legally pending) | **GREEN** | Every document in `docs/product` declares one, `declaredDocumentationState()` refuses a value outside the six, and a not-yet-a-capability document must say so in its opening lines. |
 
 ## 2. The nine lifecycle stages
 
@@ -114,10 +114,21 @@ Every consequence states what happens if nobody decides, in the words somebody
 would have to say to the customer. "The control stays UNKNOWN" is a tautology and
 a test refuses it.
 
-### R3 — Documentation states are not enforced in prose — **AMBER**
+### R3 — Documentation states — **CLOSED**
 
-See §1. The vocabulary exists; nothing checks that a capability described in
-`docs/` carries one of the six labels. RR-074.
+Every document in `docs/product` declares one of the six states, and a document
+in a state that is not yet a capability must say so in its opening lines — a
+reader skims the prose, not the header. `FRAMEWORK_PACKS.md` is labelled
+`PLANNED`, which it always was.
+
+A check scanning prose for forward-looking promises was built and removed. It
+produced eleven hits across the repository and not one was real: "it will refuse
+rather than degrade" describes behaviour that exists, because English uses the
+future tense for a deterministic system's reliable behaviour. Eleven exceptions
+would have been needed to make it pass, and a check needing an exception per
+instance is not a check. The contract asks documentation to _distinguish_ the six
+states, which the marker does; it does not ask for prose to be policed for verb
+tense.
 
 ## 4. Requirements confirmed, with what confirms them
 
@@ -145,8 +156,8 @@ requirements as far as this repository can establish them, and is **not
 production ready** — by the contract's own definition, since no capability is
 attested `PROVEN` and no release record exists.
 
-One requirement is unmet, one is closed with its data layer empty, and one is unauditable. None of the four is a
+No requirement is unmet. One is closed with its data layer empty (crosswalks, RR-078), and one is unauditable because the contract does not state it. None of the four is a
 weakening of an established invariant; all four are additions v3.1 did not ask
 for.
 
-R1 and R2 are done. R3 remains, with RR-075 waiting on contract text.
+R1, R2 and R3 are done. RR-075 and RR-078 both wait on input from the founder rather than on engineering.

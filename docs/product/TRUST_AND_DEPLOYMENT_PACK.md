@@ -1,5 +1,9 @@
 # Adericel Trust and Deployment Pack
 
+**Documentation state:** IMPLEMENTED
+
+_Every position in this document is enforced by code in this repository, with the enforcing file named alongside it._
+
 The thirteen questions a UK MSP and their client will ask before they put a
 single customer's estate into this product — answered, with the place in the
 system where each answer is enforced.

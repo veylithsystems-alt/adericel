@@ -1,5 +1,9 @@
 # The commercial boundary between Adericel and Veylith Systems
 
+**Documentation state:** IMPLEMENTED
+
+_Every position in this document is enforced by code in this repository, with the enforcing file named alongside it._
+
 Adericel is the product. Veylith Systems Ltd is the company that builds and
 operates it. They are not the same system, they are not the same deployment,
 and the separation is enforced in code rather than promised in a contract.
