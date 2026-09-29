@@ -88,18 +88,28 @@ read from the schemes; writing one from recollection would produce a confident
 rationale with no basis, which is what the `confidence` and `provenance` fields
 exist to prevent. Recorded as RR-078, blocked on source material.
 
-### R2 — A conflict does not expose its consequence — **AMBER**
+### R2 — A conflict's consequence — **CLOSED**
 
 v3.2 requires a conflict to expose sources, timestamps, observations, affected
 controls, resolution state and **the resulting assurance limitation**.
 
-`ConflictOutcome` in `packages/domain/src/conflict.ts` carries the sources with
-`observedAt` and `collectedAt`, the resolution state, the distinct values and a
-prose `detail`. It does not carry **which controls the conflict affects**, nor a
-typed **assurance limitation**. An operator is told that two sources disagree
-and has to work out for themselves what that costs them. The fan-out machinery
-built for the resolution queue is the same computation and can supply it.
-Recorded as RR-077.
+`conflictConsequence()` supplies the two that were missing. It is separate from
+`resolveConflict()` on purpose: deciding what to believe is a question about
+sources and needs nothing else, while deciding what the disagreement costs is a
+question about the assurance graph. The caller supplies the fan-out, which is the
+same map the resolution queue already builds.
+
+The limitation vocabulary makes one distinction the contract is really asking
+for. An unresolved conflict withholds a determination. A conflict resolved by a
+configured authority or a materially fresher reading **produced** one — that is
+decided rather than undecided, and it is not unanimity. A recipient of an
+Assurance Passport is entitled to know the reading was contested, because "Intune
+says encrypted" and "Intune says encrypted while the RMM says otherwise" are
+different statements and only one of them is the whole truth.
+
+Every consequence states what happens if nobody decides, in the words somebody
+would have to say to the customer. "The control stays UNKNOWN" is a tautology and
+a test refuses it.
 
 ### R3 — Documentation states are not enforced in prose — **AMBER**
 
@@ -132,9 +142,8 @@ requirements as far as this repository can establish them, and is **not
 production ready** — by the contract's own definition, since no capability is
 attested `PROVEN` and no release record exists.
 
-Two requirements are unmet, one is closed with its data layer empty, and one is unauditable. None of the four is a
+One requirement is unmet, one is closed with its data layer empty, and one is unauditable. None of the four is a
 weakening of an established invariant; all four are additions v3.1 did not ask
 for.
 
-R1 is done. The remaining order is R2 (conflict consequence, because the
-fan-out computation already exists and can supply it), then R3.
+R1 and R2 are done. R3 remains, with RR-075 waiting on contract text.
