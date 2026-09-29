@@ -1,24 +1,13 @@
 MASTER PRODUCT, ENGINEERING, OPERATING,
 SUPPORT & BUILD CONTRACT v3.2
-Company:
-Veylith Systems
-Product:
-Adericel
-Classification:
-Autonomous Organisational Security Assurance Infrastructure
-Status:
-Controlling Engineering & Product Contract
+Company: Veylith Systems
+Product: Adericel
+Classification: Autonomous Organisational Security Assurance Infrastructure
+Status: Controlling Engineering & Product Contract
 Principle:
-Build Adericel as a best
--
-in
--
-class, legally defensible, evidence
--
-led assurance infrastructure
+Build Adericel as a best-in-class, legally defensible, evidence-led assurance infrastructure
 platform for MSPs.
-Adericel must become the
-system of record for what is actually known about an
+Adericel must become the system of record for what is actually known about an
 including what is not known, why it is not
 known, what changed, what was done, whether it worked, and what evidence supports
 each determination.
@@ -26,14 +15,13 @@ Adericel must be designed to become infrastructure, not merely software.
 or first commercial release.
 Adericel enables an MSP to take a customer organisation through a governed assurance
 lifecycle:
-The lifecycle is continuous rather than a one
--
-time assessment.
+The lifecycle is continuous rather than a one-time assessment.
 Adericel must preserve throughout the lifecycle:
 truth;
 uncertainty;
 evidence;
 provenance;
+
 authority;
 policy;
 action history;
@@ -44,9 +32,7 @@ accountability;
 auditability.
 The platform must never manufacture certainty merely to make the lifecycle appear
 complete.
-The lifecycle is a first
--
-class product concept.
+The lifecycle is a first-class product concept.
 3.1 ONBOARD
 Adericel must support governed onboarding of an MSP customer organisation.
 Onboarding establishes, subject to available evidence:
@@ -59,25 +45,18 @@ integrations;
 capabilities;
 permissions;
 assurance baseline;
-data
--
-processing context;
+data-processing context;
 operational state.
-Missing information becomes
-UNKNOWN
-, not an assumed fact.
+Missing information becomes UNKNOWN, not an assumed fact.
 Onboarding must not require unnecessary manual consultancy, spreadsheets or meetings
 where the process can be safely automated.
 3.2 CONNECT
 Adericel discovers and establishes authorised connections to relevant systems.
 Connections must be:
+
 least privilege;
-tenant
--
-scoped;
-capability
--
-aware;
+tenant-scoped;
+capability-aware;
 observable;
 revocable;
 auditable.
@@ -89,12 +68,8 @@ The assurance engine must remain:
 deterministic;
 reproducible;
 explainable;
-evidence
--
-led;
-framework
--
-independent;
+evidence-led;
+framework-independent;
 independent of AI interpretation.
 Cyber Essentials is the initial commercial wedge, not the architectural ceiling.
 3.4 MONITOR
@@ -112,10 +87,9 @@ verification outcomes.
 Temporal history must permit reconstruction of what Adericel believed at a given point in
 time.
 3.5 MANAGE
-Adericel manages governed assurance work rather than becoming a generic IT
--
-management
+Adericel manages governed assurance work rather than becoming a generic IT-management
 platform.
+
 This includes:
 findings;
 risks;
@@ -133,13 +107,10 @@ rather than attempting to replace every operational system.
 3.6 VERIFY
 No consequential action becomes successful merely because an action was dispatched.
 The authoritative lifecycle is:
--
-OBSERVE
+-OBSERVE
 Execution outcomes that cannot be established must remain explicitly unknown and enter
 reconciliation.
-Never claim universal exactly
--
-once execution across network boundaries.
+Never claim universal exactly-once execution across network boundaries.
 3.7 PROVE
 Adericel must transform assurance state into defensible evidence.
 Outputs include:
@@ -150,17 +121,10 @@ provenance;
 audit history;
 exceptions;
 verification;
-point
--
-in
--
-time state;
-machine
--
-readable interchange.
-A human
--
-readable report is a presentation layer, not the underlying authority.
+point-in-time state;
+machine-readable interchange.
+A human-readable report is a presentation layer, not the underlying authority.
+
 3.8 IMPROVE
 Assurance must be continuous.
 Adericel should preserve institutional memory and use previous evidence, changes, findings
@@ -185,6 +149,7 @@ The fundamental Adericel loop is:
 Every major subsystem must reinforce this loop.
 The Truth Engine is the authoritative determination layer.
 AI must never become the source of authoritative security truth.
+
 Required truth states include:
 PROVEN;
 FAILING;
@@ -215,6 +180,7 @@ what action is required;
 whether action was verified.
 Maintain the Organisational Assurance Graph covering, where applicable:
 organisations;
+
 people;
 identities;
 devices;
@@ -239,9 +205,7 @@ verifications;
 exceptions;
 assurance snapshots.
 Relationships must be explicit and queryable.
-Evidence is first
--
-class infrastructure.
+Evidence is first-class infrastructure.
 Every material determination must preserve appropriate lineage:
 Evidence must support:
 provenance;
@@ -253,17 +217,14 @@ retention;
 replay;
 audit.
 Never manufacture evidence.
+
 Frameworks must not become the underlying domain model.
-Build a framework
--
-independent control and requirement layer allowing observations and
+Build a framework-independent control and requirement layer allowing observations and
 evidence to be mapped across:
 Cyber Essentials;
 ISO 27001;
 future frameworks;
-customer
--
-specific requirements;
+customer-specific requirements;
 future regulatory requirements.
 Crosswalks must preserve:
 source framework;
@@ -277,17 +238,12 @@ One observation may satisfy multiple controls, but the system must never imply e
 where the underlying requirements differ.
 Microsoft is the first major ecosystem because of the initial MSP wedge.
 Build deep, reliable Microsoft coverage through the existing connector/capability fabric.
-Do not allow Microsoft
--
-specific assumptions to contaminate the canonical assurance model.
+Do not allow Microsoft-specific assumptions to contaminate the canonical assurance model.
 Future connectors must be composable.
 Adericel should ultimately integrate with the systems MSPs already operate rather than
 require replacement of those systems.
-Adericel must support point
--
-in
--
-time assurance.
+
+Adericel must support point-in-time assurance.
 The system must be able to answer:
 What did Adericel believe at time X?
 and:
@@ -297,40 +253,25 @@ assurance snapshots;
 temporal state;
 deterministic diffs;
 evidence changes;
-control
--
-state changes;
+control-state changes;
 requirement changes;
 action changes;
-assurance
--
-quality changes.
+assurance-quality changes.
 Historical records must not be silently rewritten.
 It must support:
-human
--
-readable presentation;
-machine
--
-readable interchange;
+human-readable presentation;
+machine-readable interchange;
 provenance;
-point
--
-in
--
-time state;
+point-in-time state;
 evidence references;
 exceptions;
 UNKNOWN;
 integrity verification.
 The Passport must not imply that a signature establishes substantive correctness beyond the
 underlying assurance determination.
-Adericel must support a versioned machine
--
-readable interchange contract:
-adericel.passport
--
-interchange/v1
+
+Adericel must support a versioned machine-readable interchange contract:
+adericel.passport-interchange/v1
 The interchange must provide:
 canonical JSON;
 JSON Schema;
@@ -339,35 +280,24 @@ detached Ed25519 signature;
 issuer identity;
 immutable key ID;
 algorithm/version;
-issued/as
--
-of metadata.
+issued/as-of metadata.
 Signing must operate over the canonical representation.
 Verification must be possible independently of Adericel.
 A third party must be able to verify:
 who issued the record + that the exact record has not been altered.
 Issuer signing keys must be separately configured credentials.
-Do
-not
-derive issuer keys from the deployment/root secret.
+Do not derive issuer keys from the deployment/root secret.
 Support:
 Requirements:
 immutable key IDs;
 active signing key;
-historical public
--
-key retention;
+historical public-key retention;
 controlled rotation;
 compromise/revocation procedure;
-no private
--
-key persistence in normal application data;
-no private
--
-key logging;
-future compatibility with KMS/HSM
--
-backed custody.
+no private-key persistence in normal application data;
+no private-key logging;
+
+future compatibility with KMS/HSM-backed custody.
 Do not introduce unnecessary PKI complexity.
 Verification must be a pure operation requiring only:
 canonical content + signature + issuer public key
@@ -390,6 +320,7 @@ Historical evidence can inform future assessment.
 It cannot silently establish current truth where current verification is required.
 Where authoritative sources disagree, Adericel must represent the conflict.
 It must not silently select the most convenient source.
+
 Conflicts should expose:
 sources;
 timestamps;
@@ -397,9 +328,7 @@ observations;
 affected controls;
 resolution state;
 resulting assurance limitation.
-Autonomy must be policy
--
-controlled.
+Autonomy must be policy-controlled.
 Action authority follows:
 Autonomy levels must not bypass:
 legal authority;
@@ -414,14 +343,13 @@ interpret;
 summarise;
 explain;
 propose;
-classify where explicitly non
--
-authoritative;
+classify where explicitly non-authoritative;
 assist investigation;
 draft responses.
 AI may not:
 establish authoritative truth;
 manufacture evidence;
+
 silently convert UNKNOWN to PASS;
 approve consequential actions;
 bypass policy;
@@ -429,21 +357,13 @@ bypass authorisation;
 overwrite deterministic assessments.
 Local Ollama remains preferred where technically appropriate.
 Adericel is distributed through:
-Do not design the core product around direct
--
-to
--
-SME distribution.
+Do not design the core product around direct-to-SME distribution.
 The MSP requires:
-secure multi
--
-tenancy;
+secure multi-tenancy;
 delegated access;
 portfolio assurance;
 customer lifecycle management;
-coverage
--
-aware prioritisation;
+coverage-aware prioritisation;
 automated evidence collection;
 governed remediation;
 customer proof;
@@ -455,6 +375,7 @@ Support lifecycle:
 Support must preserve:
 tenant scope;
 entitlement;
+
 provenance;
 diagnostics;
 evidence;
@@ -481,21 +402,18 @@ secure session/refresh handling;
 signed webhooks;
 replay protection;
 idempotency;
-append
--
-only audit;
+append-only audit;
 secrets management;
 dependency integrity;
 secure defaults;
+
 network egress controls;
 operational health separation;
 backup/restore.
 Security boundaries must be tested, not merely documented.
 Adericel must be designed for UK GDPR/Data Protection Act 2018 compliance and legal
 defensibility.
-Privacy must be
-by design and by default
-.
+Privacy must be by design and by default.
 Engineering must support:
 purpose limitation;
 data minimisation;
@@ -515,19 +433,11 @@ Where a DPIA, contractual review, ICO registration, legal opinion or other exter
 determination is required, the system must not falsely represent it as completed.
 Engineering compliance readiness is not equivalent to legal certification.
 Default infrastructure preference:
-1.
-local/self
--
-hosted;
-2.
-UK
--
-hosted;
-3.
-non
--
-UK external services only where technically, commercially and legally justified.
+1. local/self-hosted;
+2. UK-hosted;
+3. non-UK external services only where technically, commercially and legally justified.
 Do not introduce external AI/data services merely for convenience.
+
 The system must support:
 encrypted backup;
 restore verification;
@@ -539,11 +449,7 @@ deterministic replay where applicable.
 Backup existence alone is insufficient.
 Restoration must be tested.
 Adericel must measure real operational value.
-Proof
--
-of
--
-value must derive from actual system evidence such as:
+Proof-of-value must derive from actual system evidence such as:
 observations;
 evidence;
 claims;
@@ -558,34 +464,24 @@ human interventions.
 Do not invent time savings, ROI or customer outcomes.
 Do not compete primarily through:
 feature count;
+
 generic AI;
 dashboards;
 opaque scoring;
-consultant
--
-heavy services.
+consultant-heavy services.
 The strategic position is the
-operational/security tooling
-.
+operational/security tooling.
 Adericel should progressively own:
 memory
 This position must be earned through actual capability.
 Do not claim market leadership before evidence exists.
 Where inexpensive to establish correctly now, build primitives supporting future:
 supplier assurance;
-third
--
-party assurance;
+third-party assurance;
 framework expansion;
-machine
--
-to
--
-machine assurance exchange;
+machine-to-machine assurance exchange;
 temporal assurance;
-requirement
--
-change impact;
+requirement-change impact;
 assurance quality;
 assurance graph evolution;
 policy simulation;
@@ -598,6 +494,7 @@ an RMM;
 a PSA;
 an EDR;
 a SIEM;
+
 a generic ticketing system;
 a generic GRC clone;
 an autonomous legal authority;
@@ -623,20 +520,17 @@ explicit contracts;
 composable primitives;
 immutable history;
 versioned rules;
-schema
--
-first interfaces;
+schema-first interfaces;
 capability discovery;
 testable boundaries;
 dependency isolation.
 Avoid:
+
 duplicated business logic;
 hidden state;
 magic automation;
 speculative abstractions;
-feature
--
-driven architecture;
+feature-driven architecture;
 irreversible coupling.
 Tests must cover:
 domain invariants;
@@ -665,6 +559,7 @@ planned;
 assumed;
 externally dependent;
 legally pending.
+
 Never present a target as an implemented capability.
 No change may weaken:
 truth integrity;
@@ -692,39 +587,28 @@ no unsupported claims are introduced.
 The ultimate Adericel test is:
 Can Adericel truthfully prove what is known about an organisation, what is unknown,
 why each determination exists, what evidence supports it, what changed, what action
+
 was taken, whether that action worked, what remains unresolved, and what the
 And operationally:
-Can an MSP onboard, assure, monitor, manage and ultimately offboard
-its customer
+Can an MSP onboard, assure, monitor, manage and ultimately offboard its customer
 organisations through Adericel while preserving truth, evidence, authority, uncertainty
 and an auditable lifecycle record?
 If not, the platform is incomplete.
-Adericel begins with UK Microsoft
--
-focused MSPs and Cyber Essentials.
+Adericel begins with UK Microsoft-focused MSPs and Cyber Essentials.
 It must not remain defined by either.
-The long
--
-term objective is:
+The long-term objective is:
 Adericel becomes trusted assurance infrastructure through which organisations and
-their service providers can establish, maintain, exchange and verify evidence
--
-backed
+their service providers can establish, maintain, exchange and verify evidence-backed
 assurance across systems, frameworks and time.
-The product should become progressively harder to replace because it owns the
-assurance
-record and its provenance
-, not because it traps customers in proprietary tooling.
+The product should become progressively harder to replace because it owns the assurance
+record and its provenance, not because it traps customers in proprietary tooling.
 The first real MSP pilot remains the immediate commercial milestone.
-It is
-not
-the architectural ceiling.
+It is not the architectural ceiling.
 Build the foundations now that would otherwise become expensive, dangerous or structurally
 impossible to retrofit later.
-Build Adericel for its
-best practical future
-, while delivering incrementally.
+Build Adericel for its best practical future, while delivering incrementally.
 Do not:
+
 restart the product;
 create a parallel architecture;
 add feature volume for appearance;
@@ -735,25 +619,17 @@ sacrifice architecture for launch speed.
 Do:
 strengthen the existing platform;
 preserve established invariants;
-build load
--
-bearing primitives early;
+build load-bearing primitives early;
 automate where defensible;
 retain human authority at consequential boundaries;
 make uncertainty explicit;
 make evidence authoritative;
 make verification reproducible;
 make the system interoperable;
-make the organisation lifecycle first
--
-class.
+make the organisation lifecycle first-class.
 Adericel is not merely a tool that assesses organisations.
 It is the governed assurance lifecycle infrastructure through which an MSP can
 onboard, assure, monitor, manage, verify, prove, improve and offboard customer
-organisations
-while preserving an authoritative, evidence
--
-backed record of what was
-true, what w
-as unknown, what happened and why.
+organisations while preserving an authoritative, evidence-backed record of what was
+true, what was unknown, what happened and why.
 That is the product to build.

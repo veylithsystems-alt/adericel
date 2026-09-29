@@ -13,11 +13,14 @@ v3.2 is a principle-and-lifecycle contract rather than a numbered-section one,
 so this report is organised by the contract's own headings instead of by section
 number.
 
-**This audit is bounded by a lossy source.** The contract was supplied as a PDF;
-its diagrams did not extract, and it uses diagrams for several load-bearing
-lists. Those are listed in [`docs/contract/README.md`](../contract/README.md) and
-appear below as `UNAUDITABLE` — not as passes. Nothing in this repository has
-been built from a guess at them.
+**This audit is bounded by an incomplete source.** Eight passages in the
+contract introduce a list or a sequence and are followed by nothing. This was
+first recorded as a PDF extraction failure; the document was then re-read with a
+positional extractor and examined directly, and the passages are empty in the
+document itself — it holds no images, no form XObjects and no vector drawing.
+They are listed in [`docs/contract/README.md`](../contract/README.md) and appear
+below as `UNAUDITABLE`, not as passes. Nothing here is built from a guess at
+them.
 
 ---
 

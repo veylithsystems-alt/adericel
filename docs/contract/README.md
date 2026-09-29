@@ -6,28 +6,45 @@ directory holds what the repository needs in order to be audited against it.
 
 ## `v3.2-extracted.txt`
 
-A **lossy text extraction** of the v3.2 PDF, kept so that a claim in this
-repository can be traced to the words it rests on.
+A text extraction of the v3.2 PDF, kept so that a claim in this repository can
+be traced to the words it rests on. It is not the contract — the PDF is.
 
-It is not the contract. The PDF is the contract. Specifically, this extraction
-is missing every diagram, and the contract uses diagrams for several
-load-bearing lists. The following are known to be incomplete here:
+## Seven passages are incomplete in the contract itself
 
-| Where                                | What is missing                                                                                         |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| §3.6 VERIFY                          | The authoritative execution lifecycle. Only `OBSERVE` survives; the rest of the sequence was a diagram. |
-| "The fundamental Adericel loop"      | The loop itself.                                                                                        |
-| "Action authority follows:"          | The autonomy/authority progression.                                                                     |
-| "Adericel is distributed through:"   | The distribution model.                                                                                 |
-| "Support lifecycle:"                 | The support stages.                                                                                     |
-| "Adericel should progressively own:" | All but the word `memory`.                                                                              |
-| Evidence lineage                     | The lineage chain under "Every material determination must preserve appropriate lineage".               |
-| The ultimate test                    | Truncated at "and what the".                                                                            |
+**This was first recorded here as an extraction failure, and that was wrong.**
+The document was re-examined with a positional extractor that decodes composite
+fonts and reassembles lines by coordinate. The result is the same in these seven
+places, and the file was then examined directly:
+
+- it contains **no images** (no `/Subtype/Image` object anywhere),
+- it contains **no form XObjects**,
+- it contains **no vector drawing** (zero curve operators on any of the 22
+  pages),
+- and there are **no text fragments** at the coordinates in question.
+
+Between "The fundamental Adericel loop is:" at y=287 and "Every major subsystem
+must reinforce this loop." at y=218 there is a single empty paragraph — a 27pt
+gap, not the space a diagram would occupy. Nothing was lost in reading the file.
+The passages are empty in the document.
+
+| Where                                                             | What is absent                                   |
+| ----------------------------------------------------------------- | ------------------------------------------------ |
+| §3.6 VERIFY, "The authoritative lifecycle is:"                    | Everything after the first bullet, `-OBSERVE`.   |
+| "The fundamental Adericel loop is:"                               | The loop.                                        |
+| "Action authority follows:"                                       | The authority progression.                       |
+| "Adericel is distributed through:"                                | The distribution model.                          |
+| "Support lifecycle:"                                              | The support stages.                              |
+| "Adericel should progressively own:"                              | Everything after the word `memory`.              |
+| "Every material determination must preserve appropriate lineage:" | The lineage chain.                               |
+| "The ultimate Adericel test is:"                                  | The sentence stops mid-clause at "and what the". |
 
 **Nothing in this repository may be built from a guess at those.** Where a
-missing item was needed, it is recorded as an open risk rather than inferred —
-the contract itself forbids presenting an assumption as an implemented
-capability, and that applies most sharply to assumptions about the contract.
+missing item was needed it is recorded as an open risk rather than inferred: the
+contract itself forbids presenting an assumption as an implemented capability,
+and that applies most sharply to assumptions about the contract. See RR-075.
+
+If the Word original has these lists, exporting it again would supply them. As
+the PDF stands they are not there to read.
 
 ## What changed from v3.1 to v3.2, as it affects the build
 
