@@ -82,6 +82,24 @@ const COMMON_ROUTES = new Set([
   // deliberately readable by a customer, because it is the answer to the
   // question their solicitor asked.
   'GET /v1/system/data-processing',
+  // The containment vocabulary: what each level costs and what each trigger
+  // means. Reference data an operator reads while deciding under pressure,
+  // identical for every caller and naming no organisation.
+  'GET /v1/containment/levels',
+  // The commercial vocabulary: what each state costs a customer and which
+  // moves are legal from where. Reference data an operator reads while
+  // deciding what to do about an unpaid invoice. Identical for every caller,
+  // names no organisation, and deliberately readable by a customer — they are
+  // entitled to know what happens to their record if they stop paying.
+  'GET /v1/commercial/states',
+  // The support model: what each severity promises and which transitions are
+  // prohibited. Published deliberately — a customer is entitled to know that
+  // nobody can mark their S1 resolved without them. Names no organisation.
+  'GET /v1/support/model',
+  // The resolution vocabulary: what each kind of unknown means and how
+  // materiality is banded. Reference data an operator reads while working a
+  // queue. Names no organisation.
+  'GET /v1/resolution/model',
 ]);
 
 /**
@@ -97,6 +115,17 @@ const OVERRIDES: Record<string, RouteClass> = {
   // tells an attacker something about load.
   'GET /v1/system/health': ['VEYLITH_INTERNAL'],
   'GET /v1/system/outbox': ['VEYLITH_INTERNAL'],
+  // Platform-scale containment stops every estate, so it belongs to Veylith
+  // alone. An MSP reaches C1-C3 over its own customers through the
+  // organisation-scoped routes; C4 and C5 are not one partner's to declare.
+  'POST /v1/system/containment': ['VEYLITH_INTERNAL'],
+  'POST /v1/system/containment/recover': ['VEYLITH_INTERNAL'],
+  // Emergency access is opened by Veylith over an organisation it has no
+  // standing authority over. The organisation sees every grant through its own
+  // audit trail; this is the operator's side of it.
+  'POST /v1/system/break-glass': ['VEYLITH_INTERNAL'],
+  'POST /v1/system/break-glass/:id/close': ['VEYLITH_INTERNAL'],
+  'GET /v1/system/break-glass': ['VEYLITH_INTERNAL'],
 };
 
 const ALL_SURFACES: Surface[] = [...SURFACES];

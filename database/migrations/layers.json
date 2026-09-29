@@ -1,0 +1,25 @@
+{
+  "$comment": [
+    "Which migrations belong to Veylith's own company layer rather than to the",
+    "Adericel product.",
+    "",
+    "WHY A MANIFEST RATHER THAN A MARKER IN THE SQL",
+    "",
+    "A `-- migrate:layer company` line inside the file would be the obvious",
+    "design and it cannot be used: the runner refuses a migration whose",
+    "checksum has changed since it was applied, and adding a line changes the",
+    "checksum. That refusal is correct and worth more than the tidiness, so the",
+    "classification lives beside the files instead of inside them.",
+    "",
+    "The usual cost of a manifest is that it drifts from what it describes.",
+    "`tests/unit/migration-layers.test.ts` closes that by derivation: any",
+    "migration whose SQL touches the `veylith` schema must be listed here, and",
+    "anything listed here must actually touch it. Neither direction can rot",
+    "without a named failure."
+  ],
+  "company": [
+    "0018_veylith_operating_core",
+    "0019_veylith_commercial_pipeline",
+    "0020_veylith_decision_binding"
+  ]
+}

@@ -209,7 +209,10 @@ export async function runLoopCycle(
         });
         counters.determinationsMade += outputs.length;
         counters.determinationsUnknown += outputs.filter(
-          (output: { assessment: { state: string } }) => output.assessment.state === 'UNKNOWN',
+          (output: { assessment: { state: string } }) =>
+            output.assessment.state === 'UNKNOWN' ||
+            output.assessment.state === 'DEGRADED' ||
+            output.assessment.state === 'BLOCKED',
         ).length;
       } catch (error) {
         skipped.push({

@@ -510,7 +510,10 @@ describe.skipIf(!available)('billing lifecycle', () => {
       );
       expect((response.json() as { outcome: string }).outcome).toBe('APPLIED');
       const row = await subscriptionRow();
-      expect(row.status).toBe('CANCELLED');
+      // TERMINATED in the §16 vocabulary (ADR-0047). The provider event is
+      // still named SUBSCRIPTION_CANCELLED because that is what Stripe calls
+      // it; the commercial state is ours and says what it means.
+      expect(row.status).toBe('TERMINATED');
       // The customer said stop. There is nothing to be lenient about.
       expect(row.lapsed_at).not.toBeNull();
       expect(await maintained()).toBe(false);
@@ -523,7 +526,7 @@ describe.skipIf(!available)('billing lifecycle', () => {
       expect((response.json() as { outcome: string }).outcome).toBe('SUBSCRIPTION_CANCELLED');
       // A final-period invoice settling after cancellation is ordinary, and
       // must not resurrect the subscription.
-      expect((await subscriptionRow()).status).toBe('CANCELLED');
+      expect((await subscriptionRow()).status).toBe('TERMINATED');
       expect(await maintained()).toBe(false);
     });
   });
@@ -549,7 +552,7 @@ describe.skipIf(!available)('billing lifecycle', () => {
       void other;
     });
 
-    it('refuses to take payment against a cancelled subscription', async () => {
+    it('refuses to take payment against an ended subscription', async () => {
       const owner = await signIn(harness, 'owner-billing-corp@test.invalid');
       const response = await harness.server.inject({
         method: 'POST',
@@ -562,7 +565,7 @@ describe.skipIf(!available)('billing lifecycle', () => {
         },
       });
       expect(response.statusCode).toBe(412);
-      expect(response.body).toMatch(/cancelled/i);
+      expect(response.body).toMatch(/has ended/i);
     });
   });
 });

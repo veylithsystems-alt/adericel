@@ -76,6 +76,7 @@ interface PassportBody {
     controls: {
       key: string;
       state: string;
+      truthState: string | null;
       unknownReason: string | null;
       rationale: string | null;
       evidenceAgeDays: number | null;
@@ -186,6 +187,41 @@ describe.skipIf(!available)('assurance passport', () => {
     // yesterday's, and a reader cannot tell them apart without the number.
     const determined = second.content.controls.filter((c) => c.state !== 'UNKNOWN');
     expect(determined.some((c) => c.evidenceAgeDays !== null)).toBe(true);
+  });
+
+  it('says how firmly it knows each control, not only what it concluded', async () => {
+    /**
+     * Contract v3.1 §6 and §18.
+     *
+     * A control satisfied on a re-observed API reading and one satisfied on
+     * somebody's word are the same assurance state and very different claims.
+     * Until this existed the Passport reported the conclusion and hid its
+     * footing, so an insurer reading it could not weigh one against the other.
+     */
+    const passport = await issue();
+
+    const determined = passport.content.controls.filter((c) => c.state !== 'UNKNOWN');
+    expect(determined.length).toBeGreaterThan(0);
+    for (const control of determined) {
+      expect(
+        control.truthState,
+        `${control.key} states a conclusion with no provenance`,
+      ).not.toBeNull();
+    }
+
+    // These determinations came from a connector, so they are observations —
+    // not assumptions, and certainly not interpretations.
+    expect(determined.some((c) => c.truthState === 'OBSERVED')).toBe(true);
+  });
+
+  it('never reports a model interpretation as the footing for a determination', async () => {
+    // The boundary ADR-0004 enforces, restated where a recipient can see it: an
+    // INTERPRETED claim cannot reach the Truth Engine, so no assessed control
+    // may ever cite one as its truth state.
+    const passport = await issue();
+    for (const control of passport.content.controls) {
+      expect(control.truthState).not.toBe('INTERPRETED');
+    }
   });
 
   it('never reports every control satisfied while any remains undetermined', async () => {

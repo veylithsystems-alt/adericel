@@ -197,7 +197,16 @@ describe.skipIf(!available)('the walls, under live requests', () => {
   let platformToken: string;
 
   beforeAll(async () => {
-    harness = await createHarness();
+    /**
+     * The company layer on, deliberately, because that is the harder case.
+     *
+     * With it off the company routes are not registered and a client asking
+     * for them gets a 404 — which proves nothing about the boundary. Turning
+     * it on means the routes exist and the assertion below is the real one:
+     * a client or an MSP is refused company data by the surface model, not by
+     * the route being absent.
+     */
+    harness = await createHarness({ env: { ADERICEL_COMPANY_LAYER: 'true' } });
     await harness.truncate();
     tenant = await seedTenant(harness, { slug: 'boundary-corp', records: [] });
     other = await seedTenant(harness, { slug: 'boundary-rival', records: [] });

@@ -102,6 +102,28 @@ describe('Microsoft Entra', () => {
               userType: 'Member',
               signInActivity: { lastSignInDateTime: '2026-09-01T09:00:00Z' },
             },
+            {
+              id: 'g1',
+              displayName: 'External Reviewer',
+              userPrincipalName: 'reviewer@partner.test',
+              // Enabled guest, which is the one "default credential" a
+              // directory can actually see.
+              accountEnabled: true,
+              userType: 'Guest',
+              signInActivity: { lastSignInDateTime: '2026-09-02T09:00:00Z' },
+            },
+          ],
+        },
+      ],
+      [
+        /\/settings/,
+        {
+          value: [
+            {
+              id: 's1',
+              displayName: 'Password Rule Settings',
+              values: [{ name: 'EnableBannedPasswordCheck', value: 'true' }],
+            },
           ],
         },
       ],
@@ -145,6 +167,7 @@ describe('Microsoft Entra', () => {
     expect(result.capabilityReports?.map((r) => r.capability).sort()).toEqual([
       'collect.identities',
       'collect.mfa',
+      'collect.password_policy',
       'collect.privileged_roles',
     ]);
     expect(result.capabilityReports?.every((r) => r.outcome === 'AVAILABLE')).toBe(true);
@@ -203,6 +226,24 @@ describe('Microsoft Intune', () => {
           realTimeProtectionEnabled: true,
           malwareProtectionEnabled: true,
           signatureUpdateDateTime: '2026-09-09T06:00:00Z',
+          networkInspectionSystemEnabled: true,
+        },
+      ],
+      [
+        /deviceConfigurations/,
+        {
+          value: [
+            {
+              id: 'p1',
+              displayName: 'Windows baseline',
+              '@odata.type': '#microsoft.graph.windows10GeneralConfiguration',
+              passwordRequired: true,
+              maxPasswordAttempts: 10,
+              passwordMinutesOfInactivityBeforeLock: 5,
+              storageBlockRemovableStorage: true,
+              automaticUpdateMode: 'autoInstallAtMaintenanceTime',
+            },
+          ],
         },
       ],
       [

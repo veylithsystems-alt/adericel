@@ -234,7 +234,8 @@ export async function createHarness(
             billing_events, passport_share_views, passport_shares, assurance_passports,
             assurance_states, assessments, assessment_inputs, claim_evidence, claims, evidence_observations,
             evidence_subjects, evidence, observations, integration_runs, integrations,
-            control_requirements, controls, organisation_frameworks, graph_edges, graph_nodes,
+            control_requirements, controls, organisation_commitments, organisation_frameworks,
+            graph_edges, graph_nodes,
             outbox_events, event_log, audit_log, idempotency_keys, scheduled_jobs, reports,
             subscriptions, msp_baseline_controls, msp_baselines, sessions, api_keys, grants,
             onboarding_tasks, invitations, signups,
@@ -330,7 +331,8 @@ export async function seedTenant(
       `INSERT INTO subscriptions (msp_id, plan_key, status, price_per_organisation_minor,
                                   current_period_start, current_period_end)
        VALUES ($1, 'standard', 'ACTIVE', 19900, now(), now() + interval '1 month')
-       ON CONFLICT (msp_id) WHERE msp_id IS NOT NULL AND status <> 'CANCELLED' DO NOTHING`,
+       ON CONFLICT (msp_id) WHERE msp_id IS NOT NULL
+            AND status NOT IN ('TERMINATED', 'ARCHIVED') DO NOTHING`,
       [row.id],
     );
     return row.id;

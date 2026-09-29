@@ -1,4 +1,5 @@
-import { z } from 'zod';
+import { COMMERCIAL_CAPABILITY, COMMERCIAL_STATES, commercialStateSchema } from './commercial.js';
+import type { CommercialState } from './commercial.js';
 
 /**
  * Billing model.
@@ -6,16 +7,16 @@ import { z } from 'zod';
  * Adericel is sold wholesale to MSPs, priced per organisation per month. The
  * price is configuration, never a constant: MSP agreements differ, currencies
  * differ, and the platform must not need a code change to sell.
+ *
+ * A subscription's status IS the commercial state (`commercial.ts`). They were
+ * two vocabularies for one fact, and two vocabularies for one fact is how the
+ * two drift: a five-state billing enum and a ten-state contract model would
+ * have needed a mapping, and the mapping would have been the place the
+ * separation from security containment quietly died. There is one enum.
  */
-export const SUBSCRIPTION_STATUSES = [
-  'TRIAL',
-  'ACTIVE',
-  'PAST_DUE',
-  'SUSPENDED',
-  'CANCELLED',
-] as const;
-export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
-export const subscriptionStatusSchema = z.enum(SUBSCRIPTION_STATUSES);
+export const SUBSCRIPTION_STATUSES = COMMERCIAL_STATES;
+export type SubscriptionStatus = CommercialState;
+export const subscriptionStatusSchema = commercialStateSchema;
 
 export const PLAN_TIERS = ['PILOT', 'STANDARD', 'VOLUME', 'ENTERPRISE'] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
@@ -76,9 +77,15 @@ export function monthlyChargeMinor(plan: PlanDefinition, organisationCount: numb
 }
 
 /**
- * Whether an MSP may add another organisation. A suspended or cancelled
- * subscription blocks growth but never blocks read access to existing
- * assurance data — customers must always be able to export their own record.
+ * Whether an MSP may add another organisation.
+ *
+ * The answer comes from `COMMERCIAL_CAPABILITY[state].newCommitments` rather
+ * than a list of statuses repeated here, so a new commercial state cannot be
+ * added without deciding what it does to growth. Taking on an organisation
+ * costs money to serve, so it is the one thing every restricted state stops.
+ *
+ * It never blocks read access to existing assurance data. Customers must always
+ * be able to read and export their own record — see `commercial.ts`.
  */
 export function checkOrganisationEntitlement(
   subscription: Pick<SubscriptionRecord, 'status' | 'trialEndsAt'>,
@@ -86,10 +93,10 @@ export function checkOrganisationEntitlement(
   organisationLimit: number | null,
   atIso: string,
 ): EntitlementCheck {
-  if (subscription.status === 'CANCELLED' || subscription.status === 'SUSPENDED') {
+  if (!COMMERCIAL_CAPABILITY[subscription.status].newCommitments) {
     return {
       allowed: false,
-      reason: `Subscription is ${subscription.status.toLowerCase()}`,
+      reason: COMMERCIAL_CAPABILITY[subscription.status].summary,
       organisationsInUse,
       organisationLimit,
     };

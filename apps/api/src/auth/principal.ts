@@ -28,6 +28,7 @@ interface GrantRow {
   scope_id: string | null;
   roles: string[];
   expires_at: Date | null;
+  attenuated_to: string[] | null;
 }
 
 async function loadGrants(
@@ -37,7 +38,7 @@ async function loadGrants(
   nowIso: string,
 ): Promise<Grant[]> {
   const rows = await ctx.many<GrantRow>(
-    `SELECT scope_type, scope_id, roles, expires_at
+    `SELECT scope_type, scope_id, roles, expires_at, attenuated_to
      FROM grants
      WHERE principal_type = $1 AND principal_id = $2
        AND revoked_at IS NULL
@@ -49,6 +50,10 @@ async function loadGrants(
     scopeId: row.scope_id,
     roles: row.roles as Role[],
     expiresAt: row.expires_at?.toISOString() ?? null,
+    // Carried through exactly as stored. An unrecognised permission name here
+    // narrows to nothing rather than widening to everything, because `conveys`
+    // asks the roles first and this list second.
+    attenuatedTo: (row.attenuated_to as Permission[] | null) ?? null,
   }));
 }
 

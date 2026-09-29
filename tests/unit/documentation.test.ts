@@ -1,6 +1,11 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  DOCUMENTATION_STATES,
+  NOT_YET_CAPABILITY_STATES,
+  declaredDocumentationState,
+} from '@adericel/domain';
 
 /**
  * Documentation that matches the code.
@@ -137,5 +142,172 @@ describe('the data protection documents describe the code that exists', () => {
         /\bfully (GDPR[- ])?compliant\b/i,
       );
     }
+  });
+});
+
+describe('the residual-risk register', () => {
+  const REGISTER = 'docs/audit/RESIDUAL_RISK_REGISTER.md';
+  const register = readFileSync(join(ROOT, REGISTER), 'utf8');
+
+  /** Each `### RR-nnn` entry and its body. */
+  function entries(section: string): readonly { heading: string; body: string }[] {
+    return section
+      .split(/(?=^### RR-)/m)
+      .filter((block) => block.startsWith('### RR-'))
+      .map((block) => ({ heading: block.split('\n')[0] ?? '', body: block }));
+  }
+
+  it('files no open risk under the heading that says it is closed', () => {
+    /**
+     * Found by adding RR-073 and noticing it landed in the wrong section
+     * alongside four others that were already there.
+     *
+     * A register that files an open risk under "Closed" is worse than no
+     * register: somebody reading it to decide whether a risk was dealt with
+     * gets the answer "yes" from the heading and "no" from the row, and the
+     * heading is what they skim. §37 is about exactly this kind of claim.
+     */
+    const closed = register.split(/^## Closed$/m)[1];
+    expect(closed, `${REGISTER} has no "## Closed" section`).toBeDefined();
+
+    const misfiled = entries(closed ?? '')
+      .filter((entry) => /\|\s*\*\*State\*\*\s*\|\s*`OPEN`/.test(entry.body))
+      .map((entry) => entry.heading);
+
+    expect(misfiled, `Open risks filed under "## Closed":\n${misfiled.join('\n')}`).toEqual([]);
+  });
+
+  it('gives every entry a state, because an entry without one asserts nothing', () => {
+    const stateless = entries(register)
+      .filter((entry) => !/\|\s*\*\*State\*\*\s*\|/.test(entry.body))
+      .map((entry) => entry.heading);
+    expect(stateless).toEqual([]);
+  });
+
+  it('numbers every entry uniquely', () => {
+    const numbers = entries(register).map(
+      (entry) => /### (RR-\d+)/.exec(entry.heading)?.[1] ?? entry.heading,
+    );
+    const duplicated = numbers.filter((number, index) => numbers.indexOf(number) !== index);
+    expect(duplicated).toEqual([]);
+  });
+});
+
+describe('documentation distinguishes what is built from what is not', () => {
+  const PRODUCT_DOCS = 'docs/product';
+
+  /**
+   * Contract v3.2: "Documentation must distinguish: implemented; tested;
+   * planned; assumed; externally dependent; legally pending. Never present a
+   * target as an implemented capability."
+   *
+   * Applied to `docs/product` specifically: those are the documents written for
+   * somebody outside the build to read, so they are where an unlabelled target
+   * does real damage. An ADR is a decision record and says so by being one; a
+   * runbook describes an operation somebody is performing.
+   *
+   * WHAT WAS TRIED AND ABANDONED
+   *
+   * Scanning prose for forward-looking promises about the product. Across the
+   * whole repository it produced eleven hits and not one was real — English uses
+   * the future tense for a deterministic system's reliable behaviour ("it will
+   * refuse rather than degrade"), which is the voice this product is written in.
+   * Eleven exceptions would have been needed, and a check needing an exception
+   * per instance is not a check. The note in `release-gate.ts` records it so it
+   * is not attempted again as though it were new.
+   */
+  const productDocs = readdirSync(join(ROOT, PRODUCT_DOCS)).filter((name) => name.endsWith('.md'));
+
+  it('has product documents to check', () => {
+    // A guard on the guard: if the directory moves, the loops below would pass
+    // by iterating nothing.
+    expect(productDocs.length).toBeGreaterThan(3);
+  });
+
+  it('declares a recognised state on every customer-facing document', () => {
+    const undeclared = productDocs.filter(
+      (name) =>
+        declaredDocumentationState(readFileSync(join(ROOT, PRODUCT_DOCS, name), 'utf8')) === null,
+    );
+    expect(
+      undeclared,
+      `These documents declare no documentation state:\n${undeclared.join('\n')}\n` +
+        `Add one of: ${DOCUMENTATION_STATES.join(', ')}`,
+    ).toEqual([]);
+  });
+
+  it('says plainly, in any document that is not yet a capability, that it is not one', () => {
+    /**
+     * The rule the contract is actually protecting. A document labelled PLANNED
+     * whose body reads like a description of working software has satisfied the
+     * letter of the label and none of its purpose — a reader skims the prose,
+     * not the header.
+     */
+    for (const name of productDocs) {
+      const text = readFileSync(join(ROOT, PRODUCT_DOCS, name), 'utf8');
+      const state = declaredDocumentationState(text);
+      if (state === null || !NOT_YET_CAPABILITY_STATES.includes(state)) continue;
+
+      // The caveat must be near the top, where a reader meets it before the
+      // body rather than after being persuaded by it.
+      const opening = text.split('\n').slice(0, 12).join('\n');
+      expect(opening, `${name} is ${state} and does not say so in its opening`).toMatch(
+        /not (?:built|a working capability)|should (?:not )?be read as/i,
+      );
+    }
+  });
+
+  it('labels the generated documents from their generators, not by hand', () => {
+    // A marker added by hand to a generated file is removed by the next run,
+    // and the drift check would then fail for a reason nobody expects.
+    for (const name of ['CAPABILITY_STATUS.md', 'MSP_OPERATING_MODEL.md']) {
+      const text = readFileSync(join(ROOT, PRODUCT_DOCS, name), 'utf8');
+      expect(text, name).toMatch(/Do not edit by hand/);
+      expect(declaredDocumentationState(text), name).not.toBeNull();
+    }
+  });
+});
+
+describe('the README tells a reader to run things that exist', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const scripts = Object.keys(
+    (
+      JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+        scripts: Record<string, string>;
+      }
+    ).scripts,
+  );
+
+  /** Every `pnpm <name>` the README names, deduplicated. */
+  const invoked = [
+    ...new Set(
+      [...readme.matchAll(/(?:^|[\s`])pnpm\s+((?:[a-z]+:)?[a-z][a-z0-9:-]*)/g)].map(
+        (m) => m[1] ?? '',
+      ),
+    ),
+  ].filter((name) => name !== '');
+
+  it('names commands to check', () => {
+    // A guard on the guard: if the pattern stops matching, the check below would
+    // pass by finding nothing to verify.
+    expect(invoked.length).toBeGreaterThan(5);
+  });
+
+  it('names no script that does not exist', () => {
+    /**
+     * The failure this prevents is small and corrosive: a script is renamed, the
+     * README keeps telling people to run the old name, and the first thing a new
+     * reader does with this repository does not work. "Documentation matches
+     * implementation" is one of the ten completion conditions, and a command is
+     * the most literal form of it.
+     */
+    const passthrough = new Set(['install', 'dlx', 'exec', 'run', 'add', 'why', 'audit', 'store']);
+    const unknown = invoked.filter((name) => !scripts.includes(name) && !passthrough.has(name));
+    expect(
+      unknown,
+      `The README tells a reader to run scripts that are not in package.json:\n  ${unknown.join(
+        '\n  ',
+      )}`,
+    ).toEqual([]);
   });
 });

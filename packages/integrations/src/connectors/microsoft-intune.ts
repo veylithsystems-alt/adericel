@@ -102,6 +102,101 @@ interface WindowsProtectionState {
   realTimeProtectionEnabled?: boolean;
   malwareProtectionEnabled?: boolean;
   signatureUpdateDateTime?: string | null;
+  /** Defender SmartScreen / network protection. Cyber Essentials MP-3. */
+  networkInspectionSystemEnabled?: boolean;
+}
+
+/**
+ * A device configuration profile, reduced to the settings Cyber Essentials
+ * asks about.
+ *
+ * Graph returns these as a polymorphic collection whose shape depends on
+ * `@odata.type`, and the settings live under different names per platform. Only
+ * the names below are read: a connector that walked the whole object would be
+ * collecting an estate's entire endpoint configuration in order to answer four
+ * questions.
+ */
+interface DeviceConfiguration {
+  id: string;
+  displayName?: string | null;
+  '@odata.type'?: string;
+  /** Windows / iOS / Android: a device unlock credential is required. */
+  passwordRequired?: boolean | null;
+  /** Attempts before the device wipes or locks out. */
+  maxPasswordAttempts?: number | null;
+  passwordMinutesOfInactivityBeforeLock?: number | null;
+  passwordMinutesOfInactivityBeforeScreenTimeout?: number | null;
+  /** Windows: auto-run and auto-play of removable media. */
+  storageBlockRemovableStorage?: boolean | null;
+  smartScreenEnableInShell?: boolean | null;
+  /** Windows Update for Business: automatic installation behaviour. */
+  automaticUpdateMode?: string | null;
+}
+
+/**
+ * Combine configuration profiles into the settings that are unambiguously in
+ * force across all of them.
+ *
+ * Unanimity, not last-write-wins. Two profiles that disagree about whether a
+ * device unlock credential is required describe a tenant where the answer
+ * depends on which groups a device is in — and since assignments are not
+ * resolved (see the note at the call site), the only honest output is nothing.
+ *
+ * A setting nothing mentions is also nothing: silence in a profile is not a
+ * statement that the setting is off.
+ */
+function combineProfiles(
+  profiles: readonly DeviceConfiguration[],
+): Record<string, boolean | number> {
+  const settings: Record<string, boolean | number> = {};
+
+  const unanimous = <T>(read: (profile: DeviceConfiguration) => T | null | undefined): T | null => {
+    const stated = profiles
+      .map(read)
+      .filter((value): value is T => value !== null && value !== undefined);
+    if (stated.length === 0) return null;
+    const first = stated[0]!;
+    return stated.every((value) => value === first) ? first : null;
+  };
+
+  const lockRequired = unanimous((profile) => profile.passwordRequired);
+  if (lockRequired !== null) settings.lockRequired = lockRequired;
+
+  const maxAttempts = unanimous((profile) => profile.maxPasswordAttempts);
+  if (maxAttempts !== null) settings.lockMaxAttempts = maxAttempts;
+
+  // Two names for the same idea on different platforms. Minutes in Graph,
+  // seconds in the canonical predicate, because every other duration Adericel
+  // carries is in seconds and a unit that varies by predicate is a bug waiting
+  // for somebody in a hurry.
+  const lockMinutes = unanimous(
+    (profile) =>
+      profile.passwordMinutesOfInactivityBeforeLock ??
+      profile.passwordMinutesOfInactivityBeforeScreenTimeout,
+  );
+  if (lockMinutes !== null) settings.lockTimeoutSeconds = lockMinutes * 60;
+
+  const removableBlocked = unanimous((profile) => profile.storageBlockRemovableStorage);
+  if (removableBlocked !== null) settings.autorunDisabled = removableBlocked;
+
+  /**
+   * Windows Update for Business automatic installation.
+   *
+   * `automaticUpdateMode` is an enumeration, and only two of its values mean
+   * updates install without a person. `userDefined` explicitly means the
+   * decision was left to the user, which is not automatic — mapping it to true
+   * would be the single most flattering mistake available here.
+   */
+  const updateMode = unanimous((profile) => profile.automaticUpdateMode);
+  if (updateMode !== null) {
+    settings.automaticUpdatesEnabled =
+      updateMode === 'autoInstallAtMaintenanceTime' ||
+      updateMode === 'autoInstallAndRebootAtMaintenanceTime' ||
+      updateMode === 'autoInstallAndRebootAtScheduledTime' ||
+      updateMode === 'autoInstallAndRebootWithoutEndUserControl';
+  }
+
+  return settings;
 }
 
 export function createMicrosoftIntuneConnector(deps: {
@@ -404,9 +499,82 @@ export function createMicrosoftIntuneConnector(deps: {
               ...(state.signatureUpdateDateTime
                 ? { signaturesUpdatedAt: state.signatureUpdateDateTime }
                 : {}),
+              ...(state.networkInspectionSystemEnabled === undefined
+                ? {}
+                : { webProtectionEnabled: state.networkInspectionSystemEnabled }),
             },
           });
         }
+      }
+
+      /**
+       * Configuration profiles: what the tenant has decided, estate-wide.
+       *
+       * One request for the whole estate rather than one per device, because
+       * these are tenant-wide objects. That makes them cheap, and it makes them
+       * a statement about intent rather than about a particular machine — so the
+       * observation is attached to each device that the profile governs, not to
+       * the tenant, because a control about devices must be decidable per
+       * device.
+       *
+       * ASSIGNMENT IS NOT READ, AND THAT IS A REAL LIMIT
+       *
+       * A profile in Intune applies to the groups it is assigned to. Reading
+       * assignments means resolving group membership for every device, which is
+       * the expensive shape this connector already avoids for protection state.
+       * So the profiles are combined conservatively: a setting counts as in
+       * force only when EVERY profile that sets it agrees, and a tenant with
+       * two contradictory profiles produces no claim rather than whichever one
+       * happened to be read last.
+       *
+       * The consequence is stated rather than hidden: a tenant whose profile
+       * targets only half the estate will have Adericel report the setting for
+       * all of it. That over-reports, which is why the capability report says
+       * assignments were not resolved, and why this is tracked as RR-069.
+       */
+      try {
+        const { value: profiles = [] } = await client.json<GraphPage<DeviceConfiguration>>({
+          url: `${config.graphBaseUrl}/deviceManagement/deviceConfigurations?$top=${config.pageSize}`,
+          headers: { authorization: `Bearer ${accessToken}` },
+          ...(context.signal ? { signal: context.signal } : {}),
+        });
+
+        const settings = combineProfiles(profiles);
+        const stated = Object.keys(settings).length;
+
+        if (stated > 0) {
+          for (const deviceId of deviceIds) {
+            observations.push({
+              kind: 'DEVICE_STATE',
+              sourceSystem: 'microsoft-intune',
+              subjectExternalId: deviceId,
+              observedAt: context.nowIso,
+              payload: { externalId: deviceId, ...settings },
+            });
+          }
+        }
+
+        capabilityReports.push(
+          capabilityReport(
+            microsoftIntuneManifest,
+            'collect.configuration_profiles',
+            profiles.length === 0 ? 'EMPTY' : stated === 0 ? 'PARTIAL' : 'AVAILABLE',
+            profiles.length === 0
+              ? 'The tenant has no Intune device configuration profiles. These settings are ' +
+                  'managed elsewhere — Group Policy, or another MDM — and must be attested.'
+              : stated === 0
+                ? `Read ${profiles.length} profile(s), none of which set a Cyber Essentials ` +
+                  'setting unambiguously. Where two profiles disagree Adericel claims nothing.'
+                : `Read ${profiles.length} profile(s). Profile assignments were not resolved, ` +
+                  'so a profile targeting part of the estate is reported for all of it.',
+            { records: profiles.length },
+          ),
+        );
+      } catch (error) {
+        capabilityReports.push(
+          reportFromError(microsoftIntuneManifest, 'collect.configuration_profiles', error),
+        );
+        warnings.push(`Device configuration profiles unavailable (${(error as Error).message}).`);
       }
 
       return {
@@ -453,11 +621,32 @@ export const microsoftIntuneManifest: ConnectorManifest = connectorManifestSchem
         'device.endpoint_protection.installed',
         'device.endpoint_protection.realtime_enabled',
         'device.endpoint_protection.signatures_updated_at',
+        'device.endpoint_protection.web_protection_enabled',
       ],
       requiredPermission: 'DeviceManagementConfiguration.Read.All',
       incremental: false,
       // Read per device, so a large estate may be capped in one run. Its
       // absence is a partial picture rather than a fault.
+      optional: true,
+    },
+    {
+      key: 'collect.configuration_profiles',
+      title: 'Device configuration: unlocking, auto-run and update behaviour',
+      domain: 'ENDPOINT',
+      produces: ['DEVICE_STATE'],
+      predicates: [
+        'device.lock.required',
+        'device.lock.max_attempts',
+        'device.lock.timeout_seconds',
+        'device.autorun_disabled',
+        'device.updates.automatic_enabled',
+      ],
+      requiredPermission: 'DeviceManagementConfiguration.Read.All',
+      incremental: false,
+      // Tenant-wide profiles, not per device: one request for the estate. It is
+      // optional because a tenant that manages these outside Intune — through
+      // Group Policy, or a third-party MDM — has no profiles to read, and that
+      // is a real answer rather than a fault.
       optional: true,
     },
   ],

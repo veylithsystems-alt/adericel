@@ -33,6 +33,8 @@ COPY packages/value/package.json         packages/value/
 COPY packages/triage/package.json        packages/triage/
 COPY packages/questionnaire/package.json packages/questionnaire/
 COPY packages/inference/package.json packages/inference/
+COPY packages/containment/package.json packages/containment/
+COPY packages/support/package.json packages/support/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
 COPY packages/billing/package.json       packages/billing/
@@ -86,6 +88,8 @@ COPY --from=build /app/packages/value/dist         packages/value/dist/
 COPY --from=build /app/packages/triage/dist        packages/triage/dist/
 COPY --from=build /app/packages/questionnaire/dist packages/questionnaire/dist/
 COPY --from=build /app/packages/inference/dist packages/inference/dist/
+COPY --from=build /app/packages/containment/dist packages/containment/dist/
+COPY --from=build /app/packages/support/dist packages/support/dist/
 COPY --from=build /app/packages/actions/dist       packages/actions/dist/
 COPY --from=build /app/packages/integrations/dist  packages/integrations/dist/
 COPY --from=build /app/packages/billing/dist       packages/billing/dist/
@@ -103,4 +107,27 @@ EXPOSE 4000
 
 # Overridden per service in docker-compose.yml. The API is the default because
 # it is the one an operator running the image by hand almost always wants.
+CMD ["node", "apps/api/dist/main.js"]
+
+# ------------------------------------------------------------------- product
+# Adericel as a customer receives it.
+#
+# Identical to `runtime` with one thing removed: Veylith's own operating layer.
+# An MSP self-hosting Adericel has no business holding the company's autonomy
+# gate, exception queue, business ledger or commercial pipeline, and until
+# ADR-0049 they received all four.
+#
+# Removing the compiled output rather than the manifest is deliberate. The
+# manifest stays so pnpm's symlink tree is intact and the image starts; the code
+# is absent, so `await import('@adericel/vaol')` fails loudly if anybody ever
+# sets ADERICEL_COMPANY_LAYER on a product image. A silent success there would be
+# worse than a crash: it would mean the separation was decorative.
+#
+# Build with:
+#   docker build -f infrastructure/docker/Dockerfile --target product -t adericel/product .
+FROM runtime AS product
+USER root
+RUN rm -rf packages/vaol/dist apps/api/dist/routes/veylith.js apps/api/dist/routes/veylith.js.map
+USER node
+ENV ADERICEL_COMPANY_LAYER=false
 CMD ["node", "apps/api/dist/main.js"]

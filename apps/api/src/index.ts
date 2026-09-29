@@ -10,3 +10,4 @@ export * from './services/retention.js';
 export * from './services/erasure.js';
 export * from './services/operating-loop.js';
 export * from './services/capacity.js';
+export * from './services/support.js';

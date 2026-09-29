@@ -1,6 +1,5 @@
 import { loadConfig, errorFields } from '@adericel/shared';
 import { assertTenantIsolationEnforced } from '@adericel/graph';
-import { DEFAULT_COMPANY_POLICY, ensureAutonomyPolicy } from '@adericel/vaol';
 import { createAppContext } from './context.js';
 import { buildServer } from './app.js';
 
@@ -39,19 +38,39 @@ async function main(): Promise<void> {
     isProduction: config.nodeEnv === 'production',
   });
 
-  // The company's authority model. Installed only when no version exists —
-  // once a policy is in the database it is the company's, possibly deliberately
-  // narrowed, and an upgrade overwriting it with the shipped default would be a
-  // privilege escalation performed by a deployment.
-  const policy = await app.db.withPlatform(async (ctx) =>
-    ensureAutonomyPolicy(ctx, DEFAULT_COMPANY_POLICY, 'bootstrap', app.clock),
-  );
-  app.logger.info(
-    { installed: policy.installed, policyHash: policy.hash },
-    policy.installed
-      ? 'installed the default company autonomy policy'
-      : 'company autonomy policy already present; left unchanged',
-  );
+  /**
+   * The company's authority model, on a company deployment only.
+   *
+   * Imported dynamically rather than at the top of the file, and that is the
+   * substance of the separation rather than a style choice: a static import
+   * pulls `@adericel/vaol` into the module graph of every deployment, so the
+   * product could not be built or shipped without the company layer even when
+   * it never called it. A dynamic import inside the branch means a product
+   * build genuinely does not load it, and `tests/unit/architecture.test.ts`
+   * asserts there is no static path from the product to the company layer.
+   *
+   * Installed only when no version exists — once a policy is in the database it
+   * is the company's, possibly deliberately narrowed, and an upgrade
+   * overwriting it with the shipped default would be a privilege escalation
+   * performed by a deployment.
+   */
+  if (config.companyLayerEnabled) {
+    const { DEFAULT_COMPANY_POLICY, ensureAutonomyPolicy } = await import('@adericel/vaol');
+    const policy = await app.db.withPlatform(async (ctx) =>
+      ensureAutonomyPolicy(ctx, DEFAULT_COMPANY_POLICY, 'bootstrap', app.clock),
+    );
+    app.logger.info(
+      { installed: policy.installed, policyHash: policy.hash },
+      policy.installed
+        ? 'installed the default company autonomy policy'
+        : 'company autonomy policy already present; left unchanged',
+    );
+  } else {
+    app.logger.info(
+      'company layer disabled; this is a product deployment and holds none of Veylith’s own ' +
+        'operating or commercial machinery',
+    );
+  }
 
   const server = await buildServer(app);
 

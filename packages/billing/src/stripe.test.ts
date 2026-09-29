@@ -222,10 +222,32 @@ describe('what an event does to a subscription', () => {
     expect(at('PAYMENT_FAILED')).toBe('PAST_DUE');
   });
 
-  it('activates on checkout and renewal, cancels on cancellation', () => {
+  it('activates on checkout and renewal, terminates on cancellation', () => {
     expect(at('SUBSCRIPTION_ACTIVATED')).toBe('ACTIVE');
     expect(at('SUBSCRIPTION_RENEWED')).toBe('ACTIVE');
-    expect(at('SUBSCRIPTION_CANCELLED')).toBe('CANCELLED');
+    expect(at('SUBSCRIPTION_CANCELLED')).toBe('TERMINATED');
+  });
+
+  it('cannot restrict or suspend from a webhook, at all', () => {
+    /**
+     * A provider event is a fact about a payment. COMMERCIAL_RESTRICTION and
+     * COMMERCIAL_SUSPENSION are decisions about a relationship, and the second
+     * one stops a customer's assurance being maintained. Neither belongs to a
+     * webhook handler, so neither is reachable from one — asserted over every
+     * event the provider can produce rather than the two we happened to think
+     * of.
+     */
+    const events = [
+      'SUBSCRIPTION_ACTIVATED',
+      'SUBSCRIPTION_RENEWED',
+      'PAYMENT_FAILED',
+      'SUBSCRIPTION_CANCELLED',
+      'IGNORED',
+    ] as const;
+    for (const event of events) {
+      expect(at(event)).not.toBe('COMMERCIAL_RESTRICTION');
+      expect(at(event)).not.toBe('COMMERCIAL_SUSPENSION');
+    }
   });
 
   it('returns null for an ignored event rather than the current status', () => {

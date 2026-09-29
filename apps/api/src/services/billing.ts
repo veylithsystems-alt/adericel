@@ -135,10 +135,10 @@ export async function applyBillingEvent(
       return finish('SUPERSEDED', false, subscription.id, null);
     }
 
-    // A cancellation is terminal. A renewal that arrives afterwards — a
+    // Termination is terminal. A renewal that arrives afterwards — a
     // final-period invoice settling, say — must not reactivate it.
-    if (subscription.status === 'CANCELLED' && status !== 'CANCELLED') {
-      return finish('SUBSCRIPTION_CANCELLED', false, subscription.id, 'CANCELLED');
+    if (subscription.status === 'TERMINATED' && status !== 'TERMINATED') {
+      return finish('SUBSCRIPTION_CANCELLED', false, subscription.id, 'TERMINATED');
     }
 
     const graceEndsAt =
@@ -158,7 +158,7 @@ export async function applyBillingEvent(
            grace_ends_at = CASE WHEN $2 = 'PAST_DUE' THEN $8::timestamptz ELSE NULL END,
            lapsed_at = CASE WHEN $2 = 'ACTIVE' THEN NULL ELSE lapsed_at END,
            lapse_reason = CASE WHEN $2 = 'ACTIVE' THEN NULL ELSE lapse_reason END,
-           cancelled_at = CASE WHEN $2 = 'CANCELLED' THEN $9::timestamptz ELSE cancelled_at END,
+           cancelled_at = CASE WHEN $2 = 'TERMINATED' THEN $9::timestamptz ELSE cancelled_at END,
            updated_at = now()
        WHERE id = $1`,
       [
@@ -174,9 +174,9 @@ export async function applyBillingEvent(
       ],
     );
 
-    // A cancellation lapses immediately. There is no grace period for a
+    // Termination lapses immediately. There is no grace period for a
     // deliberate cancellation: the customer has said stop.
-    if (status === 'CANCELLED') {
+    if (status === 'TERMINATED') {
       await stopMaintaining(ctx, subscription.id, now, 'Subscription cancelled');
     } else if (status === 'ACTIVE') {
       await resumeMaintaining(ctx, subscription.id, now);

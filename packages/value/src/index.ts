@@ -5,3 +5,4 @@ export * from './quality.js';
 export * from './report.js';
 export * from './projection.js';
 export * from './capacity.js';
+export * from './outcome.js';

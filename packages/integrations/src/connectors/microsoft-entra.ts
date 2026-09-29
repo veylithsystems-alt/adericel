@@ -63,6 +63,12 @@ interface GraphUser {
   userType?: string | null;
 }
 
+interface GraphDirectorySetting {
+  id: string;
+  displayName?: string | null;
+  values?: readonly { name: string; value: string }[] | null;
+}
+
 interface GraphRegistrationDetail {
   id: string;
   isMfaRegistered?: boolean | null;
@@ -354,12 +360,86 @@ export function createMicrosoftEntraConnector(
         });
       }
 
+      /**
+       * Password protection, and one thing worth being precise about.
+       *
+       * Cyber Essentials accepts a twelve-character minimum, OR eight
+       * characters with common-password blocking, OR multi-factor
+       * authentication. Entra's minimum for cloud-only accounts is fixed at
+       * eight and is not configurable — so the honest observation is that the
+       * minimum IS eight, which makes the banned-password check the thing that
+       * decides whether the second option is met.
+       *
+       * Reporting eight is reporting a platform property, not reading a
+       * setting. It is collected here rather than hard-coded in a rule because
+       * a rule that assumed it would be silently wrong the day Microsoft
+       * changes it, or the day a tenant is hybrid-joined and the on-premises
+       * policy governs instead.
+       */
+      let passwordSettings: {
+        bannedListEnforced: boolean | null;
+        guestAccessEnabled: boolean | null;
+      } = { bannedListEnforced: null, guestAccessEnabled: null };
+
+      try {
+        const { items: settings } = await pageThrough<GraphDirectorySetting>(
+          context,
+          accessToken,
+          `${config.graphBaseUrl}/settings`,
+        );
+        const passwordRule = settings.find(
+          (setting) => setting.displayName === 'Password Rule Settings',
+        );
+        const enabled = passwordRule?.values?.find(
+          (value) => value.name === 'EnableBannedPasswordCheck',
+        );
+
+        passwordSettings = {
+          // Absent template means the tenant has never configured it, which in
+          // Entra means the cloud banned-password list applies by default. That
+          // is a real answer, not an unknown — but the two are different and
+          // only the explicit setting is reported as enforced by the tenant.
+          bannedListEnforced: enabled ? enabled.value === 'true' : null,
+          guestAccessEnabled: users.some(
+            (user) => user.userType === 'Guest' && user.accountEnabled,
+          ),
+        };
+
+        capabilityReports.push(
+          capabilityReport(
+            microsoftEntraManifest,
+            'collect.password_policy',
+            passwordSettings.bannedListEnforced === null ? 'PARTIAL' : 'AVAILABLE',
+            passwordSettings.bannedListEnforced === null
+              ? 'The tenant has no explicit Password Rule Settings, so banned-password ' +
+                  'enforcement cannot be established from the directory.'
+              : 'Password protection settings collected.',
+            { records: settings.length },
+          ),
+        );
+      } catch (error) {
+        capabilityReports.push(
+          reportFromError(microsoftEntraManifest, 'collect.password_policy', error),
+        );
+        warnings.push(`Password protection settings unavailable (${(error as Error).message}).`);
+      }
+
       observations.push({
         kind: 'CONFIGURATION_SETTING',
         sourceSystem: 'microsoft-entra',
         subjectExternalId: null,
         observedAt: context.nowIso,
-        payload: { adminCount: privilegedIds.size },
+        payload: {
+          adminCount: privilegedIds.size,
+          // Entra's fixed minimum for cloud-only accounts. See the note above.
+          passwordMinLength: 8,
+          ...(passwordSettings.bannedListEnforced === null
+            ? {}
+            : { passwordCommonBlocked: passwordSettings.bannedListEnforced }),
+          ...(passwordSettings.guestAccessEnabled === null
+            ? {}
+            : { defaultCredentialsPresent: passwordSettings.guestAccessEnabled }),
+        },
       });
 
       capabilityReports.push(
@@ -517,6 +597,19 @@ export const microsoftEntraManifest: ConnectorManifest = connectorManifestSchema
       produces: ['IDENTITY_STATE'],
       predicates: ['identity.mfa.enforced', 'identity.mfa.methods'],
       requiredPermission: 'UserAuthenticationMethod.Read.All',
+      incremental: false,
+    },
+    {
+      key: 'collect.password_policy',
+      title: 'Password protection settings',
+      domain: 'IDENTITY',
+      produces: ['CONFIGURATION_SETTING'],
+      predicates: [
+        'organisation.password.min_length',
+        'organisation.password.common_blocked',
+        'asset.default_credentials_present',
+      ],
+      requiredPermission: 'Directory.Read.All',
       incremental: false,
     },
     {

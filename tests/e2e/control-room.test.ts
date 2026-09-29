@@ -27,7 +27,16 @@ describe.skipIf(!available)('the control room', () => {
   let platformToken: string;
 
   beforeAll(async () => {
-    harness = await createHarness();
+    /**
+     * Veylith's own control room, so this is a company deployment.
+     *
+     * The company layer is off by default (ADR-0049): an unset flag means a
+     * customer self-hosting the product, and those routes are not registered
+     * at all there. This suite is the other side of that switch and opts in
+     * explicitly, which is also what makes it a test of the company layer
+     * rather than of whatever happens to be wired up.
+     */
+    harness = await createHarness({ env: { ADERICEL_COMPANY_LAYER: 'true' } });
     await harness.truncate();
     tenant = await seedTenant(harness, { slug: 'control-corp', records: [] });
     customerToken = await signIn(harness, 'owner-control-corp@test.invalid');

@@ -63,10 +63,10 @@ export function registerBillingRoutes(server: FastifyInstance, app: AppContext):
         [scope.mspId, scope.organisationId],
       );
       if (!subscription) throw new AdericelError('NOT_FOUND', 'No subscription for this account');
-      if (subscription.status === 'CANCELLED') {
+      if (subscription.status === 'TERMINATED' || subscription.status === 'ARCHIVED') {
         throw new AdericelError(
           'PRECONDITION_FAILED',
-          'This subscription is cancelled. Start a new one rather than paying against it.',
+          'This subscription has ended. Start a new one rather than paying against it.',
         );
       }
       const plan = await ctx.oneOrFail<{
@@ -204,7 +204,7 @@ export function registerBillingRoutes(server: FastifyInstance, app: AppContext):
            FROM organisations o
            LEFT JOIN subscriptions s
              ON (s.organisation_id = o.id OR (s.msp_id IS NOT NULL AND s.msp_id = o.msp_id))
-            AND s.status <> 'CANCELLED'
+            AND s.status NOT IN ('TERMINATED', 'ARCHIVED')
            WHERE o.id = $1
            ORDER BY s.created_at DESC NULLS LAST
            LIMIT 1`,

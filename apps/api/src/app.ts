@@ -15,11 +15,15 @@ import { registerEvidenceRoutes } from './routes/evidence.js';
 import { registerActionRoutes } from './routes/actions.js';
 import { registerOnboardingRoutes } from './routes/onboarding.js';
 import { registerPassportRoutes } from './routes/passport.js';
+import { registerCommercialRoutes } from './routes/commercial.js';
+import { registerSupportRoutes } from './routes/support.js';
+import { registerResolutionRoutes } from './routes/resolution.js';
+import { registerContainmentRoutes } from './routes/containment.js';
+import { registerBreakGlassRoutes } from './routes/break-glass.js';
 import { registerBillingRoutes } from './routes/billing.js';
 import { registerFindingRoutes } from './routes/findings.js';
 import { registerGraphRoutes } from './routes/graph.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
-import { registerVeylithRoutes } from './routes/veylith.js';
 import {
   registerLoopRoutes,
   registerPortfolioRoutes,
@@ -148,12 +152,48 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   registerActionRoutes(server, app);
   registerOnboardingRoutes(server, app);
   registerPassportRoutes(server, app);
+  registerContainmentRoutes(server, app);
+  registerCommercialRoutes(server, app);
+  registerSupportRoutes(server, app);
+  registerResolutionRoutes(server, app);
+  registerBreakGlassRoutes(server, app);
   registerBillingRoutes(server, app);
   registerFindingRoutes(server, app);
   registerGraphRoutes(server, app);
   registerIntegrationRoutes(server, app);
-  registerVeylithRoutes(server, app);
+  /**
+   * The company layer, and only where it belongs.
+   *
+   * These routes serve Veylith's own control room. A customer self-hosting
+   * Adericel gets none of them registered at all — not refused by
+   * authorisation, not present. An unregistered path resolves to no surface,
+   * which `decide` already refuses, but not registering it is stronger: there
+   * is nothing to probe and nothing to get wrong later.
+   *
+   * `ADERICEL_COMPANY_LAYER` defaults to off. See `config.ts` for why that
+   * direction is the safe one.
+   */
+  if (app.config.companyLayerEnabled) {
+    // Dynamic, and that is the substance rather than a style choice: a static
+    // import would put `@adericel/vaol` in the module graph of every
+    // deployment, so a product build could not be shipped without the company
+    // layer even though it never calls it.
+    const { registerVeylithRoutes } = await import('./routes/veylith.js');
+    registerVeylithRoutes(server, app);
+  }
   registerPortfolioRoutes(server, app);
+  /**
+   * Proof of value is product, not company.
+   *
+   * It counts what Adericel did for an MSP's clients and prices it only with
+   * durations the MSP supplied. That is the MSP showing their client what they
+   * are paying for — it is the most useful thing in the product for renewal
+   * conversations, and withholding it from a self-hosted deployment would be
+   * withholding the argument for the deployment.
+   *
+   * `@adericel/value` therefore stays in the product. `@adericel/vaol` —
+   * Veylith's own gate, ledger and pipeline — does not.
+   */
   registerValueRoutes(server, app);
   registerTriageRoutes(server, app);
   registerLoopRoutes(server, app);

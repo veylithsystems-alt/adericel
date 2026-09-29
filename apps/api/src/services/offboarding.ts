@@ -325,7 +325,8 @@ export async function offboardingStatus(
             WHERE g.principal_type = 'USER' AND g.scope_type = 'ORGANISATION'
               AND g.scope_id = $1 AND g.revoked_at IS NULL)) AS live_sessions,
          (SELECT count(*)::text FROM subscriptions
-          WHERE organisation_id = $1 AND status <> 'CANCELLED') AS live_subscriptions`,
+          WHERE organisation_id = $1
+             AND status NOT IN ('TERMINATED', 'ARCHIVED')) AS live_subscriptions`,
       [organisationId, actingSessionId ?? null],
       'Organisation offboarding facts',
     );

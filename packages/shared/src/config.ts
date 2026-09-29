@@ -20,6 +20,24 @@ export const configSchema = z.object({
   releaseVersion: z.string().default('0.0.0-dev'),
   logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 
+  /**
+   * Whether this deployment runs Veylith's own company layer.
+   *
+   * Adericel is the product an MSP self-hosts. The company layer is the machinery
+   * of the company that operates it: the autonomy gate, the exception queue, the
+   * business ledger, the commercial pipeline. A customer has no business holding
+   * any of it, and until now they did — `apps/api` imported it at startup and
+   * registered its routes unconditionally, while the README claimed the opposite
+   * and a test asserted the separation over `packages/` only, which is precisely
+   * where the dependency was not.
+   *
+   * **Default false.** The safe reading of an unset flag is "this is a customer
+   * deployment", because the cost of being wrong that way is a Veylith operator
+   * seeing a 404 and setting the flag, and the cost of being wrong the other way
+   * is a customer's database holding Veylith's commercial pipeline.
+   */
+  companyLayerEnabled: z.coerce.boolean().default(false),
+
   api: z.object({
     host: z.string().default('0.0.0.0'),
     port: port.default(4000),
@@ -263,6 +281,19 @@ function csv(value: string | undefined): string[] | undefined {
     .filter(Boolean);
 }
 
+/**
+ * An environment flag, read strictly.
+ *
+ * `undefined` and the four conventional falsy spellings are false; everything
+ * else is true. Deliberately not `Boolean(value)`, which makes the string
+ * "false" true — the single most expensive coercion in configuration.
+ */
+function truthy(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  const normalised = value.trim().toLowerCase();
+  return !['', '0', 'false', 'no', 'off'].includes(normalised);
+}
+
 const DEV_JWT_SECRET = 'development-only-insecure-jwt-secret-000000';
 const DEV_CREDENTIAL_KEY = 'development-only-insecure-credential-key-0';
 
@@ -276,6 +307,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AdericelConfig
     serviceName: env.ADERICEL_SERVICE_NAME,
     releaseVersion: env.ADERICEL_RELEASE_VERSION,
     logLevel: env.LOG_LEVEL,
+    // Any non-empty value other than the four falsy spellings enables it, so a
+    // typo reads as off rather than on.
+    companyLayerEnabled: truthy(env.ADERICEL_COMPANY_LAYER),
     api: {
       host: env.API_HOST,
       port: env.API_PORT,

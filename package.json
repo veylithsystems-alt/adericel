@@ -46,15 +46,22 @@
     "n8n:validate": "tsx --conditions=development workflows/n8n/validate.ts",
     "brand:build": "tsx --conditions=development scripts/build-brand-assets.ts",
     "verify:restore": "tsx scripts/verify-restore.ts",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test",
+    "db:migrate:product": "MIGRATION_LAYER=product tsx scripts/migrate.ts up",
+    "docs:operating-model": "tsx scripts/generate-operating-model.ts",
+    "docs:capability-status": "tsx scripts/generate-capability-status.ts",
+    "release:position": "tsx scripts/release-position.ts",
+    "test:mutation": "tsx scripts/mutation-test.ts"
   },
   "dependencies": {
+    "@adericel/resolution": "workspace:*",
     "pg": "^8.16.3"
   },
   "devDependencies": {
     "@adericel/actions": "workspace:*",
     "@adericel/api": "workspace:*",
     "@adericel/autonomy": "workspace:*",
+    "@adericel/containment": "workspace:*",
     "@adericel/domain": "workspace:*",
     "@adericel/evidence": "workspace:*",
     "@adericel/graph": "workspace:*",
@@ -62,6 +69,7 @@
     "@adericel/notifications": "workspace:*",
     "@adericel/policy": "workspace:*",
     "@adericel/shared": "workspace:*",
+    "@adericel/support": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
     "@adericel/vaol": "workspace:*",
     "@adericel/worker": "workspace:*",

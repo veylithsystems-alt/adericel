@@ -193,3 +193,154 @@ export function resolveConflict(
 export function conflictBlocksClaim(outcome: ConflictOutcome): boolean {
   return outcome.resolution === 'UNRESOLVED';
 }
+
+/**
+ * What a conflict costs.
+ *
+ * Contract v3.2 requires a conflict to expose its sources, timestamps,
+ * observations, **affected controls**, resolution state and **the resulting
+ * assurance limitation**. `ConflictOutcome` had the first three and the fifth.
+ * It reported that two systems disagreed and left an operator to work out for
+ * themselves what that meant for the organisation's position — which is the
+ * same cost the resolution queue was built to remove, in a different place.
+ *
+ * WHY THIS IS SEPARATE FROM `resolveConflict`
+ *
+ * Deciding what to believe is a question about sources and needs nothing else.
+ * Deciding what the disagreement costs is a question about the assurance graph:
+ * which controls read this predicate. Keeping them apart means `resolveConflict`
+ * stays pure over its own inputs, and the consequence can be computed wherever
+ * the fan-out is known — which is the same map the resolution queue already
+ * builds.
+ */
+export const ASSURANCE_LIMITATIONS = [
+  /** Sources agree, or only one spoke. Nothing is limited. */
+  'NONE',
+  /**
+   * No determination is possible for the affected controls.
+   *
+   * The honest outcome of an unresolved conflict: collecting again produces the
+   * same disagreement, so the controls stay UNKNOWN until somebody decides
+   * which source is authoritative.
+   */
+  'DETERMINATION_WITHHELD',
+  /**
+   * A determination exists and rests on one source over another that disagreed.
+   *
+   * Not a failure — a configured authority or a materially fresher reading is a
+   * legitimate basis. But a recipient of an Assurance Passport is entitled to
+   * know that the reading was contested, because "Intune says encrypted" and
+   * "Intune says encrypted while the RMM says otherwise" are different
+   * statements and only one of them is the whole truth.
+   */
+  'DETERMINATION_RESTS_ON_ONE_SOURCE',
+] as const;
+export type AssuranceLimitation = (typeof ASSURANCE_LIMITATIONS)[number];
+
+export interface ConflictConsequence {
+  readonly predicate: string;
+  readonly subjectExternalId: string | null;
+  /** Controls that read this predicate and are therefore affected. */
+  readonly affectedControlKeys: readonly string[];
+  readonly limitation: AssuranceLimitation;
+  /** Why that limitation, in the words an operator would use. */
+  readonly limitationBecause: string;
+  /** What happens if nobody decides. Never "the control stays UNKNOWN". */
+  readonly ifUnresolved: string;
+  /** Who resolves it. Adericel deliberately does not (ADR-0029). */
+  readonly resolvedBy: string;
+}
+
+/**
+ * The consequence of one conflict, given the controls that read the predicate.
+ *
+ * `controlsReadingPredicate` is supplied by the caller because this module has
+ * no database and no graph. The resolution service already computes exactly this
+ * map for the whole organisation.
+ */
+export function conflictConsequence(
+  outcome: ConflictOutcome,
+  controlsReadingPredicate: readonly string[],
+): ConflictConsequence {
+  const affectedControlKeys = [...new Set(controlsReadingPredicate)].sort();
+  const affected = affectedControlKeys.length;
+  const subject =
+    outcome.subjectExternalId === null ? 'the organisation' : outcome.subjectExternalId;
+
+  if (outcome.resolution === 'AGREED') {
+    return {
+      predicate: outcome.predicate,
+      subjectExternalId: outcome.subjectExternalId,
+      affectedControlKeys,
+      limitation: 'NONE',
+      limitationBecause: 'Every source that spoke to this agreed, so nothing is limited by it.',
+      ifUnresolved: 'Nothing. There is no disagreement to resolve.',
+      resolvedBy: 'Nobody. Nothing is outstanding.',
+    };
+  }
+
+  const names = outcome.sources.map((source) => source.displayName).join(' and ');
+  const contested =
+    `${names} disagree about \`${outcome.predicate}\` for ${subject}, ` +
+    `across ${outcome.distinctValues} distinct value(s).`;
+
+  if (outcome.resolution === 'UNRESOLVED') {
+    return {
+      predicate: outcome.predicate,
+      subjectExternalId: outcome.subjectExternalId,
+      affectedControlKeys,
+      limitation: 'DETERMINATION_WITHHELD',
+      limitationBecause:
+        `${contested} No configured authority and no freshness difference resolves it, so ` +
+        `Adericel withholds a determination for ${affected === 0 ? 'any control reading it' : `${affected} control(s)`}.`,
+      ifUnresolved:
+        affected === 0
+          ? 'No control currently reads this predicate, so nothing is undecided by it today. ' +
+            'The disagreement is still on record and will matter the moment one does.'
+          : `${affected} control(s) stay undecided. If a questionnaire or an assessor asks, the ` +
+            'honest answer is that two systems disagree and the organisation has not decided ' +
+            'which is right — which reads to a third party exactly like a failure.',
+      resolvedBy:
+        'A recorded decision about which source is authoritative for this predicate, or a ' +
+        'correction at whichever source is wrong. Adericel does not choose between disagreeing ' +
+        'sources (ADR-0029), and collecting again will produce the same disagreement.',
+    };
+  }
+
+  const basis =
+    outcome.resolution === 'RESOLVED_BY_AUTHORITY'
+      ? 'a configured authority names one of them authoritative for this predicate'
+      : 'one reading is materially fresher than the others';
+
+  return {
+    predicate: outcome.predicate,
+    subjectExternalId: outcome.subjectExternalId,
+    affectedControlKeys,
+    limitation: 'DETERMINATION_RESTS_ON_ONE_SOURCE',
+    limitationBecause:
+      `${contested} A determination was made because ${basis}. It is a legitimate basis and it ` +
+      'is not unanimity: the reading was contested, and anybody relying on it is entitled to ' +
+      'know that.',
+    ifUnresolved:
+      affected === 0
+        ? 'The determination stands. No control reads this predicate today, so nothing rests ' +
+          'on it yet.'
+        : `${affected} control(s) rest on a contested reading. They are decided, not undecided — ` +
+          'but the disagreement remains unexplained, and the source that was overruled will keep ' +
+          'reporting what it reports.',
+    resolvedBy:
+      'Correcting whichever source is wrong. Until then the determination stands on the ' +
+      'configured basis and the disagreement stays on record.',
+  };
+}
+
+/**
+ * Whether a conflict is worth putting in front of a person.
+ *
+ * A resolved conflict is not silent: it produced a determination on a contested
+ * reading, and a source that keeps disagreeing is usually a real fault in one of
+ * the two systems. It ranks below an unresolved one, and above nothing.
+ */
+export function conflictNeedsAttention(consequence: ConflictConsequence): boolean {
+  return consequence.limitation !== 'NONE';
+}

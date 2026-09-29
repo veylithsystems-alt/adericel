@@ -86,6 +86,17 @@ export const ROLES = [
   'ORG_ANALYST',
   'ORG_READONLY',
   'AUTOMATION',
+  /**
+   * Emergency access, granted to itself by a named Veylith operator.
+   *
+   * A real role rather than a label, because a grant carrying a role nothing
+   * recognises confers nothing — emergency access that silently grants no
+   * access, discovered during the emergency. It is deliberately read-and-
+   * diagnose only: break-glass is for understanding an estate and repairing
+   * Adericel's view of it, never for changing the customer's systems or who can
+   * reach them (see `break-glass.ts`).
+   */
+  'BREAK_GLASS',
 ] as const;
 export type Role = (typeof ROLES)[number];
 export const roleSchema = z.enum(ROLES);
@@ -188,6 +199,21 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
   ORG_APPROVER: [...ORG_READ_PERMISSIONS, 'org:action:approve', 'org:exception:approve'],
   ORG_ANALYST: [...ORG_ANALYST_PERMISSIONS],
   ORG_READONLY: [...ORG_READ_PERMISSIONS],
+  /**
+   * The ceiling for emergency access.
+   *
+   * Everything needed to see what is happening and to correct Adericel's own
+   * record, and nothing that changes the customer's systems, their membership,
+   * or what Adericel asserts to third parties. An operator names a narrower set
+   * when they open the door; this is the most the door can ever open to.
+   */
+  BREAK_GLASS: [
+    ...ORG_READ_PERMISSIONS,
+    'org:evidence:write',
+    'org:claim:write',
+    'org:assessment:run',
+    'org:integration:manage',
+  ],
   AUTOMATION: [
     'org:read',
     'org:asset:read',
@@ -226,6 +252,25 @@ export interface Grant {
   readonly roles: readonly Role[];
   /** Optional expiry, used for delegated/just-in-time MSP access. */
   readonly expiresAt: string | null;
+  /**
+   * An optional narrowing of what this grant conveys.
+   *
+   * The roles set the ceiling. This sets a floor beneath it: when present, the
+   * grant conveys only the permissions named here AND carried by its roles.
+   * It can only ever subtract — a permission listed here that the roles do not
+   * carry is conveyed by neither, so an attenuation is never a way to acquire
+   * something the role did not have.
+   *
+   * Absent (the ordinary case) means the roles convey everything they carry.
+   * Present and empty conveys nothing at all, which is the safe reading of
+   * "somebody asked for a narrowing and named nothing".
+   *
+   * This exists because break-glass asks for a specific, minimal set of
+   * permissions, and recording that set next to a grant that ignored it would
+   * make the narrowing decorative. Any grant may be attenuated; emergency
+   * access is simply the first caller that needs it.
+   */
+  readonly attenuatedTo?: readonly Permission[] | null;
 }
 
 /**
@@ -332,7 +377,12 @@ export function effectiveRoles(grant: Grant): readonly Role[] {
 }
 
 function conveys(grant: Grant, permission: Permission): boolean {
-  return permissionsForRoles(effectiveRoles(grant)).has(permission);
+  // The role ceiling first. An attenuation cannot reach past it.
+  if (!permissionsForRoles(effectiveRoles(grant)).has(permission)) return false;
+
+  const narrowing = grant.attenuatedTo;
+  if (narrowing === undefined || narrowing === null) return true;
+  return narrowing.includes(permission);
 }
 
 /**

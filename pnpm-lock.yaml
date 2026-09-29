@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@adericel/resolution':
+        specifier: workspace:*
+        version: link:packages/resolution
       pg:
         specifier: ^8.16.3
         version: 8.23.0
@@ -21,6 +24,9 @@ importers:
       '@adericel/autonomy':
         specifier: workspace:*
         version: link:packages/autonomy
+      '@adericel/containment':
+        specifier: workspace:*
+        version: link:packages/containment
       '@adericel/domain':
         specifier: workspace:*
         version: link:packages/domain
@@ -42,6 +48,9 @@ importers:
       '@adericel/shared':
         specifier: workspace:*
         version: link:packages/shared
+      '@adericel/support':
+        specifier: workspace:*
+        version: link:packages/support
       '@adericel/truth-engine':
         specifier: workspace:*
         version: link:packages/truth-engine
@@ -105,6 +114,9 @@ importers:
       '@adericel/billing':
         specifier: workspace:*
         version: link:../../packages/billing
+      '@adericel/containment':
+        specifier: workspace:*
+        version: link:../../packages/containment
       '@adericel/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -129,6 +141,9 @@ importers:
       '@adericel/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@adericel/support':
+        specifier: workspace:*
+        version: link:../../packages/support
       '@adericel/triage':
         specifier: workspace:*
         version: link:../../packages/triage
@@ -292,6 +307,30 @@ importers:
         specifier: ^4.1.11
         version: 4.5.4
 
+  packages/containment:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
+  packages/crosswalk:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
   packages/domain:
     dependencies:
       '@adericel/shared':
@@ -401,8 +440,32 @@ importers:
         specifier: ^4.1.11
         version: 4.5.4
 
+  packages/resolution:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
   packages/shared:
     dependencies:
+      zod:
+        specifier: ^4.1.11
+        version: 4.5.4
+
+  packages/support:
+    dependencies:
+      '@adericel/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@adericel/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: ^4.1.11
         version: 4.5.4

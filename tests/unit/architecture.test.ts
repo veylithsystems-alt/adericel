@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { loadConfig } from '@adericel/shared';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -136,6 +137,87 @@ describe('the company layer stays out of the product', () => {
     for (const pkg of packageNames()) {
       if (pkg === 'vaol') continue;
       expect(internalDeps(pkg), pkg).not.toContain('vaol');
+    }
+  });
+
+  it('has no static import path from the product to the company layer', () => {
+    /**
+     * The hole this test was written to close.
+     *
+     * The check above covered `packages/` only — and the dependency was in
+     * `apps/`. `apps/api/src/main.ts` imported VAOL at the top of the file and
+     * called it during startup, and `app.ts` registered its routes
+     * unconditionally, while the README claimed a customer "gets the assurance
+     * platform and none of Veylith's commercial machinery, and a test asserts
+     * that separation holds". The test existed and was true; it simply did not
+     * look where the problem was.
+     *
+     * A static import is the thing that matters rather than a call, because a
+     * static import puts the company layer in the module graph of every
+     * deployment — so it would have to be built and shipped with a product
+     * image even if nothing ever invoked it. The company layer is now reached
+     * through `await import()` inside a branch on `companyLayerEnabled`.
+     *
+     * `routes/veylith.ts` is the company layer's own module and may import it;
+     * nothing that a product deployment loads may.
+     */
+    const companyOwned = [join('apps', 'api', 'src', 'routes', 'veylith.ts')];
+    const offenders: string[] = [];
+
+    for (const file of sourceFiles(join(ROOT, 'apps'))) {
+      if (file.endsWith('.test.ts')) continue;
+      if (companyOwned.some((suffix) => file.includes(suffix))) continue;
+      const source = readFileSync(file, 'utf8');
+      // `import ... from '@adericel/vaol'` or a static import of the company
+      // route module. `await import(...)` is deliberately not matched: that is
+      // the sanctioned shape.
+      if (
+        /^\s*import\s[^;]*from\s*['"]@adericel\/vaol['"]/m.test(source) ||
+        /^\s*import\s[^;]*from\s*['"][^'"]*routes\/veylith\.js['"]/m.test(source)
+      ) {
+        offenders.push(file.replace(ROOT, ''));
+      }
+    }
+    expect(offenders, 'static imports of the company layer from the product').toEqual([]);
+  });
+
+  it('reaches the company layer only behind the configuration flag', () => {
+    /**
+     * A dynamic import is only a separation if something decides whether to
+     * take it. An `await import('@adericel/vaol')` sitting outside a branch on
+     * `companyLayerEnabled` would be the same dependency with extra steps.
+     */
+    const offenders: string[] = [];
+    for (const file of sourceFiles(join(ROOT, 'apps'))) {
+      if (file.endsWith('.test.ts')) continue;
+      if (file.includes(join('routes', 'veylith.ts'))) continue;
+      const source = readFileSync(file, 'utf8');
+      if (!/await import\(\s*['"](@adericel\/vaol|[^'"]*routes\/veylith\.js)['"]/.test(source)) {
+        continue;
+      }
+      if (!source.includes('companyLayerEnabled')) offenders.push(file.replace(ROOT, ''));
+    }
+    expect(offenders, 'company-layer imports not guarded by companyLayerEnabled').toEqual([]);
+  });
+
+  it('defaults the company layer off, so an unset flag is a customer', () => {
+    // The direction of the default is the whole decision. Wrong one way, a
+    // Veylith operator sees a 404 and sets a flag. Wrong the other way, a
+    // customer's database holds Veylith's commercial pipeline.
+    const base = { DATABASE_URL: 'postgres://adericel@localhost:5432/adericel' };
+    const flagged = (value?: string): boolean =>
+      loadConfig(value === undefined ? base : { ...base, ADERICEL_COMPANY_LAYER: value })
+        .companyLayerEnabled;
+
+    expect(flagged()).toBe(false);
+    // "false" as a string is the coercion that catches everybody. Boolean('false')
+    // is true, and a config flag that reads its own negation as affirmative is
+    // the most expensive one-line bug available here.
+    for (const off of ['', 'false', 'FALSE', '0', 'no', 'off', '  off  ']) {
+      expect(flagged(off), off).toBe(false);
+    }
+    for (const on of ['true', '1', 'yes', 'enabled']) {
+      expect(flagged(on), on).toBe(true);
     }
   });
 

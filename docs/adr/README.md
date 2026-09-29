@@ -53,6 +53,13 @@ implications.
 | [0040](./ADR-0040-signed-passport-interchange.md)                   | A Passport is signed, and the signature is what a stranger checks | Accepted |
 | [0041](./ADR-0041-sovereign-inference.md)                           | Inference is local first, and leaving requires an author          | Accepted |
 | [0042](./ADR-0042-msp-only-distribution.md)                         | Every organisation belongs to an MSP                              | Accepted |
+| [0043](./ADR-0043-degraded-and-blocked.md)                          | A broken source is not an unknown                                 | Accepted |
+| [0044](./ADR-0044-truth-state.md)                                   | How firmly we know it, separately from what we concluded          | Accepted |
+| [0045](./ADR-0045-governed-containment.md)                          | Containment stops Adericel, not the customer                      | Accepted |
+| [0046](./ADR-0046-break-glass-and-grant-attenuation.md)             | Break-glass, and grants that mean what they say                   | Accepted |
+| [0047](./ADR-0047-commercial-is-not-security.md)                    | A commercial state is not a security state                        | Accepted |
+| [0048](./ADR-0048-support-domain.md)                                | Support is a disclosure surface, and it routes to the MSP         | Accepted |
+| [0049](./ADR-0049-product-and-company-layers.md)                    | Adericel is the product; Veylith is the company that operates it  | Accepted |
 
 ## Writing a new ADR
 

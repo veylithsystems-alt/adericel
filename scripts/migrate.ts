@@ -39,13 +39,64 @@ function splitDirections(sql: string, filename: string): { up: string; down: str
   return { up, down };
 }
 
-export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migration[]> {
+/**
+ * Which layer a deployment is running.
+ *
+ * `product` is Adericel: the assurance platform an MSP self-hosts. `all`
+ * additionally applies Veylith's own company layer — the autonomy gate, the
+ * exception queue, the business ledger, the commercial pipeline — which belongs
+ * to the company that operates the platform and to nobody who buys it.
+ *
+ * The default is `all` for the same reason the demo connectors default on in
+ * development: Veylith's own deployment is the one being built against daily,
+ * and a default that broke it every morning would be turned off. A product
+ * build sets `MIGRATION_LAYER=product` explicitly, and `pnpm db:migrate:product`
+ * is that spelling.
+ */
+export const MIGRATION_LAYERS = ['product', 'all'] as const;
+export type MigrationLayer = (typeof MIGRATION_LAYERS)[number];
+
+export interface LayerManifest {
+  readonly company: readonly string[];
+}
+
+export async function loadLayerManifest(dir: string = MIGRATIONS_DIR): Promise<LayerManifest> {
+  try {
+    const raw = await readFile(path.join(dir, 'layers.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { company?: unknown };
+    if (!Array.isArray(parsed.company) || parsed.company.some((id) => typeof id !== 'string')) {
+      throw new Error('layers.json: "company" must be an array of migration ids');
+    }
+    return { company: parsed.company as readonly string[] };
+  } catch (error) {
+    // Fail closed the safe way round. A missing or malformed manifest must not
+    // silently classify a company migration as product — that would install
+    // Veylith's commercial tables into a customer's database, which is the
+    // exact outcome this file exists to prevent.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(
+        `No layers.json in ${dir}. The runner cannot tell product migrations from company ` +
+          'ones without it, and guessing would install company tables into a customer database.',
+      );
+    }
+    throw error;
+  }
+}
+
+export async function loadMigrations(
+  dir: string = MIGRATIONS_DIR,
+  layer: MigrationLayer = 'all',
+): Promise<Migration[]> {
   const entries = (await readdir(dir)).filter((f) => f.endsWith('.sql')).sort();
+  const manifest = await loadLayerManifest(dir);
+  const company = new Set(manifest.company);
+
   const migrations: Migration[] = [];
   for (const filename of entries) {
     const sql = await readFile(path.join(dir, filename), 'utf8');
     const { up, down } = splitDirections(sql, filename);
     const id = filename.replace(/\.sql$/, '');
+    if (layer === 'product' && company.has(id)) continue;
     migrations.push({
       id,
       filename,
@@ -55,6 +106,16 @@ export async function loadMigrations(dir: string = MIGRATIONS_DIR): Promise<Migr
     });
   }
   return migrations;
+}
+
+function layerFromEnv(): MigrationLayer {
+  const value = process.env.MIGRATION_LAYER ?? 'all';
+  if (!MIGRATION_LAYERS.includes(value as MigrationLayer)) {
+    throw new Error(
+      `MIGRATION_LAYER must be one of ${MIGRATION_LAYERS.join(', ')}; received "${value}".`,
+    );
+  }
+  return value as MigrationLayer;
 }
 
 /**
@@ -141,7 +202,11 @@ export async function up(
   log: (m: string) => void = console.log,
 ): Promise<number> {
   await client.query(BOOTSTRAP);
-  const migrations = await loadMigrations();
+  const layer = layerFromEnv();
+  const migrations = await loadMigrations(MIGRATIONS_DIR, layer);
+  if (layer === 'product') {
+    log('running the product layer only; Veylith company migrations are skipped');
+  }
   const { rows } = await client.query<{ id: string; checksum: string }>(
     'SELECT id, checksum FROM public.schema_migrations',
   );

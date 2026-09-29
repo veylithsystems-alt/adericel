@@ -224,6 +224,15 @@ export const ROLES_VALID_IN_SCOPE: Readonly<Record<ScopeType, readonly Role[]>> 
     'ORG_ANALYST',
     'ORG_READONLY',
     'AUTOMATION',
+    /**
+     * Emergency access is organisation-scoped and nothing else.
+     *
+     * Deliberately absent from MSP and PLATFORM. A break-glass grant reaches
+     * exactly one estate: an operator working an incident on one customer has
+     * no reason to be able to read the rest of the portfolio, and a grant that
+     * widened with scope would be standing access with a shorter expiry.
+     */
+    'BREAK_GLASS',
   ],
 };
 

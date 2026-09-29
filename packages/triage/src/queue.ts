@@ -431,7 +431,11 @@ export async function buildExceptionQueue(
       continue;
     }
 
-    if (row.state === 'UNKNOWN') {
+    // DEGRADED and BLOCKED reach the queue through this branch too: each is a
+    // control Adericel could not substantiate, and each needs a person. The
+    // reason codes below then separate "nobody connected a source" from "the
+    // source broke" from "we are not allowed to look".
+    if (row.state === 'UNKNOWN' || row.state === 'DEGRADED' || row.state === 'BLOCKED') {
       // The Truth Engine's own reason codes. Matched on the code rather than on
       // prose: an earlier version compared against "no evidence" with a space
       // and never matched NO_EVIDENCE, so every coverage gap in the portfolio

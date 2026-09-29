@@ -89,13 +89,15 @@ export function statusForEvent(event: BillingEvent): SubscriptionStatus | null {
     case 'SUBSCRIPTION_RENEWED':
       return 'ACTIVE';
     case 'PAYMENT_FAILED':
-      // PAST_DUE, not SUSPENDED. A failed card is usually an expired card, and
-      // suspending an MSP's whole portfolio over one is a disproportionate
-      // response to the most common billing event there is. Suspension is a
-      // decision someone makes after dunning, not an automatic consequence.
+      // PAST_DUE, and nothing more. A failed card is usually an expired card,
+      // and restricting an MSP's whole portfolio over one is a disproportionate
+      // response to the most common billing event there is. COMMERCIAL_RESTRICTION
+      // and COMMERCIAL_SUSPENSION are decisions a person makes after dunning,
+      // never an automatic consequence of a provider webhook — which is why
+      // this function cannot return either of them.
       return 'PAST_DUE';
     case 'SUBSCRIPTION_CANCELLED':
-      return 'CANCELLED';
+      return 'TERMINATED';
     case 'IGNORED':
       return null;
   }
