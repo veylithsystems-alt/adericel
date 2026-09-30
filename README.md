@@ -173,56 +173,54 @@ quietly left blank.
 
 ## What is in this repository
 
+Twenty workspace packages. The dependency direction is acyclic and enforced by a
+test rather than by intent: `shared` → `domain` → {`graph`, `evidence`, `policy`,
+`truth-engine`} → everything else → `apps`. Nothing `truth-engine` depends on can
+perform I/O.
+
+**The assurance core.** What decides, records and proves.
+
+| Package                                            | What it is, and what it refuses to do                                                                                                                                                                    |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`packages/truth-engine`](./packages/truth-engine) | Deterministic assurance evaluation. No clock, no database, no network, no model — so the same ruleset hash and input digest give the same answer in a dispute years later.                               |
+| [`packages/domain`](./packages/domain)             | The Organisational Assurance Graph, claims, authorisation, the assurance and truth-state vocabularies, and the release gate. Pure.                                                                       |
+| [`packages/graph`](./packages/graph)               | Graph persistence and traversal, and the row-level-security boundary every tenant read passes through.                                                                                                   |
+| [`packages/evidence`](./packages/evidence)         | Provenance, integrity, freshness, supersession, storage. Evidence is never manufactured and a revoked piece stops supporting what it supported.                                                          |
+| [`packages/policy`](./packages/policy)             | Frameworks, controls, rulesets, versioning. A published ruleset version is immutable; changing a rule creates a new version.                                                                             |
+| [`packages/crosswalk`](./packages/crosswalk)       | Directed statements relating a requirement in one framework to one in another, each with its rationale, confidence band, applicability, versions and provenance. Never establishes an assurance state.   |
+| [`packages/resolution`](./packages/resolution)     | What to do about an `UNKNOWN`: which of six kinds it is, how material, who can actually close it, and how many assessments resolving it would make decidable — as counts, never a confidence percentage. |
+
+**Acting, and the controls on acting.**
+
+| Package                                            | What it is, and what it refuses to do                                                                                                                                                           |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`packages/actions`](./packages/actions)           | The action lifecycle: propose → approve → execute → verify. Dispatch is never success; an outcome that cannot be established goes to reconciliation.                                            |
+| [`packages/autonomy`](./packages/autonomy)         | A five-valued authority engine. Pure, and `UNKNOWN` never permits.                                                                                                                              |
+| [`packages/containment`](./packages/containment)   | Governed containment C0–C5, its authority model and recovery preconditions. No level withholds an organisation's own assurance record, and automation can enter containment but never leave it. |
+| [`packages/integrations`](./packages/integrations) | One connector contract, SSRF-guarded egress, and a connector that declares what it can observe. A connector never decides assurance truth.                                                      |
+| [`packages/inference`](./packages/inference)       | Local-first inference. Sovereignty is a classification the code enforces: an external provider does not start without a written acknowledgement, and extraction must quote the document.        |
+
+**Running a portfolio.** What an MSP works with day to day.
+
+| Package                                              | What it is, and what it refuses to do                                                                                                                                                                          |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`packages/triage`](./packages/triage)               | The MSP exception queue and the connector coverage ladder: what needs a person, ranked, and how far each customer actually got.                                                                                |
+| [`packages/support`](./packages/support)             | Case states and the transitions that are prohibited, MSP-first routing, the disclosure gate, integrity-protected diagnostic bundles. Nothing about an organisation is disclosed before somebody is identified. |
+| [`packages/questionnaire`](./packages/questionnaire) | Answer states, renderers and the consistency checker, plus a hardened workbook reader. No silent yes, enforced as a property.                                                                                  |
+| [`packages/value`](./packages/value)                 | Proof of value and engineer capacity. Counts what Adericel did, prices it only with durations the MSP supplied, and returns `null` with a reason rather than a figure it cannot substantiate.                  |
+| [`packages/billing`](./packages/billing)             | Subscriptions, provider events, lapse. Provider-neutral, and a commercial lapse never becomes security containment.                                                                                            |
+| [`packages/notifications`](./packages/notifications) | Everything Adericel needs a person to see, and nothing it needs them to see twice.                                                                                                                             |
+| [`packages/shared`](./packages/shared)               | Config, canonical JSON, content hashing, the Passport interchange and its standalone verifier, clock, logging, errors.                                                                                         |
+
+**The company layer**, which a customer never receives.
+
+| Package                            | What it is                                                                                                                                                                       |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`packages/vaol`](./packages/vaol) | Veylith's own operating layer: the autonomy gate, the exception queue, the business ledger, the commercial pipeline. Off by default and absent from a product build — see below. |
+
+**Everything else.**
+
 ```
-packages/
-  truth-engine/   Deterministic assurance evaluation. Pure. No I/O.
-  domain/         The Organisational Assurance Graph, claims, authorisation.
-  graph/          Graph persistence and traversal.
-  evidence/       Provenance, integrity, freshness, supersession, storage.
-  policy/         Frameworks, controls, rulesets, versioning.
-  actions/        The action lifecycle: propose → approve → execute → verify.
-  integrations/   One connector contract; SSRF-guarded egress.
-  billing/        Subscriptions, provider events, lapse.
-  notifications/  Everything Adericel needs a person to see.
-  shared/         Config, canonical JSON, clock, logging, errors.
-
-  autonomy/       A five-valued authority engine. Pure. UNKNOWN never permits.
-  vaol/           Veylith's own operating layer: the gate, the exception
-                  queue, the business ledger, the commercial pipeline.
-  questionnaire/  The questionnaire engine: answer states, renderers and the
-                  consistency checker. No silent yes, enforced as a property.
-  containment/    Governed containment C0-C5, its authority model and recovery
-                  preconditions. Pure. No level ever withholds an organisation's
-                  own assurance record, and automation can enter containment but
-                  never leave it.
-  support/        The support domain: case states and the transitions that are
-                  prohibited, MSP-first routing, the disclosure gate, and
-                  integrity-protected diagnostic bundles. Pure. Nothing about an
-                  organisation is disclosed before somebody is identified.
-  crosswalk/      Directed statements relating a requirement in one framework to
-                  a requirement in another, each carrying its rationale,
-                  confidence band, applicability, versions and provenance. Never
-                  symmetric except where two requirements genuinely ask the same
-                  thing, because a symmetric mapping is an equivalence claim. A
-                  crosswalk says where evidence may already exist and never
-                  establishes an assurance state. Pure.
-  resolution/     What to do about an UNKNOWN. Sorts it into one of six kinds by
-                  what a person does next, weighs how much it matters, routes it
-                  to whoever can actually close it — including the client, when
-                  a person owes a decision rather than a source owing data — and
-                  says how many control assessments resolving it would make
-                  decidable, as a count over the graph and never a confidence
-                  percentage. Pure.
-  inference/      Local-first inference. Sovereignty is a classification the code
-                  enforces, not a preference: an external provider does not start
-                  without a written acknowledgement. Extraction must quote the
-                  document, and the quote is checked.
-  triage/         The MSP exception queue and the connector coverage ladder.
-                  What needs a person, ranked, and how far each customer got.
-  value/          The proof-of-value engine, and engineer capacity. Counts what Adericel did, prices
-                  it only with durations the MSP supplied, and refuses to
-                  produce a figure it cannot substantiate.
-
 apps/
   api/            Fastify HTTP API. Authentication, tenancy, every resource.
   worker/         Outbox dispatch, schedulers, reconciliation, dead letters.
@@ -232,7 +230,7 @@ database/migrations/   Versioned SQL, checksum-verified, RLS included.
 workflows/n8n/         Deliverable B — the single importable export.
 docs/adr/              Architecture decision records.
 infrastructure/        Dockerfiles, edge proxy, deployment.
-tests/                 unit · integration · tenancy · security · e2e
+tests/                 unit · integration · tenancy · security · e2e · mutation
 ```
 
 ### Adericel is the product; Veylith is the company that operates it
@@ -309,12 +307,14 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Twenty-one are recorded. They include: a control scoped out of assessment
+Twenty-five are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
-which would report a freshly onboarded organisation as having nothing undecided. One of
-them breaks this README, by renaming a command it tells you to run.
+which would report a freshly onboarded organisation as having nothing undecided. Five of
+them break this README: renaming a command it tells you to run, dropping a
+package from the prose, pointing a link at a path that does not exist, naming a
+package that was never built, and letting a stated count drift.
 
 Three things about the runner are deliberate. It refuses to start on a dirty
 working tree, because a crash would otherwise leave a mutated file
