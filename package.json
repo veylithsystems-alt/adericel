@@ -78,7 +78,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.18.0",
     "@types/pg": "^8.15.5",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^5.0.2",
     "eslint": "^9.37.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fontkit": "^2.0.4",
