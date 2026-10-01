@@ -430,6 +430,18 @@ progress) · `ACCEPTED` (understood, deliberately not fixed now, with a reason) 
 | **Target**      | Before a customer holds two frameworks.                                                                                                                                                                                                                                                               |
 | **State**       | `OPEN` — blocked on source material, not on engineering.                                                                                                                                                                                                                                              |
 
+### RR-079 — A moderate advisory stands in dev tooling
+
+| Field           | Value                                                                                                                                                                                                                                                                                              |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description** | `brace-expansion` carries a moderate quadratic-expansion advisory on paths reached only through `eslint` and `@vitest/coverage-v8`. The high-severity advisory on the same package (GHSA-qhr7-859c-m2p7) is pinned out; the moderate one has no patched version compatible with `minimatch@3` yet. |
+| **Impact**      | Low. Neither path reaches the shipped image: both are development tooling, and the input is this repository's own glob patterns rather than anything a customer supplies.                                                                                                                          |
+| **Likelihood**  | Not exploitable in the product as built.                                                                                                                                                                                                                                                           |
+| **Mitigation**  | `pnpm.overrides` pins the patched version per major. A blanket floor was tried first and broke `eslint`: `minimatch@3.1.5` calls `expand()` as a CommonJS default and `brace-expansion@5` no longer provides one. The per-major form keeps each consumer on a patched version within its own line. |
+| **Owner**       | Engineering.                                                                                                                                                                                                                                                                                       |
+| **Target**      | When `eslint` moves off `minimatch@3`, or a patched 1.x is published.                                                                                                                                                                                                                              |
+| **State**       | `OPEN` — accepted at moderate. The CI gate is set at high and passes; this is recorded so the acceptance is a decision on the record rather than a threshold nobody revisits.                                                                                                                      |
+
 ---
 
 ## Closed

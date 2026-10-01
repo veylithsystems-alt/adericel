@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -23,24 +23,63 @@ const ROOT = join(import.meta.dirname, '..', '..');
 const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
 
 describe('the README describes the repository that exists', () => {
-  it('lists every package', () => {
-    const packages = readdirSync(join(ROOT, 'packages'));
-    const missing = packages.filter((name) => !readme.includes(`  ${name}/`));
-    expect(missing).toEqual([]);
-  });
-
-  it('lists no package that does not exist', () => {
+  /**
+   * `lists every package` used to live here, checking that each package name
+   * appeared as a line in an ASCII directory tree. It was removed rather than
+   * fixed: the tree it depended on is gone, and a strictly stronger check
+   * replaced it — see "the README explains every package, rather than listing
+   * it" below, which requires each package to be discussed in prose with a path
+   * a reader can follow. Naming something in a tree is not explaining it.
+   */
+  it('names no package that does not exist', () => {
     const packages = new Set(readdirSync(join(ROOT, 'packages')));
-    const listed = [...readme.matchAll(/^ {2}([a-z-]+)\/ {2,}/gm)].map((m) => m[1]!);
-    const phantom = listed.filter(
-      (name) => !packages.has(name) && !['api', 'worker', 'web'].includes(name),
-    );
-    expect(phantom).toEqual([]);
+    const named = [...readme.matchAll(/`packages\/([a-z-]+)`/g)].map((m) => m[1] ?? '');
+    expect(named.length).toBeGreaterThan(15);
+
+    const phantom = [...new Set(named)].filter((name) => !packages.has(name));
+    expect(
+      phantom,
+      `The README names packages that do not exist:\n  ${phantom.join('\n  ')}`,
+    ).toEqual([]);
   });
 
-  it('does not state a count that will go stale', () => {
-    // "Twenty-two architecture decision records" was true once. A number in
-    // prose is a promise to update prose, and nobody keeps it.
+  it('states the package count correctly, or not at all', () => {
+    /**
+     * The README's own rule is that a number in prose is a promise to update
+     * prose and nobody keeps it. This one was introduced with the package tables
+     * anyway, because a reader arriving cold deserves to know the order of
+     * magnitude — so it is checked rather than trusted.
+     *
+     * A count in prose is allowed here on exactly one condition: something
+     * fails when it drifts.
+     */
+    const words: Record<string, number> = {
+      sixteen: 16,
+      seventeen: 17,
+      eighteen: 18,
+      nineteen: 19,
+      twenty: 20,
+      'twenty-one': 21,
+      'twenty-two': 22,
+      'twenty-three': 23,
+      'twenty-four': 24,
+      'twenty-five': 25,
+    };
+    const stated = /\b([a-z-]+)\s+workspace packages\b/i.exec(readme)?.[1]?.toLowerCase();
+    if (stated === undefined) return; // No claim made, nothing to be wrong about.
+
+    const actual = readdirSync(join(ROOT, 'packages'), { withFileTypes: true }).filter((entry) =>
+      entry.isDirectory(),
+    ).length;
+    expect(
+      words[stated],
+      `The README says "${stated} workspace packages" and there are ${actual}.`,
+    ).toBe(actual);
+  });
+
+  it('does not state a count that nothing verifies', () => {
+    // "Twenty-two architecture decision records" was true once. Nothing counts
+    // the ADRs, so the claim may not be made.
     expect(readme).not.toMatch(/\b(twenty|thirty|forty)[- ]?\w*\s+architecture decision records/i);
   });
 });
@@ -309,5 +348,82 @@ describe('the README tells a reader to run things that exist', () => {
         '\n  ',
       )}`,
     ).toEqual([]);
+  });
+});
+
+describe('the README explains every package, rather than listing it', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+
+  /**
+   * The README with every fenced code block removed.
+   *
+   * A directory tree inside a code fence names a package without engaging with
+   * it, and cannot be clicked. The point of this check is that each package is
+   * discussed in prose a reader can follow, so the tree does not count.
+   */
+  const prose = readme.replace(/```[\s\S]*?```/g, '');
+
+  const packages = readdirSync(join(ROOT, 'packages'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+
+  it('finds packages to check', () => {
+    // A guard on the guard. An empty list would make the checks below vacuous,
+    // and the directory layout is exactly the kind of thing that moves.
+    expect(packages.length).toBeGreaterThan(15);
+  });
+
+  it('discusses every package in prose, not only in the directory tree', () => {
+    /**
+     * Seventeen of twenty packages were listed and never mentioned again when
+     * this check was written. A reader could see that `containment` existed and
+     * had nowhere to go to find out what it refuses to do.
+     *
+     * A full section each would have made the README worse — nobody reads forty
+     * sections — so what is required is that each package is named in prose with
+     * a path a reader can follow.
+     */
+    const unexplained = packages.filter((name) => !new RegExp(`packages/${name}\\b`).test(prose));
+    expect(
+      unexplained,
+      `These packages appear in the repository and are not discussed in the README ` +
+        `outside its directory tree:\n  ${unexplained.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('links every package by a path that resolves', () => {
+    // A link is only useful if it goes somewhere. A renamed package would
+    // otherwise leave a README full of paths that 404 on GitHub.
+    const linked = [...prose.matchAll(/\]\(\.\/(packages\/[a-z-]+)\)/g)].map((m) => m[1] ?? '');
+    expect(linked.length).toBeGreaterThan(15);
+
+    const broken = [...new Set(linked)].filter((target) => !existsSync(join(ROOT, target)));
+    expect(
+      broken,
+      `These README links point at paths that do not exist:\n  ${broken.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('says what each package refuses to do, not just what it is', () => {
+    /**
+     * The house style, and the reason the tables have the heading they have. A
+     * package description that only says what something does tells a reader
+     * nothing about the boundary — and the boundaries are the product.
+     *
+     * Checked loosely and deliberately: at least half the rows must carry a
+     * refusal. Requiring it of every row would push somebody into writing one
+     * that is not true, and a fabricated boundary is worse than a missing
+     * sentence.
+     */
+    const rows = [...prose.matchAll(/^\| \[`packages\/[a-z-]+`\].*$/gm)].map((m) => m[0]);
+    expect(rows.length).toBeGreaterThan(15);
+
+    const refusals = rows.filter((row) =>
+      /\bnever\b|\brefus|\bnot\b|\bno \b|\bcannot\b|\bonly\b|\bprohibited\b/i.test(row),
+    );
+    expect(
+      refusals.length * 2,
+      `Only ${refusals.length} of ${rows.length} package rows state a boundary.`,
+    ).toBeGreaterThanOrEqual(rows.length);
   });
 });

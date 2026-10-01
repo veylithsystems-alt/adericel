@@ -166,7 +166,7 @@ Every claimed guard, proved by breaking it on every build is attested to OPERATI
 - **DESIGNED** (person) — Contract: security and privacy claims require executable tests where possible
 - **IMPLEMENTED** (check) — tests/mutation/registry.ts; scripts/mutation-test.ts
 - **TESTED** (check) — tests/unit/mutation-registry.test.ts checks the registry is well formed; the runner itself was exercised against a deliberately unguarded mutation and reported it as SURVIVED with a non-zero exit
-- **VERIFIED** (check) — Twenty-one recorded mutations all killed by their named tests, run by CI rather than by hand. The runner refuses a dirty working tree, restores every file it touched including artefacts a suite regenerated, and reports a stale or ambiguous match as an error rather than a pass
+- **VERIFIED** (check) — Twenty-five recorded mutations all killed by their named tests, run by CI rather than by hand. The runner refuses a dirty working tree, restores every file it touched including artefacts a suite regenerated, and reports a stale or ambiguous match as an error rather than a pass
 - **OPERATIONAL** (check) — A required CI job on every push
 
 ### White-label presentation for MSPs

@@ -314,6 +314,52 @@ export const MUTATIONS: readonly Mutation[] = [
     suite: 'tests/unit/documentation.test.ts',
     mustFail: ['names no script that does not exist'],
   },
+  /**
+   * The fifth README guard — that at least half the package rows state a
+   * boundary rather than only a purpose — is deliberately absent from this
+   * registry. It is a proportion across twenty rows, so no single find-and-
+   * replace trips it, and the looseness is intentional: requiring a refusal in
+   * every row would push somebody into writing one that is not true, and a
+   * fabricated boundary is worse than a missing sentence. It was verified by
+   * stripping the refusal language from every row at once and watching it fail.
+   */
+  {
+    id: 'readme-lists-a-package-without-explaining-it',
+    invariant:
+      'Every package is discussed in the README prose, not merely named in a directory tree.',
+    file: 'README.md',
+    find: "| [`packages/containment`](./packages/containment)   | Governed containment C0–C5, its authority model and recovery preconditions. No level withholds an organisation's own assurance record, and automation can enter containment but never leave it. |\n",
+    replace: '',
+    suite: 'tests/unit/documentation.test.ts',
+    mustFail: ['discusses every package in prose, not only in the directory tree'],
+  },
+  {
+    id: 'readme-package-link-goes-nowhere',
+    invariant: 'Every package path the README links to resolves to a real directory.',
+    file: 'README.md',
+    find: '](./packages/triage)',
+    replace: '](./packages/triage-queue)',
+    suite: 'tests/unit/documentation.test.ts',
+    mustFail: ['links every package by a path that resolves'],
+  },
+  {
+    id: 'readme-names-a-phantom-package',
+    invariant: 'The README never names a package that does not exist in the repository.',
+    file: 'README.md',
+    find: '`packages/shared`',
+    replace: '`packages/scheduling`',
+    suite: 'tests/unit/documentation.test.ts',
+    mustFail: ['names no package that does not exist'],
+  },
+  {
+    id: 'readme-package-count-drifts',
+    invariant: 'A count stated in the README prose is verified, or it is not stated.',
+    file: 'README.md',
+    find: 'Twenty workspace packages',
+    replace: 'Eighteen workspace packages',
+    suite: 'tests/unit/documentation.test.ts',
+    mustFail: ['states the package count correctly, or not at all'],
+  },
   {
     id: 'register-cites-missing-path',
     invariant: 'Every evidence path the capability register cites must exist.',
