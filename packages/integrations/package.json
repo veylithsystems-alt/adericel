@@ -19,7 +19,7 @@
     "@adericel/domain": "workspace:*",
     "@adericel/shared": "workspace:*",
     "undici": "^7.29.1",
-    "zod": "^4.1.11"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@adericel/truth-engine": "workspace:*"
