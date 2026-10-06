@@ -394,6 +394,16 @@ The suites are separated by what a failure would mean:
 tick there is not "a test broke"; it is a claim about isolation that no longer
 holds, and it should say so in the checks list without anyone having to open it.
 
+**A clean dependency audit is not a property of this code.** During one build
+session `pnpm audit` reported clean, then two high-severity advisories, then
+clean again — without a line here changing. Both were newly published, both
+reached only through `eslint` and `@vitest/coverage-v8`, and both are pinned by
+`pnpm.overrides`. The audit tells you what the advisory database said at the
+moment you ran it, which is why CI runs it on every push rather than at release:
+the exposure window is a push, not a version. Treating a past green audit as a
+standing claim would be the same mistake as treating a connector's silence as a
+pass.
+
 `test:mutation` is deliberately **not** part of `pnpm verify`. It edits source
 files and restores them, so it refuses to run on a dirty working tree — which is
 the normal state while you are working. Run it before you push; CI runs it on
