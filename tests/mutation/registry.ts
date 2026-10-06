@@ -314,6 +314,48 @@ export const MUTATIONS: readonly Mutation[] = [
     suite: 'tests/unit/documentation.test.ts',
     mustFail: ['names no script that does not exist'],
   },
+  // ---------------------------------------------------------------------------
+  // Conformance to the lifecycles the contract states.
+  // ---------------------------------------------------------------------------
+  {
+    id: 'lifecycle-dispatch-counted-as-success',
+    invariant:
+      'Dispatch and confirmation sit in different stages of the contract execution lifecycle.',
+    file: 'packages/domain/src/contract-lifecycle.ts',
+    find: "    actionStates: ['CONFIRMED', 'UNVERIFIED', 'ROLLBACK_REQUIRED', 'ROLLED_BACK'],",
+    replace: "    actionStates: ['UNVERIFIED', 'ROLLBACK_REQUIRED', 'ROLLED_BACK'],",
+    suite: 'packages/domain/src/contract-lifecycle.test.ts',
+    mustFail: ['keeps dispatch and success in different stages'],
+  },
+  {
+    id: 'lifecycle-stage-claimed-as-a-state',
+    invariant:
+      'A stage realised as a stored property is not reported as a state the entity passes through.',
+    file: 'packages/domain/src/contract-lifecycle.ts',
+    find: "  RISK: {\n    realisation: 'PROPERTY',",
+    replace: "  RISK: {\n    realisation: 'STATE',",
+    suite: 'packages/domain/src/contract-lifecycle.test.ts',
+    mustFail: ['does not claim a stage is a state when it is a property'],
+  },
+  {
+    id: 'support-closed-counted-as-resolved',
+    invariant: 'A case that ended is not thereby a case that was resolved.',
+    file: 'packages/support/src/case.ts',
+    find: "  return state === 'RESOLVED';",
+    replace: "  return state === 'RESOLVED' || state === 'CLOSED';",
+    suite: 'packages/support/src/contract-stages.test.ts',
+    mustFail: ['counts only RESOLVED as a resolution'],
+  },
+  {
+    id: 'support-unknown-outcome-guessed',
+    invariant: 'An outcome the history does not record is reported as unknown, never as resolved.',
+    file: 'packages/support/src/case.ts',
+    find: '  return null;\n}\n\n/** Case states that end the case without solving anything. */',
+    replace:
+      "  return 'RESOLVED';\n}\n\n/** Case states that end the case without solving anything. */",
+    suite: 'packages/support/src/contract-stages.test.ts',
+    mustFail: ['returns null rather than guessing when the history does not say'],
+  },
   /**
    * The fifth README guard — that at least half the package rows state a
    * boundary rather than only a purpose — is deliberately absent from this

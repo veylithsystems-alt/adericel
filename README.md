@@ -294,6 +294,52 @@ single 16 GB VPS. The working is in
 [docs/operations/vps-sizing.md](./docs/operations/vps-sizing.md), including what
 that machine will not do.
 
+## Conformance to the contract's own lifecycles
+
+The contract states two sequences that bear directly on code: the authoritative
+execution lifecycle (`INTENT → POLICY → AUTHORISATION → RISK → ACTION →
+RE-OBSERVE → VERIFY → EVIDENCE`) and the support lifecycle (`RECEIVED → TRIAGED
+→ INVESTIGATING → ACTION_REQUIRED → VERIFICATION_PENDING → RESOLVED → CLOSED`).
+
+Both are quoted in code, and every state this system actually has is mapped onto
+them — [executions](./packages/domain/src/contract-lifecycle.ts),
+[support cases](./packages/support/src/case.ts). The mappings are total by
+construction, so a state added without deciding which stage of the contract it
+belongs to does not compile.
+
+**They are mappings, not renames.** Sixteen action states and twenty support case
+states are finer than the contract's eight and seven, and deliberately: an MSP
+cannot work a queue in which "waiting on the customer" and "waiting on the
+vendor" are the same thing — one needs a chase and the other needs patience.
+Renaming the operational states to match the contract would destroy the
+distinctions the queues are built on.
+
+**A stage realised as a property says so.** The contract names `RISK` as a stage;
+this system carries `riskClass` on the action from proposal onwards instead,
+because a `DESTRUCTIVE` action is still destructive at the moment of execution
+and a stage would let the classification go stale between evaluation and act.
+That is recorded as `PROPERTY` rather than dressed up as a state, and a test
+refuses a stage that claims to be a state while naming none.
+
+The sharpest thing the mapping protects: **`EXECUTED` and `CONFIRMED` are two
+stages apart, with re-observation between them.** The contract is explicit that
+no action becomes successful merely because it was dispatched, and a lifecycle
+that put them in one stage would permit exactly that.
+
+### A correction this section exists because of
+
+These sequences were recorded in this repository as **missing from the contract**
+for several days. Two hand-rolled PDF readers could not decode them; I treated
+the second failure as corroboration of the first, examined the file for images
+and vector drawing, found none, and concluded the passages were blank in the
+document. A real PDF library read all eight immediately.
+
+The first failure was an ordinary limitation. The error was escalating from "my
+instrument found nothing" to "the thing is not there" — which is the precise
+inference this product exists to refuse. `UNKNOWN` means the instrument did not
+establish something; it never means the thing is absent. The account is kept in
+[`docs/contract/README.md`](./docs/contract/README.md).
+
 ## Every guard, proved by breaking it on every build
 
 A test that would still pass with its guard removed proves nothing. A suite
@@ -307,7 +353,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Twenty-five are recorded. They include: a control scoped out of assessment
+Twenty-nine are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
