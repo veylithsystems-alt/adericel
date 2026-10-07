@@ -51,7 +51,8 @@
     "docs:operating-model": "tsx scripts/generate-operating-model.ts",
     "docs:capability-status": "tsx scripts/generate-capability-status.ts",
     "release:position": "tsx scripts/release-position.ts",
-    "test:mutation": "tsx scripts/mutation-test.ts"
+    "test:mutation": "tsx scripts/mutation-test.ts",
+    "sbom": "tsx scripts/sbom.ts"
   },
   "dependencies": {
     "@adericel/resolution": "workspace:*",

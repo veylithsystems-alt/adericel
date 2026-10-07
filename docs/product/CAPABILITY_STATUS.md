@@ -52,7 +52,7 @@ pipeline is not evidence of any of them, and
 | Backup and restore | `OPERATIONAL` | `VERIFIED` | 3 |
 | Every claimed guard, proved by breaking it on every build | `OPERATIONAL` | — | 3 |
 | White-label presentation for MSPs | `DESIGNED` | — | 7 |
-| SBOM and signed releases | `DESIGNED` | — | 7 |
+| Software bill of materials per deployable | `OPERATIONAL` | — | 3 |
 
 ## What establishes each status
 
@@ -166,7 +166,7 @@ Every claimed guard, proved by breaking it on every build is attested to OPERATI
 - **DESIGNED** (person) — Contract: security and privacy claims require executable tests where possible
 - **IMPLEMENTED** (check) — tests/mutation/registry.ts; scripts/mutation-test.ts
 - **TESTED** (check) — tests/unit/mutation-registry.test.ts checks the registry is well formed; the runner itself was exercised against a deliberately unguarded mutation and reported it as SURVIVED with a non-zero exit
-- **VERIFIED** (check) — Twenty-nine recorded mutations all killed by their named tests, run by CI rather than by hand. The runner refuses a dirty working tree, restores every file it touched including artefacts a suite regenerated, and reports a stale or ambiguous match as an error rather than a pass
+- **VERIFIED** (check) — Thirty-three recorded mutations all killed by their named tests, run by CI rather than by hand. The runner refuses a dirty working tree, restores every file it touched including artefacts a suite regenerated, and reports a stale or ambiguous match as an error rather than a pass
 - **OPERATIONAL** (check) — A required CI job on every push
 
 ### White-label presentation for MSPs
@@ -175,11 +175,15 @@ White-label presentation for MSPs is attested to DESIGNED. 7 further status(es) 
 
 - **DESIGNED** (person) — Contract §38
 
-### SBOM and signed releases
+### Software bill of materials per deployable
 
-SBOM and signed releases is attested to DESIGNED. 7 further status(es) remain unestablished, and nothing here implies them.
+Software bill of materials per deployable is attested to OPERATIONAL. 3 further status(es) remain unestablished, and nothing here implies them.
 
-- **DESIGNED** (person) — Contract §36; supply-chain task
+- **DESIGNED** (person) — Contract: dependency integrity, under the security requirements
+- **IMPLEMENTED** (check) — scripts/sbom.ts — CycloneDX 1.5, from the resolved lockfile
+- **TESTED** (check) — tests/unit/sbom.test.ts
+- **VERIFIED** (check) — Four guards proved by deliberate breakage: collapsing two installed versions of one package into a single row, merging the development tree into the production inventory, adding a timestamp that destroys reproducibility, and omitting the commit the inventory describes
+- **OPERATIONAL** (check) — A CI job on every push, retaining each inventory for 90 days
 
 ## What this means for production readiness
 

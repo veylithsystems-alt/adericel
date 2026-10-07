@@ -340,6 +340,39 @@ inference this product exists to refuse. `UNKNOWN` means the instrument did not
 establish something; it never means the thing is absent. The account is kept in
 [`docs/contract/README.md`](./docs/contract/README.md).
 
+## What was in the build we shipped
+
+`pnpm sbom` writes a CycloneDX inventory per deployable — api, worker, web — from
+the **resolved lockfile** rather than the declared ranges, because `^4.1.0` is an
+intention and `4.1.3` is what ran. CI produces them on every push and keeps them
+for ninety days, long enough to outlive an incident investigation.
+
+This exists because an audit and an inventory answer different questions. An
+audit says whether anything is known to be wrong _now_. It cannot say what was
+running eight weeks ago, and a dependency tree reconstructed later from a version
+range is a guess.
+
+Four properties make the answer trustworthy, and each is proved by breaking it:
+
+**Every installed version is listed, not one row per name.** The first version
+keyed its components by package name and reported 71 where 75 were installed —
+four packages are present at two versions each, which is ordinary in a
+transitive tree. That is the worst possible place to be lossy: an incident
+responder asking "are we running the version this advisory affects" would have
+had a confident no from a document that threw the answer away.
+
+**What ships is separate from what it was built with.** Both dependency
+advisories that landed during one build session were in `eslint` and
+`@vitest/coverage-v8`. Neither is in any shipped image, and a merged inventory
+would read as though a linter were part of the product.
+
+**No timestamp.** Two inventories of an unchanged tree are byte-identical, so a
+release can be rechecked by regenerating its SBOM — the same property the
+generated documents in `docs/` have.
+
+**The commit is recorded.** An inventory that does not say which build it
+describes is an inventory of nothing in particular.
+
 ## Every guard, proved by breaking it on every build
 
 A test that would still pass with its guard removed proves nothing. A suite
@@ -353,7 +386,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Twenty-nine are recorded. They include: a control scoped out of assessment
+Thirty-three are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,

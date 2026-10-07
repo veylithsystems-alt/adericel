@@ -232,7 +232,7 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
           'SURVIVED with a non-zero exit',
       ),
       VERIFIED(
-        'Twenty-nine recorded mutations all killed by their named tests, run by CI rather than by ' +
+        'Thirty-three recorded mutations all killed by their named tests, run by CI rather than by ' +
           'hand. The runner refuses a dirty working tree, restores every file it touched ' +
           'including artefacts a suite regenerated, and reports a stale or ambiguous match as ' +
           'an error rather than a pass',
@@ -247,7 +247,18 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
   },
   {
     key: 'signed-releases',
-    title: 'SBOM and signed releases',
-    attestations: [DESIGNED('Contract §36; supply-chain task')],
+    title: 'Software bill of materials per deployable',
+    attestations: [
+      DESIGNED('Contract: dependency integrity, under the security requirements'),
+      IMPLEMENTED('scripts/sbom.ts — CycloneDX 1.5, from the resolved lockfile'),
+      TESTED('tests/unit/sbom.test.ts'),
+      VERIFIED(
+        'Four guards proved by deliberate breakage: collapsing two installed versions of one ' +
+          'package into a single row, merging the development tree into the production ' +
+          'inventory, adding a timestamp that destroys reproducibility, and omitting the ' +
+          'commit the inventory describes',
+      ),
+      OPERATIONAL('A CI job on every push, retaining each inventory for 90 days'),
+    ],
   },
 ];

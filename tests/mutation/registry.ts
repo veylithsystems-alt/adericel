@@ -315,6 +315,48 @@ export const MUTATIONS: readonly Mutation[] = [
     mustFail: ['names no script that does not exist'],
   },
   // ---------------------------------------------------------------------------
+  // The inventory of what shipped.
+  // ---------------------------------------------------------------------------
+  {
+    id: 'sbom-collapses-versions',
+    invariant:
+      'Every installed version of a package appears in the inventory, not one row per name.',
+    file: 'scripts/sbom.ts',
+    find: 'seen.add(`${name}\\u0000${version}`);',
+    replace: "seen.add(`${name}\\u0000${version}`.split('\\u0000')[0] ?? name);",
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['lists every installed version of a package, not one per name'],
+  },
+  {
+    id: 'sbom-merges-dev-into-production',
+    invariant: 'What ships and what it was built with are inventoried separately.',
+    file: 'scripts/sbom.ts',
+    find: "      const components = listed(deployable, kind === 'development');",
+    replace: '      const components = listed(deployable, true);',
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['keeps what ships separate from what it was built with'],
+  },
+  {
+    id: 'sbom-not-reproducible',
+    invariant: 'Two inventories of an unchanged tree are identical, so a release can be rechecked.',
+    file: 'scripts/sbom.ts',
+    find: '    metadata: {\n      component:',
+    replace: '    metadata: {\n      timestamp: new Date().toISOString(),\n      component:',
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['produces the same document twice for an unchanged tree'],
+  },
+  {
+    id: 'sbom-not-tied-to-a-commit',
+    invariant:
+      'An inventory names the commit it describes, or it inventories nothing in particular.',
+    file: 'scripts/sbom.ts',
+    find: "        { name: 'adericel:commit', value: commit() },",
+    replace: "        { name: 'adericel:commit', value: 'n/a' },",
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['records the commit, so the inventory is tied to a build'],
+  },
+
+  // ---------------------------------------------------------------------------
   // Conformance to the lifecycles the contract states.
   // ---------------------------------------------------------------------------
   {
