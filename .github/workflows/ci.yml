@@ -142,7 +142,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm sbom
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: adericel-sbom
           path: var/sbom/*.cdx.json
@@ -207,7 +207,7 @@ jobs:
       # Validation includes a drift check: it rebuilds the export and fails if
       # the committed JSON differs.
       - run: pnpm n8n:validate
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: adericel-n8n-export
           path: workflows/n8n/adericel.n8n.json
