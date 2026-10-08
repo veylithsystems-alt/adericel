@@ -123,6 +123,33 @@ jobs:
       - run: pnpm test:integration
       - run: pnpm test:e2e
 
+  # An audit answers "is anything known to be wrong right now". It cannot answer
+  # the question that arrives after an incident: what was in the build we
+  # shipped. Only a recorded inventory answers that, so one is produced per
+  # deployable on every push and kept as an artefact.
+  sbom:
+    name: Software bill of materials
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: adericel-sbom
+          path: var/sbom/*.cdx.json
+          # Long enough to outlive an incident investigation. An inventory that
+          # expires before somebody needs it is not an inventory.
+          retention-days: 90
+
   # Every invariant this repository claims is "proved by deliberately breaking
   # it" is recorded as the edit that breaks it and the test that must then fail.
   # A test that would still pass with its guard removed proves nothing, and a

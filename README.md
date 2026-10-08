@@ -294,6 +294,85 @@ single 16 GB VPS. The working is in
 [docs/operations/vps-sizing.md](./docs/operations/vps-sizing.md), including what
 that machine will not do.
 
+## Conformance to the contract's own lifecycles
+
+The contract states two sequences that bear directly on code: the authoritative
+execution lifecycle (`INTENT → POLICY → AUTHORISATION → RISK → ACTION →
+RE-OBSERVE → VERIFY → EVIDENCE`) and the support lifecycle (`RECEIVED → TRIAGED
+→ INVESTIGATING → ACTION_REQUIRED → VERIFICATION_PENDING → RESOLVED → CLOSED`).
+
+Both are quoted in code, and every state this system actually has is mapped onto
+them — [executions](./packages/domain/src/contract-lifecycle.ts),
+[support cases](./packages/support/src/case.ts). The mappings are total by
+construction, so a state added without deciding which stage of the contract it
+belongs to does not compile.
+
+**They are mappings, not renames.** Sixteen action states and twenty support case
+states are finer than the contract's eight and seven, and deliberately: an MSP
+cannot work a queue in which "waiting on the customer" and "waiting on the
+vendor" are the same thing — one needs a chase and the other needs patience.
+Renaming the operational states to match the contract would destroy the
+distinctions the queues are built on.
+
+**A stage realised as a property says so.** The contract names `RISK` as a stage;
+this system carries `riskClass` on the action from proposal onwards instead,
+because a `DESTRUCTIVE` action is still destructive at the moment of execution
+and a stage would let the classification go stale between evaluation and act.
+That is recorded as `PROPERTY` rather than dressed up as a state, and a test
+refuses a stage that claims to be a state while naming none.
+
+The sharpest thing the mapping protects: **`EXECUTED` and `CONFIRMED` are two
+stages apart, with re-observation between them.** The contract is explicit that
+no action becomes successful merely because it was dispatched, and a lifecycle
+that put them in one stage would permit exactly that.
+
+### A correction this section exists because of
+
+These sequences were recorded in this repository as **missing from the contract**
+for several days. Two hand-rolled PDF readers could not decode them; I treated
+the second failure as corroboration of the first, examined the file for images
+and vector drawing, found none, and concluded the passages were blank in the
+document. A real PDF library read all eight immediately.
+
+The first failure was an ordinary limitation. The error was escalating from "my
+instrument found nothing" to "the thing is not there" — which is the precise
+inference this product exists to refuse. `UNKNOWN` means the instrument did not
+establish something; it never means the thing is absent. The account is kept in
+[`docs/contract/README.md`](./docs/contract/README.md).
+
+## What was in the build we shipped
+
+`pnpm sbom` writes a CycloneDX inventory per deployable — api, worker, web — from
+the **resolved lockfile** rather than the declared ranges, because `^4.1.0` is an
+intention and `4.1.3` is what ran. CI produces them on every push and keeps them
+for ninety days, long enough to outlive an incident investigation.
+
+This exists because an audit and an inventory answer different questions. An
+audit says whether anything is known to be wrong _now_. It cannot say what was
+running eight weeks ago, and a dependency tree reconstructed later from a version
+range is a guess.
+
+Four properties make the answer trustworthy, and each is proved by breaking it:
+
+**Every installed version is listed, not one row per name.** The first version
+keyed its components by package name and reported 71 where 75 were installed —
+four packages are present at two versions each, which is ordinary in a
+transitive tree. That is the worst possible place to be lossy: an incident
+responder asking "are we running the version this advisory affects" would have
+had a confident no from a document that threw the answer away.
+
+**What ships is separate from what it was built with.** Both dependency
+advisories that landed during one build session were in `eslint` and
+`@vitest/coverage-v8`. Neither is in any shipped image, and a merged inventory
+would read as though a linter were part of the product.
+
+**No timestamp.** Two inventories of an unchanged tree are byte-identical, so a
+release can be rechecked by regenerating its SBOM — the same property the
+generated documents in `docs/` have.
+
+**The commit is recorded.** An inventory that does not say which build it
+describes is an inventory of nothing in particular.
+
 ## Every guard, proved by breaking it on every build
 
 A test that would still pass with its guard removed proves nothing. A suite
@@ -307,7 +386,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Twenty-five are recorded. They include: a control scoped out of assessment
+Thirty-three are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -347,6 +426,16 @@ The suites are separated by what a failure would mean:
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
 tick there is not "a test broke"; it is a claim about isolation that no longer
 holds, and it should say so in the checks list without anyone having to open it.
+
+**A clean dependency audit is not a property of this code.** During one build
+session `pnpm audit` reported clean, then two high-severity advisories, then
+clean again — without a line here changing. Both were newly published, both
+reached only through `eslint` and `@vitest/coverage-v8`, and both are pinned by
+`pnpm.overrides`. The audit tells you what the advisory database said at the
+moment you ran it, which is why CI runs it on every push rather than at release:
+the exposure window is a push, not a version. Treating a past green audit as a
+standing claim would be the same mistake as treating a connector's silence as a
+pass.
 
 `test:mutation` is deliberately **not** part of `pnpm verify`. It edits source
 files and restores them, so it refuses to run on a dirty working tree — which is

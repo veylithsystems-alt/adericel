@@ -314,6 +314,90 @@ export const MUTATIONS: readonly Mutation[] = [
     suite: 'tests/unit/documentation.test.ts',
     mustFail: ['names no script that does not exist'],
   },
+  // ---------------------------------------------------------------------------
+  // The inventory of what shipped.
+  // ---------------------------------------------------------------------------
+  {
+    id: 'sbom-collapses-versions',
+    invariant:
+      'Every installed version of a package appears in the inventory, not one row per name.',
+    file: 'scripts/sbom.ts',
+    find: 'seen.add(`${name}\\u0000${version}`);',
+    replace: "seen.add(`${name}\\u0000${version}`.split('\\u0000')[0] ?? name);",
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['lists every installed version of a package, not one per name'],
+  },
+  {
+    id: 'sbom-merges-dev-into-production',
+    invariant: 'What ships and what it was built with are inventoried separately.',
+    file: 'scripts/sbom.ts',
+    find: "      const components = listed(deployable, kind === 'development');",
+    replace: '      const components = listed(deployable, true);',
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['keeps what ships separate from what it was built with'],
+  },
+  {
+    id: 'sbom-not-reproducible',
+    invariant: 'Two inventories of an unchanged tree are identical, so a release can be rechecked.',
+    file: 'scripts/sbom.ts',
+    find: '    metadata: {\n      component:',
+    replace: '    metadata: {\n      timestamp: new Date().toISOString(),\n      component:',
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['produces the same document twice for an unchanged tree'],
+  },
+  {
+    id: 'sbom-not-tied-to-a-commit',
+    invariant:
+      'An inventory names the commit it describes, or it inventories nothing in particular.',
+    file: 'scripts/sbom.ts',
+    find: "        { name: 'adericel:commit', value: commit() },",
+    replace: "        { name: 'adericel:commit', value: 'n/a' },",
+    suite: 'tests/unit/sbom.test.ts',
+    mustFail: ['records the commit, so the inventory is tied to a build'],
+  },
+
+  // ---------------------------------------------------------------------------
+  // Conformance to the lifecycles the contract states.
+  // ---------------------------------------------------------------------------
+  {
+    id: 'lifecycle-dispatch-counted-as-success',
+    invariant:
+      'Dispatch and confirmation sit in different stages of the contract execution lifecycle.',
+    file: 'packages/domain/src/contract-lifecycle.ts',
+    find: "    actionStates: ['CONFIRMED', 'UNVERIFIED', 'ROLLBACK_REQUIRED', 'ROLLED_BACK'],",
+    replace: "    actionStates: ['UNVERIFIED', 'ROLLBACK_REQUIRED', 'ROLLED_BACK'],",
+    suite: 'packages/domain/src/contract-lifecycle.test.ts',
+    mustFail: ['keeps dispatch and success in different stages'],
+  },
+  {
+    id: 'lifecycle-stage-claimed-as-a-state',
+    invariant:
+      'A stage realised as a stored property is not reported as a state the entity passes through.',
+    file: 'packages/domain/src/contract-lifecycle.ts',
+    find: "  RISK: {\n    realisation: 'PROPERTY',",
+    replace: "  RISK: {\n    realisation: 'STATE',",
+    suite: 'packages/domain/src/contract-lifecycle.test.ts',
+    mustFail: ['does not claim a stage is a state when it is a property'],
+  },
+  {
+    id: 'support-closed-counted-as-resolved',
+    invariant: 'A case that ended is not thereby a case that was resolved.',
+    file: 'packages/support/src/case.ts',
+    find: "  return state === 'RESOLVED';",
+    replace: "  return state === 'RESOLVED' || state === 'CLOSED';",
+    suite: 'packages/support/src/contract-stages.test.ts',
+    mustFail: ['counts only RESOLVED as a resolution'],
+  },
+  {
+    id: 'support-unknown-outcome-guessed',
+    invariant: 'An outcome the history does not record is reported as unknown, never as resolved.',
+    file: 'packages/support/src/case.ts',
+    find: '  return null;\n}\n\n/** Case states that end the case without solving anything. */',
+    replace:
+      "  return 'RESOLVED';\n}\n\n/** Case states that end the case without solving anything. */",
+    suite: 'packages/support/src/contract-stages.test.ts',
+    mustFail: ['returns null rather than guessing when the history does not say'],
+  },
   /**
    * The fifth README guard — that at least half the package rows state a
    * boundary rather than only a purpose — is deliberately absent from this

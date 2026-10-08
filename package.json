@@ -51,7 +51,8 @@
     "docs:operating-model": "tsx scripts/generate-operating-model.ts",
     "docs:capability-status": "tsx scripts/generate-capability-status.ts",
     "release:position": "tsx scripts/release-position.ts",
-    "test:mutation": "tsx scripts/mutation-test.ts"
+    "test:mutation": "tsx scripts/mutation-test.ts",
+    "sbom": "tsx scripts/sbom.ts"
   },
   "dependencies": {
     "@adericel/resolution": "workspace:*",
@@ -92,7 +93,8 @@
     "overrides": {
       "brace-expansion@<1.1.20": "1.1.20",
       "brace-expansion@>=2.0.0 <2.1.6": "2.1.6",
-      "brace-expansion@>=4.0.0": "5.0.12"
+      "brace-expansion@>=4.0.0": "5.0.12",
+      "source-map-js": ">=1.2.2"
     }
   }
 }

@@ -395,3 +395,127 @@ export function isTerminal(state: SupportCaseState): boolean {
 export function mayDiscloseAt(state: SupportCaseState): boolean {
   return DISCLOSURE_PERMITTED_STATES.includes(state);
 }
+
+/**
+ * The contract's support lifecycle, and how these twenty states realise it.
+ *
+ * Contract v3.2: "Support lifecycle: RECEIVED → TRIAGED → INVESTIGATING →
+ * ACTION_REQUIRED → VERIFICATION_PENDING → RESOLVED → CLOSED".
+ *
+ * Seven stages; twenty states here. The twenty are a refinement, not a
+ * disagreement, and the refinements exist because an MSP cannot work a queue
+ * without them: "waiting on the customer" and "waiting on the vendor" are the
+ * same contract stage and completely different operationally — one needs a
+ * chase, the other needs patience.
+ *
+ * The mapping is total by construction, so a state added without deciding which
+ * stage of the contract's lifecycle it belongs to does not compile. That is the
+ * point: the contract's sequence is the obligation, and an operational state
+ * nobody placed within it is a state nobody has reconciled.
+ */
+export const CONTRACT_SUPPORT_STAGES = [
+  'RECEIVED',
+  'TRIAGED',
+  'INVESTIGATING',
+  'ACTION_REQUIRED',
+  'VERIFICATION_PENDING',
+  'RESOLVED',
+  'CLOSED',
+] as const;
+export type ContractSupportStage = (typeof CONTRACT_SUPPORT_STAGES)[number];
+
+export const CONTRACT_STAGE_OF_CASE_STATE: Readonly<
+  Record<SupportCaseState, ContractSupportStage>
+> = {
+  RECEIVED: 'RECEIVED',
+
+  /**
+   * Identity and entitlement sit at RECEIVED, not TRIAGED.
+   *
+   * Nothing about an organisation may be disclosed before somebody is
+   * identified, so these precede triage rather than being part of it — a case
+   * in `IDENTITY_PENDING` has not been looked at, and placing it at TRIAGED
+   * would say it had.
+   */
+  IDENTITY_PENDING: 'RECEIVED',
+  ENTITLEMENT_PENDING: 'RECEIVED',
+
+  TRIAGING: 'TRIAGED',
+  ROUTED_TO_MSP: 'TRIAGED',
+
+  QUEUED: 'INVESTIGATING',
+  IN_PROGRESS: 'INVESTIGATING',
+
+  // Every wait is the contract's ACTION_REQUIRED: somebody outside the case
+  // owes something before it can move.
+  AWAITING_CUSTOMER: 'ACTION_REQUIRED',
+  AWAITING_MSP: 'ACTION_REQUIRED',
+  AWAITING_VENDOR: 'ACTION_REQUIRED',
+  AWAITING_CHANGE: 'ACTION_REQUIRED',
+
+  /**
+   * The three specialist reviews are INVESTIGATING, not ACTION_REQUIRED.
+   *
+   * §26 requires security, privacy and commercial routing, and work is actively
+   * happening in each — by a different person, with a different authority.
+   * Classing them as a wait would let a privacy review look like an idle ticket
+   * on a report.
+   */
+  SECURITY_REVIEW: 'INVESTIGATING',
+  PRIVACY_REVIEW: 'INVESTIGATING',
+  COMMERCIAL_REVIEW: 'INVESTIGATING',
+
+  RESOLUTION_PROPOSED: 'VERIFICATION_PENDING',
+  AWAITING_VERIFICATION: 'VERIFICATION_PENDING',
+
+  RESOLVED: 'RESOLVED',
+  CLOSED: 'CLOSED',
+
+  /**
+   * Withdrawn and rejected map to CLOSED, and `isResolution()` below exists so
+   * that mapping can never be read as resolution.
+   *
+   * The contract's sequence has no ending that is not a resolution, and real
+   * support has two. They are closed — nothing further happens — and they are
+   * not RESOLVED, because counting them as resolutions would inflate every
+   * support metric an MSP shows a customer.
+   */
+  WITHDRAWN: 'CLOSED',
+  REJECTED: 'CLOSED',
+};
+
+/**
+ * Whether reaching this state means the customer's problem was actually solved.
+ *
+ * Only `RESOLVED`. The first version of this function also returned true for
+ * `CLOSED`, which is wrong in precisely the way the comment above it warns
+ * about: a withdrawn case reaches `CLOSED` too, so a closed case's state alone
+ * cannot say whether anything was solved. Returning true would have inflated
+ * every support metric an MSP shows a customer, via the function written to
+ * prevent that.
+ *
+ * A `CLOSED` case's outcome is a question about its history, not its state. Use
+ * `outcomeOfClosedCase()` with the transitions.
+ */
+export function isResolution(state: SupportCaseState): boolean {
+  return state === 'RESOLVED';
+}
+
+/**
+ * What a closed case's ending actually was, from the states it passed through.
+ *
+ * Returns null when the history does not say — which happens, and is better
+ * than a guess. A support report with an unknown outcome is accurate; one that
+ * assumed resolution is a claim nobody made.
+ */
+export function outcomeOfClosedCase(
+  states: readonly SupportCaseState[],
+): 'RESOLVED' | 'WITHDRAWN' | 'REJECTED' | null {
+  for (const state of [...states].reverse()) {
+    if (state === 'RESOLVED' || state === 'WITHDRAWN' || state === 'REJECTED') return state;
+  }
+  return null;
+}
+
+/** Case states that end the case without solving anything. */
+export const NON_RESOLUTION_ENDINGS: readonly SupportCaseState[] = ['WITHDRAWN', 'REJECTED'];
