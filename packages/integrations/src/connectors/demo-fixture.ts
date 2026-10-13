@@ -121,6 +121,23 @@ const configSchema = z.object({
    * predicate each one becomes is Adericel's decision, made in normalisation.
    */
   omitFields: z.array(z.string()).default([]),
+
+  /**
+   * Whether this source reports when the fact became true.
+   *
+   * Many do not. A configuration export, a settings snapshot, a policy
+   * listing — these say what is the case, not when it became the case, so
+   * their only recency anchor is when Adericel collected them.
+   *
+   * That distinction decides which half of the refresh keeps a stable estate
+   * proven. Evidence usability is anchored on `observed_at ?? collected_at`,
+   * so a source that reports a timestamp is carried by `observed_at` and one
+   * that does not is carried by `collected_at` — and the mutation harness
+   * found that only the first was tested, because this fixture always
+   * reported a timestamp. A guard with no test over it is the thing this
+   * repository exists not to have.
+   */
+  reportsObservedAt: z.boolean().default(true),
 });
 
 /** The observation kinds a fixture dataset may contain. */
@@ -264,7 +281,7 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
           kind: record.kind as ObservationKind,
           sourceSystem: 'adericel-demo-fixture',
           subjectExternalId: record.subjectExternalId,
-          observedAt: record.observedAt ?? context.nowIso,
+          observedAt: config.reportsObservedAt ? (record.observedAt ?? context.nowIso) : null,
           payload: Object.fromEntries(
             Object.entries({
               ...record.payload,

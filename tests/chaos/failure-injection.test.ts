@@ -99,6 +99,7 @@ const HEALTHY = {
   driftFieldNames: false,
   omitSubjects: [] as string[],
   omitFields: [] as string[],
+  reportsObservedAt: true,
 };
 
 /** Longer than the rule's `maxEvidenceAgeDays` of 7. */
@@ -167,7 +168,19 @@ describe.skipIf(!available)('what Adericel says when its dependencies fail', () 
    * across them means test order decides the answers, and a suite whose
    * results depend on its own history cannot be read.
    */
-  const freshTenant = async (slug: string): Promise<void> => {
+  const freshTenant = async (
+    slug: string,
+    /**
+     * Configuration for the *baseline* collection, not just for what follows.
+     *
+     * Needed because some properties are about the shape of the very first
+     * observation. A test that seeded a healthy baseline and then switched the
+     * source's behaviour would be asserting about evidence written before the
+     * switch — which is how the first version of the no-timestamp test came to
+     * fail its own premise check, correctly.
+     */
+    baselineConfig: Record<string, unknown> = {},
+  ): Promise<void> => {
     await harness.truncate();
     tenant = await seedTenant(harness, {
       slug,
@@ -196,7 +209,7 @@ describe.skipIf(!available)('what Adericel says when its dependencies fail', () 
       );
     });
 
-    await inject({});
+    await inject(baselineConfig);
     await collectAndAssess();
 
     // A guard on every guard below. If the baseline is not actually satisfied,
@@ -247,6 +260,47 @@ describe.skipIf(!available)('what Adericel says when its dependencies fail', () 
         expect(
           state?.state,
           `day ${day}: a successfully collected, unchanged, satisfied estate stopped being proven`,
+        ).toBe('SATISFIED');
+      }
+    }, 300_000);
+
+    it('stays proven when the source reports no timestamp of its own', async () => {
+      /**
+       * The other half of the same property, and it was untested.
+       *
+       * Evidence usability is anchored on `observed_at ?? collected_at`. A
+       * source that reports when a fact became true is carried by
+       * `observed_at`; one that does not — a configuration export, a settings
+       * snapshot, a policy listing, which say what is the case and not when it
+       * became the case — is carried by `collected_at` alone.
+       *
+       * The fixture always reported a timestamp, so the test above passed with
+       * the `collected_at` refresh deliberately broken. The mutation harness
+       * caught it: the mutation survived, which means the guard had no test
+       * over it. This is that test.
+       */
+      await freshTenant('untimestamped-corp', { reportsObservedAt: false });
+
+      // The premise, asserted rather than assumed. If the source turned out to
+      // report a timestamp anyway, this test would be a duplicate of the one
+      // above and would prove nothing about the path it exists for.
+      const anchored = await harness.db.withPlatform(async (ctx) =>
+        ctx.many<{ observed_at: Date | null }>(
+          `SELECT observed_at FROM evidence WHERE organisation_id = $1`,
+          [tenant.organisationId],
+        ),
+      );
+      expect(anchored.length).toBeGreaterThan(0);
+      for (const row of anchored) {
+        expect(row.observed_at, 'the source reported a timestamp after all').toBeNull();
+      }
+
+      for (let day = 1; day <= 20; day += 1) {
+        harness.clock.advance(24 * 60 * 60 * 1000);
+        await collectAndAssess();
+        expect(
+          (await stateOf())?.state,
+          `day ${day}: an estate whose source reports no timestamp stopped being proven`,
         ).toBe('SATISFIED');
       }
     }, 300_000);

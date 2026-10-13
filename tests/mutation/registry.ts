@@ -454,13 +454,58 @@ export const MUTATIONS: readonly Mutation[] = [
     mustFail: ['cites only paths that exist'],
   },
   {
-    id: 'reobservation-does-not-refresh-recency',
+    id: 'reobservation-recorded-as-nothing',
     invariant:
-      'Re-observing an unchanged fact refreshes its recency, so a stable estate that keeps being ' +
-      'collected stays proven instead of decaying to UNKNOWN.',
+      'Re-observing an unchanged fact is recorded, so a stable estate that keeps being collected ' +
+      'stays proven instead of decaying to UNKNOWN.',
+    file: 'packages/evidence/src/observations.ts',
+    // The defect that actually shipped: the conflict did nothing at all, so
+    // nothing downstream ran and no evidence was ever refreshed.
+    find: `           DO UPDATE SET
+             collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),
+             observed_at = GREATEST(observations.observed_at, EXCLUDED.observed_at),
+             integration_run_id = EXCLUDED.integration_run_id,
+             correlation_id = EXCLUDED.correlation_id,
+             subject_node_id = COALESCE(EXCLUDED.subject_node_id, observations.subject_node_id)`,
+    replace: '           DO NOTHING',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: [
+      'stays proven for as long as it keeps being observed',
+      'stays proven when the source reports no timestamp of its own',
+    ],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-does-not-refresh-collected-at',
+    invariant:
+      'Re-observation refreshes `collected_at`, which is the only recency anchor a source that ' +
+      'reports no timestamp of its own ever has.',
     file: 'packages/evidence/src/observations.ts',
     find: 'collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),',
     replace: 'collected_at = observations.collected_at,',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    /**
+     * Not the test above, and that is the whole point of this entry.
+     *
+     * This mutation SURVIVED when it was first recorded, pointed at the
+     * twenty-day test. Evidence usability is anchored on
+     * `observed_at ?? collected_at`, and the fixture always reported a
+     * timestamp, so `observed_at` carried the property and breaking
+     * `collected_at` changed nothing. The guard was real and had no test over
+     * it — which is exactly the state the harness exists to detect, and it
+     * detected it on the most important defect in the repository.
+     */
+    mustFail: ['stays proven when the source reports no timestamp of its own'],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-does-not-refresh-observed-at',
+    invariant:
+      'Re-observation refreshes `observed_at`, which is the anchor for every source that reports ' +
+      'when a fact became true.',
+    file: 'packages/evidence/src/observations.ts',
+    find: 'observed_at = GREATEST(observations.observed_at, EXCLUDED.observed_at),',
+    replace: 'observed_at = observations.observed_at,',
     suite: 'tests/chaos/failure-injection.test.ts',
     mustFail: ['stays proven for as long as it keeps being observed'],
     needsDatabase: true,
