@@ -8,6 +8,7 @@ import {
   type AssuranceState,
 } from '@adericel/domain';
 import { createAssessmentService } from '@adericel/actions';
+import { predicatesForConnectorFrom } from '@adericel/integrations';
 import { referencedPredicates } from '@adericel/truth-engine';
 import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
@@ -507,6 +508,7 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           clock: app.clock,
           logger: request.adericel.logger,
           rulesets: app.rulesets,
+          predicatesForConnector: predicatesForConnectorFrom(app.connectors),
           actor: principal?.displayName ?? 'system',
           correlationId: request.adericel.correlationId,
         });
@@ -567,6 +569,7 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           clock: app.clock,
           logger: request.adericel.logger,
           rulesets: app.rulesets,
+          predicatesForConnector: predicatesForConnectorFrom(app.connectors),
           actor: principal?.displayName ?? 'system',
           correlationId: request.adericel.correlationId,
         });
@@ -692,6 +695,7 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           clock: app.clock,
           logger: request.adericel.logger,
           rulesets: app.rulesets,
+          predicatesForConnector: predicatesForConnectorFrom(app.connectors),
           actor: request.adericel.principal?.displayName ?? 'system',
           correlationId: request.adericel.correlationId,
         }).replay(params.id),

@@ -25,6 +25,7 @@
     "test:tenancy": "vitest run tests/tenancy",
     "test:security": "vitest run tests/security",
     "test:e2e": "vitest run tests/e2e",
+    "test:chaos": "vitest run tests/chaos",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "db:migrate": "tsx scripts/migrate.ts up",

@@ -267,6 +267,9 @@ importers:
 
   packages/actions:
     dependencies:
+      '@adericel/containment':
+        specifier: workspace:*
+        version: link:../containment
       '@adericel/domain':
         specifier: workspace:*
         version: link:../domain

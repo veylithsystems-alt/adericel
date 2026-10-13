@@ -6,7 +6,7 @@ import {
 } from '@adericel/actions';
 import { createEvidenceRepository, createObservationRepository } from '@adericel/evidence';
 import { publish, type Database } from '@adericel/graph';
-import type { ConnectorRegistry } from '@adericel/integrations';
+import { predicatesForConnectorFrom, type ConnectorRegistry } from '@adericel/integrations';
 import { compilePolicy, type CompiledPolicy } from '@adericel/policy';
 import type { RulesetRegistry } from '@adericel/truth-engine';
 import {
@@ -121,6 +121,7 @@ export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHan
             clock,
             logger: logger.child({ organisationId, correlationId }),
             rulesets: deps.rulesets,
+            predicatesForConnector: predicatesForConnectorFrom(deps.connectors),
             actor: 'scheduler',
             correlationId,
           });
@@ -543,6 +544,7 @@ export function buildHandlers(deps: HandlerDeps): Partial<Record<JobType, JobHan
           clock,
           logger,
           rulesets: deps.rulesets,
+          predicatesForConnector: predicatesForConnectorFrom(deps.connectors),
           actor: 'self-assurance',
           correlationId,
         }).assessAllControls('SCHEDULED');
