@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { OBSERVATION_KINDS, type ObservationInput, type ObservationKind } from '@adericel/domain';
+import {
+  collectionFailureCodeSchema,
+  CollectionFailure,
+  OBSERVATION_KINDS,
+  type ObservationInput,
+  type ObservationKind,
+} from '@adericel/domain';
 import type {
   ConnectionCheck,
   Connector,
@@ -15,7 +21,7 @@ import {
   type CapabilityReport,
   type ConnectorManifest,
 } from '../manifest.js';
-import { predicatesForPayloadKeys } from '../normalise.js';
+import { predicatesForKind, predicatesForPayloadKeys } from '../normalise.js';
 
 /**
  * Demonstration fixture connector.
@@ -59,7 +65,66 @@ const configSchema = z.object({
     ]),
   /** Simulate an execution that reports success but does not change state. */
   failVerificationFor: z.array(z.string()).default([]),
+
+  /**
+   * Make collection fail, deliberately.
+   *
+   * Every real connector fails, and the failures that matter are not the ones
+   * that throw loudly — those are easy. The dangerous ones are the quiet
+   * kinds: a source that returns ninety per cent of the estate, or starts
+   * omitting a field, or keeps answering in a shape nothing can read. Each can
+   * be mistaken for a healthy collection that happens to look good.
+   *
+   * These let a test reproduce each one against the real assessment path, so
+   * "a failing source never produces a pass" is something the suite
+   * establishes rather than something the design intends. This connector is
+   * already refused when `nodeEnv === 'production'`, which is why the
+   * injection lives here rather than behind a runtime flag that could be set
+   * on a customer deployment.
+   */
+  failCollectionWith: collectionFailureCodeSchema.nullable().default(null),
+
+  /**
+   * The source renames its fields, and keeps answering.
+   *
+   * Modelled separately from `failCollectionWith` because it is not a refusal.
+   * The request succeeds, the response is well-formed, the run is recorded as
+   * a success — and every field normalisation was looking for is now called
+   * something else, so nothing can be read out of it. A vendor shipping a v2
+   * API does this on a Tuesday without telling anyone.
+   *
+   * Making this throw, as an earlier version of this connector did, would have
+   * been the comfortable choice and the wrong one: it would have tested the
+   * loud path twice and left the quiet one untested.
+   */
+  driftFieldNames: z.boolean().default(false),
+
+  /**
+   * Subjects the source silently stops returning.
+   *
+   * The quietest failure of all: collection succeeds, reports no error, and
+   * simply does not mention three of the forty devices. Nothing is broken from
+   * the connector's point of view, and a system that assessed only what
+   * arrived would report those three as fine.
+   */
+  omitSubjects: z.array(z.string()).default([]),
+
+  /**
+   * Fields the source stops reporting, while still returning the subject.
+   *
+   * Distinct from `omitSubjects` and worse. The subject is present and looks
+   * healthy; one fact about it has quietly gone missing.
+   *
+   * These are the source's own payload field names — `diskEncrypted`, not
+   * `device.disk.encrypted`. Naming them predicates would have been a lie
+   * about where the boundary is: a connector reports vendor fields, and which
+   * predicate each one becomes is Adericel's decision, made in normalisation.
+   */
+  omitFields: z.array(z.string()).default([]),
 });
+
+/** The observation kinds a fixture dataset may contain. */
+const FIXTURE_KINDS = ['IDENTITY_STATE', 'DEVICE_STATE', 'CLOUD_RESOURCE_STATE'] as const;
 
 const credentialSchema = z.object({});
 
@@ -170,7 +235,28 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
     },
 
     async collect(config, _credentials, context: ConnectorContext): Promise<CollectionResult> {
-      const observations: ObservationInput[] = config.records.map((record) => {
+      if (config.failCollectionWith !== null) {
+        /**
+         * A `CollectionFailure`, not a bare Error, because that is what the
+         * real connectors throw and the code is the whole point: the
+         * collection service records it and the assessment path turns it into
+         * a named repair. Throwing an Error here would exercise the
+         * UNCLASSIFIED path on every injection and prove nothing about the
+         * rest of the vocabulary.
+         */
+        throw new CollectionFailure(
+          config.failCollectionWith,
+          `Injected collection failure: ${config.failCollectionWith}`,
+        );
+      }
+
+      const visible = config.records.filter(
+        (record) =>
+          record.subjectExternalId === null ||
+          !config.omitSubjects.includes(record.subjectExternalId),
+      );
+
+      const observations: ObservationInput[] = visible.map((record) => {
         const effects = record.subjectExternalId
           ? state.effectsFor(context.integrationId, record.subjectExternalId)
           : {};
@@ -179,11 +265,21 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
           sourceSystem: 'adericel-demo-fixture',
           subjectExternalId: record.subjectExternalId,
           observedAt: record.observedAt ?? context.nowIso,
-          payload: {
-            ...record.payload,
-            ...effects,
-            demonstrationData: true,
-          },
+          payload: Object.fromEntries(
+            Object.entries({
+              ...record.payload,
+              ...effects,
+              demonstrationData: true,
+              // A source that stops reporting a field does not report it as
+              // null — the key is simply absent, which is why this deletes
+              // rather than nulls. A null would be an answer.
+            })
+              .filter(([key]) => !config.omitFields.includes(key))
+              // Renamed, not removed. The field is still there and still
+              // carries the right value; normalisation simply has no mapping
+              // for its new name, so no claim is derived from it.
+              .map(([key, value]) => [config.driftFieldNames ? `v2_${key}` : key, value] as const),
+          ),
         };
       });
 
@@ -193,7 +289,11 @@ export function createDemoFixtureConnector(state: FixtureState): Connector<Confi
       // integration breaks.
       const manifest = demoFixtureManifestFor(config);
       const countByKind = new Map<string, number>();
-      for (const record of config.records) {
+      // Counted from what was actually returned, not from the configured
+      // dataset. A capability report that counted the dataset would say forty
+      // devices were collected on a run that returned thirty-seven, which is
+      // the connector lying about its own coverage.
+      for (const record of visible) {
         countByKind.set(record.kind, (countByKind.get(record.kind) ?? 0) + 1);
       }
       const capabilityReports: CapabilityReport[] = manifest.collect.map((capability) => {
@@ -328,16 +428,21 @@ export const demoFixtureManifest: ConnectorManifest = connectorManifestSchema.pa
       key: 'collect.fixture_records',
       title: 'Demonstration dataset',
       domain: 'IDENTITY',
-      produces: ['IDENTITY_STATE', 'DEVICE_STATE', 'CLOUD_RESOURCE_STATE'],
-      predicates: [
-        'identity.mfa.enforced',
-        'identity.account.enabled',
-        'identity.account.type',
-        'identity.last_sign_in_at',
-        'device.disk.encrypted',
-        'device.firewall.enabled',
-        'cloud.storage.public_access',
-      ],
+      produces: FIXTURE_KINDS,
+      /**
+       * Derived, not listed.
+       *
+       * A fixture's dataset is supplied by whoever configures it, so any field
+       * the normaliser understands for these kinds may turn up — which makes a
+       * hand-written list wrong by construction. It was wrong: the list used to
+       * omit `device.managed` while the connector produced it on every run,
+       * and because impairment is matched predicate by predicate, every
+       * control gated on that predicate reported INSUFFICIENT_EVIDENCE
+       * ("connect something") when the real answer was "this credential
+       * expired". The chaos suite found it; a hand-maintained list is how it
+       * got there.
+       */
+      predicates: FIXTURE_KINDS.flatMap((kind) => predicatesForKind(kind)),
       requiredPermission: '',
       incremental: false,
     },
