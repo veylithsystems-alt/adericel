@@ -453,4 +453,115 @@ export const MUTATIONS: readonly Mutation[] = [
     suite: 'tests/unit/capability-status.test.ts',
     mustFail: ['cites only paths that exist'],
   },
+  {
+    id: 'reobservation-does-not-refresh-recency',
+    invariant:
+      'Re-observing an unchanged fact refreshes its recency, so a stable estate that keeps being ' +
+      'collected stays proven instead of decaying to UNKNOWN.',
+    file: 'packages/evidence/src/observations.ts',
+    find: 'collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),',
+    replace: 'collected_at = observations.collected_at,',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['stays proven for as long as it keeps being observed'],
+    needsDatabase: true,
+  },
+  {
+    id: 'evidence-identity-ignores-its-subject',
+    invariant:
+      'Evidence identity includes the subject it is evidence about, so two identically ' +
+      'configured devices never share one proof record.',
+    file: 'packages/evidence/src/repository.ts',
+    find: '          sourceReference: input.sourceReference ?? null,\n',
+    replace: '',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['never offers evidence about one subject as proof about another'],
+    needsDatabase: true,
+  },
+  {
+    id: 'engine-gets-no-impairment',
+    invariant:
+      'The assessment service supplies impairment to the engine, so a control whose source is ' +
+      'broken names the repair instead of reporting INSUFFICIENT_EVIDENCE.',
+    file: 'packages/actions/src/assessment-service.ts',
+    find: 'impairments: impairments.filter((impairment) => predicates.includes(impairment.predicate)),',
+    replace: 'impairments: [],',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    // A literal title, not one of the generated per-code ones: the registry
+    // checker matches `mustFail` against titles it can find in the file, and a
+    // template literal is not findable. This test asserts the broken state is
+    // DEGRADED, which is only reachable when impairment reaches the engine.
+    mustFail: ['returns to proven only after a successful collection, not on repair alone'],
+    needsDatabase: true,
+  },
+  {
+    id: 'degraded-reason-never-persisted',
+    invariant:
+      'The reason a control is DEGRADED or BLOCKED is written to its state row, not only ' +
+      'computed and dropped.',
+    file: 'packages/actions/src/assessment-service.ts',
+    find:
+      '        outcome.provenance.assessedAt,\n' +
+      '        outcome.degradedReason,\n' +
+      '        outcome.blockedReason,\n' +
+      '      ],\n',
+    replace: '        outcome.provenance.assessedAt,\n        null,\n        null,\n      ],\n',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    // Asserts `degraded_reason` reads SCHEMA_DRIFT, which is only true if the
+    // reason computed by the engine was actually written to the state row.
+    mustFail: ['treats a collection that read nothing as drift, not as a success'],
+    needsDatabase: true,
+  },
+  {
+    id: 'silent-schema-drift-recorded-as-success',
+    invariant:
+      'A collection that stored observations and derived no claims at all is reported as drift, ' +
+      'never as a successful run.',
+    file: 'packages/actions/src/collection-service.ts',
+    find: 'processed.mappableObservations > 0 && processed.claimsDerived === 0',
+    replace: 'processed.mappableObservations > 0 && processed.claimsDerived < 0',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['keeps detecting drift on the runs after the first'],
+    needsDatabase: true,
+  },
+  {
+    id: 'fixture-manifest-under-declares-its-predicates',
+    invariant:
+      "A connector's declared predicates are derived from what it can produce, not hand-listed, " +
+      'because an omission silently disables impairment for the predicates it forgot.',
+    file: 'packages/integrations/src/connectors/demo-fixture.ts',
+    find: 'predicates: FIXTURE_KINDS.flatMap((kind) => predicatesForKind(kind)),',
+    replace: "predicates: ['device.disk.encrypted', 'identity.mfa.enforced'],",
+    suite: 'packages/integrations/src/impairment.test.ts',
+    mustFail: ['declares every predicate the demonstration connector can actually produce'],
+  },
+  {
+    id: 'failure-code-guessed-from-error-prose',
+    invariant:
+      'A collection failure is classified by the code the connector reported, never by ' +
+      'pattern-matching a vendor error message.',
+    file: 'packages/domain/src/collection-failure.ts',
+    find:
+      '  // Deliberately no message inspection. See the note on the code list above.\n' +
+      "  return 'UNCLASSIFIED';",
+    replace:
+      '  const message = error instanceof Error ? error.message.toLowerCase() : String(error);\n' +
+      "  if (message.includes('401') || message.includes('unauthor')) return 'CREDENTIAL_INVALID';\n" +
+      "  if (message.includes('429')) return 'RATE_LIMITED';\n" +
+      "  if (message.includes('consent')) return 'CONSENT_WITHDRAWN';\n" +
+      "  if (message.includes('timedout')) return 'TIMEOUT';\n" +
+      "  return 'UNCLASSIFIED';",
+    suite: 'packages/domain/src/collection-failure.test.ts',
+    mustFail: ['refuses to guess a code from an error message'],
+  },
+  {
+    id: 'withdrawn-consent-routed-to-an-engineer',
+    invariant:
+      'A withdrawn consent is BLOCKED, routed to somebody with authority, because no engineer ' +
+      'can repair a decision the customer made.',
+    file: 'packages/domain/src/collection-failure.ts',
+    find: "  CONSENT_WITHDRAWN: 'CONSENT_REQUIRED',",
+    replace: '  CONSENT_WITHDRAWN: null,',
+    suite: 'packages/domain/src/collection-failure.test.ts',
+    mustFail: ['routes a withdrawn consent to somebody with authority, not to an engineer'],
+  },
 ];
