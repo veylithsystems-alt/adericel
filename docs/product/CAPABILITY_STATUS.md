@@ -53,6 +53,7 @@ pipeline is not evidence of any of them, and
 | Every claimed guard, proved by breaking it on every build | `OPERATIONAL` | — | 3 |
 | White-label presentation for MSPs | `DESIGNED` | — | 7 |
 | Software bill of materials per deployable | `OPERATIONAL` | — | 3 |
+| What Adericel says when its dependencies fail | `VERIFIED` | — | 4 |
 
 ## What establishes each status
 
@@ -184,6 +185,15 @@ Software bill of materials per deployable is attested to OPERATIONAL. 3 further 
 - **TESTED** (check) — tests/unit/sbom.test.ts
 - **VERIFIED** (check) — Four guards proved by deliberate breakage: collapsing two installed versions of one package into a single row, merging the development tree into the production inventory, adding a timestamp that destroys reproducibility, and omitting the commit the inventory describes
 - **OPERATIONAL** (check) — A CI job on every push, retaining each inventory for 90 days
+
+### What Adericel says when its dependencies fail
+
+What Adericel says when its dependencies fail is attested to VERIFIED. 4 further status(es) remain unestablished, and nothing here implies them.
+
+- **DESIGNED** (person) — Contract: failure modes explicit, and the DEGRADED/BLOCKED distinction under the assurance-state requirements
+- **IMPLEMENTED** (check) — packages/domain/src/collection-failure.ts — a closed set of failure codes and total maps to the repair each one names; packages/integrations/src/impairment.ts — impairment derived from integration health; packages/actions/src/assessment-service.ts — gathered and passed to the engine as input, inside the assessment digest
+- **TESTED** (check) — tests/chaos/failure-injection.test.ts — sixteen tests over six classified refusals, schema drift, an omitted subject, an omitted field, and two twenty-day runs of a healthy estate, one per recency anchor; packages/domain/src/collection-failure.test.ts; packages/integrations/src/impairment.test.ts
+- **VERIFIED** (check) — Ten guards proved by deliberate breakage, each re-introducing a defect this suite found: a re-observation recorded as nothing; each recency anchor separately, because breaking only one of them survived; evidence identity losing its subject; the engine receiving no impairment; a reason computed and never persisted; silent drift recorded as a success; a connector manifest hand-listing its predicates; a failure code guessed from an error message; and a withdrawn consent routed to an engineer who cannot repair it
 
 ## What this means for production readiness
 
