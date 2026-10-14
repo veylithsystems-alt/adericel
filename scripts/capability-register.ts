@@ -298,4 +298,30 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
       // the exact dishonesty this register exists to catch.
     ],
   },
+  {
+    key: 'scale-and-sustained-operation',
+    title: 'Behaviour at portfolio scale and over sustained operation',
+    attestations: [
+      DESIGNED('RR-085, and the operations sizing note in docs/operations/vps-sizing.md'),
+      IMPLEMENTED(
+        'tests/load/portfolio-scale.test.ts and tests/soak/sustained-operation.test.ts, driven ' +
+          'from the hundred-customer portfolio in proof/',
+      ),
+      TESTED(
+        'pnpm test:load — a hundred organisations under one MSP, measuring provision, collect, ' +
+          'reassess and outbox drain, and asserting cost per organisation does not climb with ' +
+          'portfolio size (209.5 ms/org in a full sweep against 185.3 one at a time); ' +
+          'pnpm test:soak — ninety simulated days, asserting observations, evidence, claims and ' +
+          'the state projection are exactly unchanged over an unchanged estate',
+      ),
+      // No VERIFIED attestation yet: these suites are new and have no mutation
+      // entries, so nothing has proved their guards would catch the defects
+      // they describe. Claiming VERIFIED on a test nobody has broken on
+      // purpose is the distinction this register exists to keep.
+      //
+      // No OPERATIONAL attestation either: one machine, synthetic portfolio,
+      // never operated. The numbers are honest about the design and say
+      // nothing about a Tuesday in production — tracked as RR-087.
+    ],
+  },
 ];

@@ -54,6 +54,7 @@ pipeline is not evidence of any of them, and
 | White-label presentation for MSPs | `DESIGNED` | — | 7 |
 | Software bill of materials per deployable | `OPERATIONAL` | — | 3 |
 | What Adericel says when its dependencies fail | `VERIFIED` | — | 4 |
+| Behaviour at portfolio scale and over sustained operation | `TESTED` | — | 5 |
 
 ## What establishes each status
 
@@ -194,6 +195,14 @@ What Adericel says when its dependencies fail is attested to VERIFIED. 4 further
 - **IMPLEMENTED** (check) — packages/domain/src/collection-failure.ts — a closed set of failure codes and total maps to the repair each one names; packages/integrations/src/impairment.ts — impairment derived from integration health; packages/actions/src/assessment-service.ts — gathered and passed to the engine as input, inside the assessment digest
 - **TESTED** (check) — tests/chaos/failure-injection.test.ts — sixteen tests over six classified refusals, schema drift, an omitted subject, an omitted field, and two twenty-day runs of a healthy estate, one per recency anchor; packages/domain/src/collection-failure.test.ts; packages/integrations/src/impairment.test.ts
 - **VERIFIED** (check) — Ten guards proved by deliberate breakage, each re-introducing a defect this suite found: a re-observation recorded as nothing; each recency anchor separately, because breaking only one of them survived; evidence identity losing its subject; the engine receiving no impairment; a reason computed and never persisted; silent drift recorded as a success; a connector manifest hand-listing its predicates; a failure code guessed from an error message; and a withdrawn consent routed to an engineer who cannot repair it
+
+### Behaviour at portfolio scale and over sustained operation
+
+Behaviour at portfolio scale and over sustained operation is attested to TESTED. 5 further status(es) remain unestablished, and nothing here implies them.
+
+- **DESIGNED** (person) — RR-085, and the operations sizing note in docs/operations/vps-sizing.md
+- **IMPLEMENTED** (check) — tests/load/portfolio-scale.test.ts and tests/soak/sustained-operation.test.ts, driven from the hundred-customer portfolio in proof/
+- **TESTED** (check) — pnpm test:load — a hundred organisations under one MSP, measuring provision, collect, reassess and outbox drain, and asserting cost per organisation does not climb with portfolio size (209.5 ms/org in a full sweep against 185.3 one at a time); pnpm test:soak — ninety simulated days, asserting observations, evidence, claims and the state projection are exactly unchanged over an unchanged estate
 
 ## What this means for production readiness
 

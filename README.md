@@ -550,6 +550,8 @@ The suites are separated by what a failure would mean:
 | `test:integration` | A component boundary is wrong                                                                  |
 | `test:e2e`         | The product does not do what it claims end to end                                              |
 | `test:chaos`       | A broken dependency produced a better answer than it should, or a working one produced a worse |
+| `test:load`        | Cost per customer climbs with portfolio size, or a customer is silently dropped from a sweep   |
+| `test:soak`        | Storage grows with how many times we looked rather than with the estate                        |
 | `test:mutation`    | A guard has rotted: its test would pass with the invariant broken                              |
 
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
@@ -563,10 +565,10 @@ time had 1,677 tests passing over a defect that made a healthy estate go dark
 on day seven. A suite that never advances a clock cannot tell a product that
 maintains assurance from one that snapshots it.
 
-**Load and soak testing still do not exist**, and that gap is the same shape as
-the one `test:chaos` just closed. Whatever breaks at a hundred concurrent
-customers will stay invisible until something runs at a hundred concurrent
-customers. It is recorded as RR-085 rather than deferred quietly.
+`test:load` and `test:soak` exist for the same reason, and were written next
+because of what `test:chaos` found. Each opens a dimension nothing had tested,
+and the first dimension opened contained four critical defects. Their measured
+numbers are below.
 
 **A clean dependency audit is not a property of this code.** During one build
 session `pnpm audit` reported clean, then two high-severity advisories, then
@@ -582,6 +584,78 @@ pass.
 files and restores them, so it refuses to run on a dirty working tree — which is
 the normal state while you are working. Run it before you push; CI runs it on
 every push against a fresh checkout.
+
+## What it actually does at a hundred customers
+
+Measured, not estimated. `pnpm test:load` provisions the hundred-customer proof
+portfolio under one MSP and sweeps it; `pnpm test:soak` runs one estate for
+ninety simulated days. Both print their numbers, so a CI log carries them.
+
+| At portfolio scale            | Measured      |
+| ----------------------------- | ------------- |
+| Provision 100 organisations   | 195.1 ms/org  |
+| Collect across the portfolio  | 686.0 ms/org  |
+| Reassess across the portfolio | 209.5 ms/org  |
+| Reassess, one at a time       | 185.3 ms/org  |
+| Domain events per cycle       | 235.3 per org |
+
+**The last comparison is the result that matters.** A full sweep costs 209.5 ms
+per organisation; sweeping them one at a time costs 185.3. A ratio of 1.13 is
+noise, which means cost per organisation does not climb with portfolio size —
+there is no N+1 query or missing index in the sweep, and the product will not
+need rewriting at two hundred customers. That property, not the absolute
+figures, is what has a test over it.
+
+**No wall-clock budget is asserted anywhere in these suites.** A threshold
+invented here would be a target dressed as a measurement, which is the precise
+dishonesty this product exists to refuse, and it would fail on a slower runner
+for no reason anybody could act on. What is asserted is the shape of the curve,
+which can only indicate a defect, and the properties that must hold at any
+scale: no organisation silently dropped from a batch, every maintained
+organisation reaching a determination, the outbox draining to zero, and no
+cross-tenant reference appearing under pooled concurrency.
+
+**One number an operator should see before accepting a default.** A
+hundred-customer cycle publishes 23,526 domain events. At the shipped batch size
+of 25 and poll interval of one second, that is about sixteen minutes to drain —
+comfortable for a nightly sweep, and worth knowing rather than discovering.
+
+### Ninety days of an estate that never changes
+
+| Table              | After 1 cycle | After 90 |
+| ------------------ | ------------- | -------- |
+| `observations`     | 3             | **3**    |
+| `evidence`         | 3             | **3**    |
+| `claims`           | 9             | **9**    |
+| `assurance_states` | 2             | **2**    |
+| `assessments`      | 2             | 180      |
+| outbox pending     | 17            | 106      |
+
+**Storage is bounded by the estate, not by how many times we looked at it**, and
+the first four rows are asserted exactly equal rather than approximately.
+Keeping a stable estate proven required refreshing the recency of an unchanged
+fact, and the easy way to do that would have been to write a row every time:
+correct, and ruinous. Three devices collected daily for a year is a thousand
+rows where three belong, and an MSP with a hundred customers would be paying to
+store a hundred thousand identical records a year.
+
+`assessments` grows on purpose, and a test asserts that it does, so nobody
+optimises it away. "Was this control satisfied in March" is a question a
+customer in a dispute will ask, and a current-state projection cannot answer it.
+It is bounded at under ten per cycle, because more would mean duplicate
+determinations per run.
+
+The outbox grows by about one event per cycle over an estate where nothing
+happened. A product that published a state-change event on every reassessment of
+an unchanged control would fill an MSP's notifications with "no change" and
+teach them to ignore the channel, which is worse than silence.
+
+**What these suites do not establish.** They run on one machine against a
+synthetic portfolio. Real estates are messier, real connectors are slower, and
+nobody has operated this. The measurements are honest about the design; they say
+nothing about a Tuesday in production.
+
+---
 
 ## Where your customers' documents go
 
