@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Forty-three are recorded. They include: a control scoped out of assessment
+Forty-five are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -511,7 +511,7 @@ them break this README: renaming a command it tells you to run, dropping a
 package from the prose, pointing a link at a path that does not exist, naming a
 package that was never built, and letting a stated count drift.
 
-Ten of them re-introduce the defects
+Twelve of them re-introduce the defects
 [the chaos suite](./tests/chaos/failure-injection.test.ts) found, because those
 are the ones that were invisible the first time: a re-observation recorded as
 nothing, so a healthy estate decays to `UNKNOWN`; each of the two recency
@@ -520,8 +520,10 @@ identity losing its subject, so identical devices share a proof; the engine
 receiving no impairment, so a broken connector says "connect something"; a
 reason computed and not persisted; silent drift recorded as a success; a
 connector manifest hand-listing its predicates; a failure code guessed from an
-error message; and a withdrawn consent routed to an engineer who cannot repair
-it.
+error message; a withdrawn consent routed to an engineer who cannot repair it;
+a portfolio sweep silently dropping the customers past its batch limit; and the
+ruinous-but-correct version of the recency fix that writes a row per
+collection.
 
 Three things about the runner are deliberate. It refuses to start on a dirty
 working tree, because a crash would otherwise leave a mutated file

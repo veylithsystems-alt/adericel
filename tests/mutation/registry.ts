@@ -609,4 +609,54 @@ export const MUTATIONS: readonly Mutation[] = [
     suite: 'packages/domain/src/collection-failure.test.ts',
     mustFail: ['routes a withdrawn consent to somebody with authority, not to an engineer'],
   },
+  {
+    id: 'portfolio-sweep-silently-drops-the-tail',
+    invariant:
+      'A sweep with no named organisation processes every maintained organisation, or the ones ' +
+      'it skipped are visible rather than silently absent.',
+    file: 'apps/worker/src/jobs/handlers.ts',
+    /**
+     * Not a live defect, and recorded anyway.
+     *
+     * In production every organisation gets its own scheduled job, so
+     * `organisationsToProcess` takes the single-organisation branch and this
+     * limit is never reached — a fact worth stating, because a reader seeing
+     * `LIMIT 200` would reasonably assume otherwise. It *is* reached by a
+     * manual sweep, which is what an operator runs and what the load suite
+     * drives.
+     *
+     * The trap is that moving these to one platform-wide schedule is the
+     * obvious optimisation at scale, and doing it would silently stop
+     * collecting from every customer past the two hundredth — each of whom
+     * would keep looking healthy until their evidence aged out. That is the
+     * day-seven defect arriving by a different route, so the guard is worth
+     * keeping whether or not the branch is live today.
+     */
+    find: 'const BATCH = 200;',
+    replace: 'const BATCH = 40;',
+    suite: 'tests/load/portfolio-scale.test.ts',
+    mustFail: ['collects from every organisation without dropping any'],
+    needsDatabase: true,
+  },
+  {
+    id: 'soak-accumulates-a-row-per-collection',
+    invariant:
+      'An unchanged fact re-collected daily for months is one evidence record, not one per ' +
+      'collection.',
+    file: 'packages/evidence/src/repository.ts',
+    /**
+     * The ruinous-but-correct implementation, re-introduced.
+     *
+     * Refreshing recency by writing a new row every time would keep a stable
+     * estate proven and would cost an MSP with a hundred customers a hundred
+     * thousand identical records a year. The chaos mutations cover the
+     * correctness half of this fix; this covers the cost half, which only a
+     * suite that runs for ninety days can see.
+     */
+    find: '      if (existing) {',
+    replace: '      if (existing && false) {',
+    suite: 'tests/soak/sustained-operation.test.ts',
+    mustFail: ['stores one observation per distinct fact, not one per collection'],
+    needsDatabase: true,
+  },
 ];
