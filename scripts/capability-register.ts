@@ -314,14 +314,15 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
           'pnpm test:soak — ninety simulated days, asserting observations, evidence, claims and ' +
           'the state projection are exactly unchanged over an unchanged estate',
       ),
-      // No VERIFIED attestation yet: these suites are new and have no mutation
-      // entries, so nothing has proved their guards would catch the defects
-      // they describe. Claiming VERIFIED on a test nobody has broken on
-      // purpose is the distinction this register exists to keep.
-      //
-      // No OPERATIONAL attestation either: one machine, synthetic portfolio,
-      // never operated. The numbers are honest about the design and say
-      // nothing about a Tuesday in production — tracked as RR-087.
+      VERIFIED(
+        'Two guards proved by deliberate breakage: lowering the sweep batch limit below the ' +
+          'portfolio size, so the customers past it are silently never collected from; and ' +
+          'disabling the evidence refresh branch, which is the ruinous-but-correct version of ' +
+          'the recency fix that writes a row per collection',
+      ),
+      // No OPERATIONAL attestation: one machine, synthetic portfolio, never
+      // operated. The numbers are honest about the design and say nothing
+      // about a Tuesday in production — tracked as RR-087.
     ],
   },
 ];

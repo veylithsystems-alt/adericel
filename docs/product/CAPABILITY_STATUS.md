@@ -54,7 +54,7 @@ pipeline is not evidence of any of them, and
 | White-label presentation for MSPs | `DESIGNED` | — | 7 |
 | Software bill of materials per deployable | `OPERATIONAL` | — | 3 |
 | What Adericel says when its dependencies fail | `VERIFIED` | — | 4 |
-| Behaviour at portfolio scale and over sustained operation | `TESTED` | — | 5 |
+| Behaviour at portfolio scale and over sustained operation | `VERIFIED` | — | 4 |
 
 ## What establishes each status
 
@@ -198,11 +198,12 @@ What Adericel says when its dependencies fail is attested to VERIFIED. 4 further
 
 ### Behaviour at portfolio scale and over sustained operation
 
-Behaviour at portfolio scale and over sustained operation is attested to TESTED. 5 further status(es) remain unestablished, and nothing here implies them.
+Behaviour at portfolio scale and over sustained operation is attested to VERIFIED. 4 further status(es) remain unestablished, and nothing here implies them.
 
 - **DESIGNED** (person) — RR-085, and the operations sizing note in docs/operations/vps-sizing.md
 - **IMPLEMENTED** (check) — tests/load/portfolio-scale.test.ts and tests/soak/sustained-operation.test.ts, driven from the hundred-customer portfolio in proof/
 - **TESTED** (check) — pnpm test:load — a hundred organisations under one MSP, measuring provision, collect, reassess and outbox drain, and asserting cost per organisation does not climb with portfolio size (209.5 ms/org in a full sweep against 185.3 one at a time); pnpm test:soak — ninety simulated days, asserting observations, evidence, claims and the state projection are exactly unchanged over an unchanged estate
+- **VERIFIED** (check) — Two guards proved by deliberate breakage: lowering the sweep batch limit below the portfolio size, so the customers past it are silently never collected from; and disabling the evidence refresh branch, which is the ruinous-but-correct version of the recency fix that writes a row per collection
 
 ## What this means for production readiness
 
