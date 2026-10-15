@@ -16,10 +16,6 @@
     "name": "outstandingBreakGlass"
   },
   {
-    "file": "apps/api/src/services/erasure.ts",
-    "name": "eraseDataSubject"
-  },
-  {
     "file": "apps/api/src/services/onboarding-tasks.ts",
     "name": "completeOnboardingTask"
   },

@@ -659,4 +659,58 @@ export const MUTATIONS: readonly Mutation[] = [
     mustFail: ['stores one observation per distinct fact, not one per collection'],
     needsDatabase: true,
   },
+  {
+    id: 'self-erasure-reads-a-target',
+    invariant:
+      'Erasing yourself takes no target: the subject is the authenticated principal, so there is ' +
+      'no parameter by which one person can erase another.',
+    file: 'apps/api/src/routes/msps.ts',
+    find:
+      '    const report = await eraseDataSubject(app, principal.principalId, ' +
+      '{ reason: body.reason });',
+    replace:
+      '    const target = (request.body as { userId?: string }).userId ?? principal.principalId;\n' +
+      '    const report = await eraseDataSubject(app, target, { reason: body.reason });',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['erases the caller, and takes no target to erase anybody else'],
+    needsDatabase: true,
+  },
+  {
+    id: 'on-behalf-erasure-reaches-across-msps',
+    invariant:
+      'An MSP may erase only its own members. A cross-tenant erasure is the most destructive act ' +
+      'available through this API.',
+    file: 'apps/api/src/routes/msps.ts',
+    find: '`SELECT id FROM users WHERE id = $1 AND msp_id = $2`',
+    replace: '`SELECT id FROM users WHERE id = $1 AND $2 IS NOT NULL`',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['refuses to reach into another MSP'],
+    needsDatabase: true,
+  },
+  {
+    id: 'self-erasure-without-a-second-factor',
+    invariant:
+      'Erasing a person requires a second factor in this session, because the act cannot be ' +
+      'undone and a stolen session must not be enough.',
+    file: 'apps/api/src/routes/msps.ts',
+    find: '    if (!principal.mfaSatisfied) {',
+    replace: '    if (false as boolean) {',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['refuses without a second factor, because it cannot be undone'],
+    needsDatabase: true,
+  },
+  {
+    id: 'erasure-permission-granted-to-a-service-identity',
+    invariant:
+      'No automation may erase a person. An n8n workflow holding a service token must not be ' +
+      'able to remove somebody from the platform.',
+    file: 'packages/domain/src/authz.ts',
+    find: "  'msp:member:erase',\n]);\n\n/**\n * Permissions that require a second factor",
+    replace: ']);\n\n/**\n * Permissions that require a second factor',
+    suite: 'packages/domain/src/authz.test.ts',
+    mustFail: [
+      'never lets a service identity erase a person',
+      'names every permission that only a human may hold, so additions are deliberate',
+    ],
+  },
 ];
