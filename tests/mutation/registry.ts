@@ -453,4 +453,264 @@ export const MUTATIONS: readonly Mutation[] = [
     suite: 'tests/unit/capability-status.test.ts',
     mustFail: ['cites only paths that exist'],
   },
+  {
+    id: 'reobservation-recorded-as-nothing',
+    invariant:
+      'Re-observing an unchanged fact is recorded, so a stable estate that keeps being collected ' +
+      'stays proven instead of decaying to UNKNOWN.',
+    file: 'packages/evidence/src/observations.ts',
+    // The defect that actually shipped: the conflict did nothing at all, so
+    // nothing downstream ran and no evidence was ever refreshed.
+    find: `           DO UPDATE SET
+             collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),
+             observed_at = GREATEST(observations.observed_at, EXCLUDED.observed_at),
+             integration_run_id = EXCLUDED.integration_run_id,
+             correlation_id = EXCLUDED.correlation_id,
+             subject_node_id = COALESCE(EXCLUDED.subject_node_id, observations.subject_node_id)`,
+    replace: '           DO NOTHING',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: [
+      'stays proven for as long as it keeps being observed',
+      'stays proven when the source reports no timestamp of its own',
+    ],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-does-not-refresh-collected-at',
+    invariant:
+      'Re-observation refreshes `collected_at`, which is the only recency anchor a source that ' +
+      'reports no timestamp of its own ever has.',
+    file: 'packages/evidence/src/observations.ts',
+    find: 'collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),',
+    replace: 'collected_at = observations.collected_at,',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    /**
+     * Not the test above, and that is the whole point of this entry.
+     *
+     * This mutation SURVIVED when it was first recorded, pointed at the
+     * twenty-day test. Evidence usability is anchored on
+     * `observed_at ?? collected_at`, and the fixture always reported a
+     * timestamp, so `observed_at` carried the property and breaking
+     * `collected_at` changed nothing. The guard was real and had no test over
+     * it — which is exactly the state the harness exists to detect, and it
+     * detected it on the most important defect in the repository.
+     */
+    mustFail: ['stays proven when the source reports no timestamp of its own'],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-does-not-refresh-observed-at',
+    invariant:
+      'Re-observation refreshes `observed_at`, which is the anchor for every source that reports ' +
+      'when a fact became true.',
+    file: 'packages/evidence/src/observations.ts',
+    find: 'observed_at = GREATEST(observations.observed_at, EXCLUDED.observed_at),',
+    replace: 'observed_at = observations.observed_at,',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['stays proven for as long as it keeps being observed'],
+    needsDatabase: true,
+  },
+  {
+    id: 'evidence-identity-ignores-its-subject',
+    invariant:
+      'Evidence identity includes the subject it is evidence about, so two identically ' +
+      'configured devices never share one proof record.',
+    file: 'packages/evidence/src/repository.ts',
+    find: '          sourceReference: input.sourceReference ?? null,\n',
+    replace: '',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['never offers evidence about one subject as proof about another'],
+    needsDatabase: true,
+  },
+  {
+    id: 'engine-gets-no-impairment',
+    invariant:
+      'The assessment service supplies impairment to the engine, so a control whose source is ' +
+      'broken names the repair instead of reporting INSUFFICIENT_EVIDENCE.',
+    file: 'packages/actions/src/assessment-service.ts',
+    find: 'impairments: impairments.filter((impairment) => predicates.includes(impairment.predicate)),',
+    replace: 'impairments: [],',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    // A literal title, not one of the generated per-code ones: the registry
+    // checker matches `mustFail` against titles it can find in the file, and a
+    // template literal is not findable. This test asserts the broken state is
+    // DEGRADED, which is only reachable when impairment reaches the engine.
+    mustFail: ['returns to proven only after a successful collection, not on repair alone'],
+    needsDatabase: true,
+  },
+  {
+    id: 'degraded-reason-never-persisted',
+    invariant:
+      'The reason a control is DEGRADED or BLOCKED is written to its state row, not only ' +
+      'computed and dropped.',
+    file: 'packages/actions/src/assessment-service.ts',
+    find:
+      '        outcome.provenance.assessedAt,\n' +
+      '        outcome.degradedReason,\n' +
+      '        outcome.blockedReason,\n' +
+      '      ],\n',
+    replace: '        outcome.provenance.assessedAt,\n        null,\n        null,\n      ],\n',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    // Asserts `degraded_reason` reads SCHEMA_DRIFT, which is only true if the
+    // reason computed by the engine was actually written to the state row.
+    mustFail: ['treats a collection that read nothing as drift, not as a success'],
+    needsDatabase: true,
+  },
+  {
+    id: 'silent-schema-drift-recorded-as-success',
+    invariant:
+      'A collection that stored observations and derived no claims at all is reported as drift, ' +
+      'never as a successful run.',
+    file: 'packages/actions/src/collection-service.ts',
+    find: 'processed.mappableObservations > 0 && processed.claimsDerived === 0',
+    replace: 'processed.mappableObservations > 0 && processed.claimsDerived < 0',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['keeps detecting drift on the runs after the first'],
+    needsDatabase: true,
+  },
+  {
+    id: 'fixture-manifest-under-declares-its-predicates',
+    invariant:
+      "A connector's declared predicates are derived from what it can produce, not hand-listed, " +
+      'because an omission silently disables impairment for the predicates it forgot.',
+    file: 'packages/integrations/src/connectors/demo-fixture.ts',
+    find: 'predicates: FIXTURE_KINDS.flatMap((kind) => predicatesForKind(kind)),',
+    replace: "predicates: ['device.disk.encrypted', 'identity.mfa.enforced'],",
+    suite: 'packages/integrations/src/impairment.test.ts',
+    mustFail: ['declares every predicate the demonstration connector can actually produce'],
+  },
+  {
+    id: 'failure-code-guessed-from-error-prose',
+    invariant:
+      'A collection failure is classified by the code the connector reported, never by ' +
+      'pattern-matching a vendor error message.',
+    file: 'packages/domain/src/collection-failure.ts',
+    find:
+      '  // Deliberately no message inspection. See the note on the code list above.\n' +
+      "  return 'UNCLASSIFIED';",
+    replace:
+      '  const message = error instanceof Error ? error.message.toLowerCase() : String(error);\n' +
+      "  if (message.includes('401') || message.includes('unauthor')) return 'CREDENTIAL_INVALID';\n" +
+      "  if (message.includes('429')) return 'RATE_LIMITED';\n" +
+      "  if (message.includes('consent')) return 'CONSENT_WITHDRAWN';\n" +
+      "  if (message.includes('timedout')) return 'TIMEOUT';\n" +
+      "  return 'UNCLASSIFIED';",
+    suite: 'packages/domain/src/collection-failure.test.ts',
+    mustFail: ['refuses to guess a code from an error message'],
+  },
+  {
+    id: 'withdrawn-consent-routed-to-an-engineer',
+    invariant:
+      'A withdrawn consent is BLOCKED, routed to somebody with authority, because no engineer ' +
+      'can repair a decision the customer made.',
+    file: 'packages/domain/src/collection-failure.ts',
+    find: "  CONSENT_WITHDRAWN: 'CONSENT_REQUIRED',",
+    replace: '  CONSENT_WITHDRAWN: null,',
+    suite: 'packages/domain/src/collection-failure.test.ts',
+    mustFail: ['routes a withdrawn consent to somebody with authority, not to an engineer'],
+  },
+  {
+    id: 'portfolio-sweep-silently-drops-the-tail',
+    invariant:
+      'A sweep with no named organisation processes every maintained organisation, or the ones ' +
+      'it skipped are visible rather than silently absent.',
+    file: 'apps/worker/src/jobs/handlers.ts',
+    /**
+     * Not a live defect, and recorded anyway.
+     *
+     * In production every organisation gets its own scheduled job, so
+     * `organisationsToProcess` takes the single-organisation branch and this
+     * limit is never reached — a fact worth stating, because a reader seeing
+     * `LIMIT 200` would reasonably assume otherwise. It *is* reached by a
+     * manual sweep, which is what an operator runs and what the load suite
+     * drives.
+     *
+     * The trap is that moving these to one platform-wide schedule is the
+     * obvious optimisation at scale, and doing it would silently stop
+     * collecting from every customer past the two hundredth — each of whom
+     * would keep looking healthy until their evidence aged out. That is the
+     * day-seven defect arriving by a different route, so the guard is worth
+     * keeping whether or not the branch is live today.
+     */
+    find: 'const BATCH = 200;',
+    replace: 'const BATCH = 40;',
+    suite: 'tests/load/portfolio-scale.test.ts',
+    mustFail: ['collects from every organisation without dropping any'],
+    needsDatabase: true,
+  },
+  {
+    id: 'soak-accumulates-a-row-per-collection',
+    invariant:
+      'An unchanged fact re-collected daily for months is one evidence record, not one per ' +
+      'collection.',
+    file: 'packages/evidence/src/repository.ts',
+    /**
+     * The ruinous-but-correct implementation, re-introduced.
+     *
+     * Refreshing recency by writing a new row every time would keep a stable
+     * estate proven and would cost an MSP with a hundred customers a hundred
+     * thousand identical records a year. The chaos mutations cover the
+     * correctness half of this fix; this covers the cost half, which only a
+     * suite that runs for ninety days can see.
+     */
+    find: '      if (existing) {',
+    replace: '      if (existing && false) {',
+    suite: 'tests/soak/sustained-operation.test.ts',
+    mustFail: ['stores one observation per distinct fact, not one per collection'],
+    needsDatabase: true,
+  },
+  {
+    id: 'self-erasure-reads-a-target',
+    invariant:
+      'Erasing yourself takes no target: the subject is the authenticated principal, so there is ' +
+      'no parameter by which one person can erase another.',
+    file: 'apps/api/src/routes/msps.ts',
+    find:
+      '    const report = await eraseDataSubject(app, principal.principalId, ' +
+      '{ reason: body.reason });',
+    replace:
+      '    const target = (request.body as { userId?: string }).userId ?? principal.principalId;\n' +
+      '    const report = await eraseDataSubject(app, target, { reason: body.reason });',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['erases the caller, and takes no target to erase anybody else'],
+    needsDatabase: true,
+  },
+  {
+    id: 'on-behalf-erasure-reaches-across-msps',
+    invariant:
+      'An MSP may erase only its own members. A cross-tenant erasure is the most destructive act ' +
+      'available through this API.',
+    file: 'apps/api/src/routes/msps.ts',
+    find: '`SELECT id FROM users WHERE id = $1 AND msp_id = $2`',
+    replace: '`SELECT id FROM users WHERE id = $1 AND $2 IS NOT NULL`',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['refuses to reach into another MSP'],
+    needsDatabase: true,
+  },
+  {
+    id: 'self-erasure-without-a-second-factor',
+    invariant:
+      'Erasing a person requires a second factor in this session, because the act cannot be ' +
+      'undone and a stolen session must not be enough.',
+    file: 'apps/api/src/routes/msps.ts',
+    find: '    if (!principal.mfaSatisfied) {',
+    replace: '    if (false as boolean) {',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['refuses without a second factor, because it cannot be undone'],
+    needsDatabase: true,
+  },
+  {
+    id: 'erasure-permission-granted-to-a-service-identity',
+    invariant:
+      'No automation may erase a person. An n8n workflow holding a service token must not be ' +
+      'able to remove somebody from the platform.',
+    file: 'packages/domain/src/authz.ts',
+    find: "  'msp:member:erase',\n]);\n\n/**\n * Permissions that require a second factor",
+    replace: ']);\n\n/**\n * Permissions that require a second factor',
+    suite: 'packages/domain/src/authz.test.ts',
+    mustFail: [
+      'never lets a service identity erase a person',
+      'names every permission that only a human may hold, so additions are deliberate',
+    ],
+  },
 ];

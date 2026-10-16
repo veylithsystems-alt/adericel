@@ -6,6 +6,7 @@ import {
   NOT_YET_CAPABILITY_STATES,
   declaredDocumentationState,
 } from '@adericel/domain';
+import { MUTATIONS } from '../mutation/registry.js';
 
 /**
  * Documentation that matches the code.
@@ -75,6 +76,55 @@ describe('the README describes the repository that exists', () => {
       words[stated],
       `The README says "${stated} workspace packages" and there are ${actual}.`,
     ).toBe(actual);
+  });
+
+  it('states the mutation count correctly, or not at all', () => {
+    /**
+     * Same rule as the package count, and this one earns its keep more.
+     *
+     * "Thirty-three are recorded" was true when it was written and silently
+     * false ten mutations later. A number that describes the strength of the
+     * test suite is exactly the number a reader uses to decide how much to
+     * trust it, so it is the last place a stale figure is harmless.
+     */
+    const words: Record<string, number> = {
+      thirty: 30,
+      'thirty-one': 31,
+      'thirty-two': 32,
+      'thirty-three': 33,
+      'thirty-four': 34,
+      'thirty-five': 35,
+      'thirty-six': 36,
+      'thirty-seven': 37,
+      'thirty-eight': 38,
+      'thirty-nine': 39,
+      forty: 40,
+      'forty-one': 41,
+      'forty-two': 42,
+      'forty-three': 43,
+      'forty-four': 44,
+      'forty-five': 45,
+      'forty-six': 46,
+      'forty-seven': 47,
+      'forty-eight': 48,
+      'forty-nine': 49,
+      fifty: 50,
+      'fifty-one': 51,
+      'fifty-two': 52,
+      'fifty-three': 53,
+      'fifty-four': 54,
+      'fifty-five': 55,
+    };
+    const stated = /\b([a-z-]+)\s+are recorded\b/i.exec(readme)?.[1]?.toLowerCase();
+    if (stated === undefined) return; // No claim made, nothing to be wrong about.
+    expect(
+      Object.keys(words),
+      `The README says "${stated} are recorded"; that is not a number this test knows.`,
+    ).toContain(stated);
+    expect(
+      words[stated],
+      `The README says "${stated} are recorded" and the registry holds ${MUTATIONS.length}.`,
+    ).toBe(MUTATIONS.length);
   });
 
   it('does not state a count that nothing verifies', () => {

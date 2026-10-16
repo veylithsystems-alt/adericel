@@ -67,6 +67,16 @@ const PUBLIC_ROUTES = new Set([
 const COMMON_ROUTES = new Set([
   'GET /v1/auth/me',
   'GET /v1/auth/roles',
+  /**
+   * Erasing yourself.
+   *
+   * COMMON because the right belongs to the person, not to a surface: MSP
+   * staff, a client organisation's own staff and Veylith staff all hold it
+   * equally, and the route names no organisation and discloses nothing about
+   * one. It takes no target — the subject is the authenticated principal — so
+   * there is nothing here one tenant could point at another.
+   */
+  'POST /v1/me/erasure',
   'POST /v1/auth/logout',
   'GET /v1/auth/mfa',
   'POST /v1/auth/mfa/totp',

@@ -80,6 +80,8 @@ export const PERMISSION_CLASS: Readonly<Record<Permission, InformationClass>> = 
   'msp:organisation:read': 'MSP_PORTFOLIO',
   'msp:organisation:manage': 'MSP_PORTFOLIO',
   'msp:member:manage': 'MSP_PORTFOLIO',
+  // Erasing a person is MSP operator work, done from the portfolio surface.
+  'msp:member:erase': 'MSP_PORTFOLIO',
   'msp:baseline:manage': 'MSP_PORTFOLIO',
   'msp:billing:read': 'MSP_PORTFOLIO',
   'msp:billing:manage': 'MSP_PORTFOLIO',

@@ -133,6 +133,122 @@ is a real hole in the assurance position and belongs in a report.
 
 ---
 
+## What happens when the things Adericel depends on break
+
+Every connector fails. The question a buyer should ask is not whether this one
+does, but what the product says while it is failing — and the answer has to be
+better than "nothing", because the failures that matter do not announce
+themselves.
+
+Two properties are enforced, and they pull against each other, which is why
+both are needed:
+
+1. **No failure of any dependency may produce a determination more favourable
+   than the evidence supports.**
+2. **No _absence_ of failure may produce one less favourable.** A healthy
+   estate, collected successfully, stays `PROVEN` — indefinitely.
+
+The second is not padding. Writing only the first is how
+[the chaos suite](./tests/chaos/failure-injection.test.ts) began, and it passed
+ten green tests while the product quietly decayed every stable fact to
+`UNKNOWN` inside a week. "The failure did not produce a pass" is also true of a
+system that can never pass at all.
+
+### A failing source names the repair, not the symptom
+
+A collection that fails records a **code**, chosen by the connector from a
+[closed set](./packages/domain/src/collection-failure.ts), never a sentence.
+That code decides what an operator is told:
+
+| The connector reported | The control becomes             | Because the job is                |
+| ---------------------- | ------------------------------- | --------------------------------- |
+| `CREDENTIAL_INVALID`   | `DEGRADED / CREDENTIAL_EXPIRED` | re-authorise the connection       |
+| `PERMISSION_DENIED`    | `DEGRADED / COLLECTION_FAILING` | grant a scope                     |
+| `RATE_LIMITED`         | `DEGRADED / RATE_LIMITED`       | wait, and collect less often      |
+| `TIMEOUT`              | `DEGRADED / SOURCE_UNAVAILABLE` | find out why the source is down   |
+| `SCHEMA_DRIFT`         | `DEGRADED / SCHEMA_DRIFT`       | report it to us; the vendor moved |
+| `CONSENT_WITHDRAWN`    | `BLOCKED / CONSENT_REQUIRED`    | ask the customer, not an engineer |
+
+The distinction is the whole value of the states. `INSUFFICIENT_EVIDENCE` tells
+an engineer to go and connect something; what actually happened is that a
+credential expired on a connection that is already set up. One of those
+sentences gets the estate observable again and the other sends somebody to redo
+work that is already done.
+
+**The code is never guessed from an error message.** Reading intent out of a
+vendor's error prose means a regular expression decides what Adericel tells a
+customer, and it will be wrong silently, in both directions, the first time a
+vendor rewords an error. A connector that cannot classify its own failure
+reports `UNCLASSIFIED`, which maps to the most general reason — _collection is
+failing and we cannot yet tell you why_ — and
+[a test asserts the tempting messages are still refused](./packages/domain/src/collection-failure.test.ts).
+
+**A broken source does not immediately change a determination, and that is
+correct.** A control reading `PROVEN` on evidence still inside its freshness
+window _is_ proven: the estate has not changed, and reporting a finding about a
+customer on the strength of a fault in Adericel would be its own kind of lie.
+So the broken connector shows up immediately in connector health — where an
+operator can act on it today — and the determination changes only once the
+evidence can no longer be refreshed. [The engine's safety rule](./packages/truth-engine/src/engine.ts)
+is that impairment may **only** convert `UNKNOWN` into `DEGRADED` or `BLOCKED`.
+It never touches a real determination.
+
+### The dangerous failures are the silent ones
+
+| What goes wrong                                              | What it looks like from outside     | What Adericel does                                                                                    |
+| ------------------------------------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Vendor renames its fields                                    | A successful run. Every light green | Run recorded `PARTIAL` with `SCHEMA_DRIFT` on the first drifted collection, and on every one after it |
+| A device stops being reported                                | A successful run, 39 of 40 devices  | Its own evidence stops being refreshed, so it ages out rather than inheriting a neighbour's proof     |
+| One field stops arriving for a device                        | A healthy-looking device            | `UNKNOWN`, never `NOT_SATISFIED` — an absent fact is not a negative fact                              |
+| A connector collects a predicate its manifest never declared | Nothing at all                      | `ConnectorManifestIncomplete`, reported on the run                                                    |
+
+Schema drift is detectable without knowing anything about the vendor:
+observations arrived whose kind the normaliser has mappings for, and not one
+claim came out of them. No healthy estate produces that result.
+
+### What this cost to find
+
+The chaos suite found six defects, every one of them invisible from outside the
+system, and all of them in code that had 1,677 tests passing over it:
+
+- **A flawless estate went dark.** Collected successfully every day by a
+  connector that never failed, `device.disk.encrypted` went `UNKNOWN` on day
+  seven and stayed there. Content deduplication dropped re-observations before
+  anything could record that we had looked again, so the recency of every
+  stable fact froze at its first collection. Almost every security fact is
+  stable — that is the point of securing it — so this was most of the product.
+- **Evidence was shared between subjects.** Identity was content-only, so forty
+  identically-imaged laptops collapsed into one proof record attached to all of
+  them. A customer asking for the proof that _their_ laptop was encrypted got a
+  record about somebody else's, and a device that silently dropped out kept
+  looking fresh because its neighbours refreshed the record they shared. The
+  more uniform the estate, the worse it got.
+- **`DEGRADED` was unreachable.** The engine's impairment logic was written,
+  unit-tested with its input supplied by hand, and never once exercised in the
+  product, because nothing supplied the input. Every broken connector reported
+  `INSUFFICIENT_EVIDENCE`.
+- **`degraded_reason` and `blocked_reason` were never written** — columns and
+  `CHECK` constraints and all. The read side had already been "fixed" to prefer
+  the stored column, over a column nothing populated.
+- **Silent drift was recorded as a success.**
+- **A connector under-declared its own predicates**, silently disabling
+  impairment for the ones it forgot.
+
+Each of those is now [a mutation in the registry](./tests/mutation/registry.ts):
+`pnpm test:mutation` re-introduces the defect on every build and fails if the
+test that should catch it does not.
+
+**And then the harness caught one more.** The mutation for the recency fix
+_survived_ — it broke `collected_at` refresh and the twenty-day test still
+passed, because usability is anchored on `observed_at ?? collected_at` and the
+fixture always reported a vendor timestamp. The guard was real and nothing
+tested it. Many real sources report no timestamp of their own — a configuration
+export says what is the case, not when it became the case — and for those
+`collected_at` is the only anchor there is. There are now two twenty-day tests,
+one per anchor, and three mutations across them.
+
+---
+
 ## One observation, several frameworks, and no false equivalence
 
 An MSP whose customer holds Cyber Essentials and ISO 27001 is answering two
@@ -386,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Thirty-three are recorded. They include: a control scoped out of assessment
+Forty-nine are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -394,6 +510,22 @@ which would report a freshly onboarded organisation as having nothing undecided.
 them break this README: renaming a command it tells you to run, dropping a
 package from the prose, pointing a link at a path that does not exist, naming a
 package that was never built, and letting a stated count drift.
+
+Sixteen of them re-introduce the defects
+[the chaos suite](./tests/chaos/failure-injection.test.ts) found, because those
+are the ones that were invisible the first time: a re-observation recorded as
+nothing, so a healthy estate decays to `UNKNOWN`; each of the two recency
+anchors separately, because breaking only one of them survived; evidence
+identity losing its subject, so identical devices share a proof; the engine
+receiving no impairment, so a broken connector says "connect something"; a
+reason computed and not persisted; silent drift recorded as a success; a
+connector manifest hand-listing its predicates; a failure code guessed from an
+error message; a withdrawn consent routed to an engineer who cannot repair it;
+a portfolio sweep silently dropping the customers past its batch limit; and the
+ruinous-but-correct version of the recency fix that writes a row per
+collection; and four on erasing a person — a self-erasure route that reads a
+target, an MSP reaching across tenants, the second-factor requirement dropped,
+and the erase permission handed to a service identity.
 
 Three things about the runner are deliberate. It refuses to start on a dirty
 working tree, because a crash would otherwise leave a mutated file
@@ -414,18 +546,33 @@ pnpm release:position # where this tree stands against the ten completion condit
 
 The suites are separated by what a failure would mean:
 
-| Suite              | A failure here means                                              |
-| ------------------ | ----------------------------------------------------------------- |
-| `test:unit`        | The Truth Engine or the domain model computed the wrong answer    |
-| `test:tenancy`     | One organisation's data was reachable from another                |
-| `test:security`    | Authentication or authorisation did not hold                      |
-| `test:integration` | A component boundary is wrong                                     |
-| `test:e2e`         | The product does not do what it claims end to end                 |
-| `test:mutation`    | A guard has rotted: its test would pass with the invariant broken |
+| Suite              | A failure here means                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| `test:unit`        | The Truth Engine or the domain model computed the wrong answer                                 |
+| `test:tenancy`     | One organisation's data was reachable from another                                             |
+| `test:security`    | Authentication or authorisation did not hold                                                   |
+| `test:integration` | A component boundary is wrong                                                                  |
+| `test:e2e`         | The product does not do what it claims end to end                                              |
+| `test:chaos`       | A broken dependency produced a better answer than it should, or a working one produced a worse |
+| `test:load`        | Cost per customer climbs with portfolio size, or a customer is silently dropped from a sweep   |
+| `test:soak`        | Storage grows with how many times we looked rather than with the estate                        |
+| `test:mutation`    | A guard has rotted: its test would pass with the invariant broken                              |
 
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
 tick there is not "a test broke"; it is a claim about isolation that no longer
 holds, and it should say so in the checks list without anyone having to open it.
+
+`test:chaos` is separate for a different reason: **it is the only suite that
+moves the clock.** Every other suite asserts a determination within one logical
+instant, which is how a product whose entire promise is about the passage of
+time had 1,677 tests passing over a defect that made a healthy estate go dark
+on day seven. A suite that never advances a clock cannot tell a product that
+maintains assurance from one that snapshots it.
+
+`test:load` and `test:soak` exist for the same reason, and were written next
+because of what `test:chaos` found. Each opens a dimension nothing had tested,
+and the first dimension opened contained four critical defects. Their measured
+numbers are below.
 
 **A clean dependency audit is not a property of this code.** During one build
 session `pnpm audit` reported clean, then two high-severity advisories, then
@@ -441,6 +588,78 @@ pass.
 files and restores them, so it refuses to run on a dirty working tree — which is
 the normal state while you are working. Run it before you push; CI runs it on
 every push against a fresh checkout.
+
+## What it actually does at a hundred customers
+
+Measured, not estimated. `pnpm test:load` provisions the hundred-customer proof
+portfolio under one MSP and sweeps it; `pnpm test:soak` runs one estate for
+ninety simulated days. Both print their numbers, so a CI log carries them.
+
+| At portfolio scale            | Measured      |
+| ----------------------------- | ------------- |
+| Provision 100 organisations   | 195.1 ms/org  |
+| Collect across the portfolio  | 686.0 ms/org  |
+| Reassess across the portfolio | 209.5 ms/org  |
+| Reassess, one at a time       | 185.3 ms/org  |
+| Domain events per cycle       | 235.3 per org |
+
+**The last comparison is the result that matters.** A full sweep costs 209.5 ms
+per organisation; sweeping them one at a time costs 185.3. A ratio of 1.13 is
+noise, which means cost per organisation does not climb with portfolio size —
+there is no N+1 query or missing index in the sweep, and the product will not
+need rewriting at two hundred customers. That property, not the absolute
+figures, is what has a test over it.
+
+**No wall-clock budget is asserted anywhere in these suites.** A threshold
+invented here would be a target dressed as a measurement, which is the precise
+dishonesty this product exists to refuse, and it would fail on a slower runner
+for no reason anybody could act on. What is asserted is the shape of the curve,
+which can only indicate a defect, and the properties that must hold at any
+scale: no organisation silently dropped from a batch, every maintained
+organisation reaching a determination, the outbox draining to zero, and no
+cross-tenant reference appearing under pooled concurrency.
+
+**One number an operator should see before accepting a default.** A
+hundred-customer cycle publishes 23,526 domain events. At the shipped batch size
+of 25 and poll interval of one second, that is about sixteen minutes to drain —
+comfortable for a nightly sweep, and worth knowing rather than discovering.
+
+### Ninety days of an estate that never changes
+
+| Table              | After 1 cycle | After 90 |
+| ------------------ | ------------- | -------- |
+| `observations`     | 3             | **3**    |
+| `evidence`         | 3             | **3**    |
+| `claims`           | 9             | **9**    |
+| `assurance_states` | 2             | **2**    |
+| `assessments`      | 2             | 180      |
+| outbox pending     | 17            | 106      |
+
+**Storage is bounded by the estate, not by how many times we looked at it**, and
+the first four rows are asserted exactly equal rather than approximately.
+Keeping a stable estate proven required refreshing the recency of an unchanged
+fact, and the easy way to do that would have been to write a row every time:
+correct, and ruinous. Three devices collected daily for a year is a thousand
+rows where three belong, and an MSP with a hundred customers would be paying to
+store a hundred thousand identical records a year.
+
+`assessments` grows on purpose, and a test asserts that it does, so nobody
+optimises it away. "Was this control satisfied in March" is a question a
+customer in a dispute will ask, and a current-state projection cannot answer it.
+It is bounded at under ten per cycle, because more would mean duplicate
+determinations per run.
+
+The outbox grows by about one event per cycle over an estate where nothing
+happened. A product that published a state-change event on every reassessment of
+an unchanged control would fill an MSP's notifications with "no change" and
+teach them to ignore the channel, which is worse than silence.
+
+**What these suites do not establish.** They run on one machine against a
+synthetic portfolio. Real estates are messier, real connectors are slower, and
+nobody has operated this. The measurements are honest about the design; they say
+nothing about a Tuesday in production.
+
+---
 
 ## Where your customers' documents go
 

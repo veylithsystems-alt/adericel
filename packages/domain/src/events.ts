@@ -33,6 +33,25 @@ export const EVENT_TYPES = [
    */
   'ClaimDisputed',
   'IntegrationCapabilityDegraded',
+  /**
+   * A collection succeeded and produced nothing readable.
+   *
+   * Separate from `IntegrationCollectionFailed` because nothing failed. The
+   * request worked, the response was well-formed, observations were stored,
+   * and not one claim came out of them — which happens when a vendor renames
+   * its fields. It is the only failure in the set that leaves every light
+   * green, so it gets its own event rather than being folded into a general
+   * degradation an operator would scroll past.
+   */
+  'IntegrationSchemaDriftDetected',
+  /**
+   * A connector collected a predicate its own manifest does not declare.
+   *
+   * Adericel's bookkeeping error rather than a customer problem, and still an
+   * event: an undeclared predicate is one whose controls can never be told why
+   * they are impaired, because impairment is matched predicate by predicate.
+   */
+  'ConnectorManifestIncomplete',
   'AssessmentRequested',
   'AssessmentCompleted',
   'AssuranceStateChanged',

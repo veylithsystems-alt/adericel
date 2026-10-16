@@ -16,6 +16,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@adericel/containment": "workspace:*",
     "@adericel/domain": "workspace:*",
     "@adericel/evidence": "workspace:*",
     "@adericel/graph": "workspace:*",
