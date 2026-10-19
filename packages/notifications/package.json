@@ -18,6 +18,6 @@
   "dependencies": {
     "@adericel/shared": "workspace:*",
     "@adericel/integrations": "workspace:*",
-    "zod": "^4.1.11"
+    "zod": "^4.6.7"
   }
 }
