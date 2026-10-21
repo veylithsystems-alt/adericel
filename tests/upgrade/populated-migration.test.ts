@@ -74,6 +74,17 @@ describe.skipIf(!available)('migrating a database with data in it', () => {
   let client: pg.Client;
   let planted: Planted;
   let appliedAfterPopulating = 0;
+  /**
+   * Where in the migration set the rows went in, or -1 if nowhere.
+   *
+   * Recorded rather than asserted here. `beforeAll` deliberately contains no
+   * assertion about the premise: a hook that throws produces no failing test
+   * *name*, so a broken premise would read as "nothing failed" to anything
+   * reading the results — including the mutation harness, which is how this
+   * was found. The premise is asserted in the first test instead, where it has
+   * a title.
+   */
+  let populateIndex = -1;
 
   beforeAll(async () => {
     // Drop and recreate, so a crashed previous run cannot make this one pass.
@@ -87,18 +98,7 @@ describe.skipIf(!available)('migrating a database with data in it', () => {
     await client.connect();
 
     const migrations = await loadMigrations();
-    const populateIndex = migrations.findIndex((m) => m.id === POPULATE_AFTER);
-    // The premise. If the migration this suite plants data after were renamed,
-    // the loop below would populate at the wrong point — or never — and the
-    // whole file would pass while exercising an empty schema, which is the
-    // thing it exists not to do.
-    expect(populateIndex, `${POPULATE_AFTER} is not in the migration set`).toBeGreaterThanOrEqual(
-      0,
-    );
-    expect(
-      migrations.length - populateIndex - 1,
-      'there are no migrations after the one data is planted at, so nothing would be tested',
-    ).toBeGreaterThan(5);
+    populateIndex = migrations.findIndex((m) => m.id === POPULATE_AFTER);
 
     await client.query('CREATE SCHEMA IF NOT EXISTS adericel');
     await client.query(`CREATE TABLE IF NOT EXISTS public.schema_migrations (
@@ -138,6 +138,21 @@ describe.skipIf(!available)('migrating a database with data in it', () => {
   });
 
   it('applies every later migration against real rows', () => {
+    /**
+     * The premise, asserted before the number that depends on it.
+     *
+     * If `POPULATE_AFTER` named a migration that is not in the set — a rename,
+     * a reordering, a split — nothing would be planted, every migration would
+     * run against an empty schema, and the count below would still be thirty-two.
+     * The suite would pass having tested the one thing it exists not to test.
+     */
+    expect(
+      populateIndex,
+      `${POPULATE_AFTER} is not in the migration set, so nothing was planted`,
+    ).toBeGreaterThanOrEqual(0);
+    expect(planted, 'no rows were planted, so every migration ran against an empty schema').toEqual(
+      expect.objectContaining({ mspId: expect.any(String) }),
+    );
     // Reported as well as asserted: the number is the whole point of the
     // suite, and a reader should be able to see it was not two.
     expect(
