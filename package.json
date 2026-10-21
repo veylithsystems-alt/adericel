@@ -28,6 +28,7 @@
     "test:chaos": "vitest run tests/chaos",
     "test:load": "vitest run tests/load",
     "test:soak": "vitest run tests/soak",
+    "test:upgrade": "vitest run tests/upgrade",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts up",

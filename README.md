@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Forty-nine are recorded. They include: a control scoped out of assessment
+Fifty are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -556,6 +556,7 @@ The suites are separated by what a failure would mean:
 | `test:chaos`       | A broken dependency produced a better answer than it should, or a working one produced a worse |
 | `test:load`        | Cost per customer climbs with portfolio size, or a customer is silently dropped from a sweep   |
 | `test:soak`        | Storage grows with how many times we looked rather than with the estate                        |
+| `test:upgrade`     | A migration that is safe on an empty schema would destroy a customer's data                    |
 | `test:mutation`    | A guard has rotted: its test would pass with the invariant broken                              |
 
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
@@ -569,10 +570,19 @@ time had 1,677 tests passing over a defect that made a healthy estate go dark
 on day seven. A suite that never advances a clock cannot tell a product that
 maintains assurance from one that snapshots it.
 
-`test:load` and `test:soak` exist for the same reason, and were written next
-because of what `test:chaos` found. Each opens a dimension nothing had tested,
+`test:load`, `test:soak` and `test:upgrade` exist for the same reason, and were
+written next because of what `test:chaos` found. Each opens a dimension nothing had tested,
 and the first dimension opened contained four critical defects. Their measured
 numbers are below.
+
+`test:upgrade` is the one whose absence would have been found by a customer
+rather than by us. Every migration here had only ever run against an empty
+schema, because the harness rebuilds the database for each run — so a migration
+that is correct on an empty table and destroys data on a populated one would
+have failed for the first time during a customer's upgrade, with their
+assurance record inside it. **Thirty-two migrations now run against a database
+already holding an MSP, an organisation and a user**, and the suite asserts its
+own premise so it cannot quietly go back to migrating nothing.
 
 **A clean dependency audit is not a property of this code.** During one build
 session `pnpm audit` reported clean, then two high-severity advisories, then

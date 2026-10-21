@@ -713,4 +713,25 @@ export const MUTATIONS: readonly Mutation[] = [
       'names every permission that only a human may hold, so additions are deliberate',
     ],
   },
+  {
+    id: 'upgrade-suite-populates-nothing',
+    invariant:
+      'The upgrade suite plants rows before the later migrations run, so each of them is applied ' +
+      'to a populated database rather than an empty one.',
+    file: 'tests/upgrade/populated-migration.test.ts',
+    /**
+     * The suite's own premise, which is the thing most worth guarding.
+     *
+     * Every assertion in that file is about rows surviving an upgrade. Point it
+     * at a migration that does not exist and it populates nothing, migrates an
+     * empty schema, and passes — proving exactly what the test suite as a whole
+     * already proved and nothing more. That is the failure mode the chaos suite
+     * shipped with, and the reason this file asserts its own premise.
+     */
+    find: "const POPULATE_AFTER = '0001_core_tenancy_identity';",
+    replace: "const POPULATE_AFTER = '0001_core_tenancy_identity_renamed';",
+    suite: 'tests/upgrade/populated-migration.test.ts',
+    mustFail: ['applies every later migration against real rows'],
+    needsDatabase: true,
+  },
 ];
