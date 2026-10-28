@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Fifty-five are recorded. They include: a control scoped out of assessment
+Fifty-nine are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -594,6 +594,25 @@ have failed for the first time during a customer's upgrade, with their
 assurance record inside it. **Thirty-two migrations now run against a database
 already holding an MSP, an organisation and a user**, and the suite asserts its
 own premise so it cannot quietly go back to migrating nothing.
+
+### A verification has to have looked at something
+
+The action lifecycle ends `EXECUTED → VERIFYING → CONFIRMED`, and the step that
+matters is the middle one: Adericel re-observes the customer's system rather
+than believing the executor's report of its own success. That was true of the
+code path, and not true of the boundary. `verify(actionId, observedValue:
+unknown)` took the deciding value **from its caller**. The one caller
+re-observed; the type permitted one that did not, and a `CONFIRMED` verification
+writes evidence that moves assurance state.
+
+Re-observation is now attestable. The only way to obtain a value `verify` will
+accept is to perform the re-observation, because the module that owns the brand
+owns the act — there is no exported constructor, deliberately. The check runs
+again at run time, because the API boundary deserialises JSON and a cast
+silences a compiler. And a verification row now names the `integration_runs`
+row its reading came out of, by foreign key, so an invented run identifier is
+refused by Postgres rather than by a convention. "We re-observed" is a record
+somebody can follow instead of a sentence in a comment.
 
 **A clean dependency audit is not a property of this code.** During one build
 session `pnpm audit` reported clean, then two high-severity advisories, then

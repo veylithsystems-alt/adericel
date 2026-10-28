@@ -777,8 +777,8 @@ export const MUTATIONS: readonly Mutation[] = [
      * elsewhere was recorded nowhere at all — for three weeks, in the document
      * whose job is to not let that happen.
      */
-    find: 'Raised as RR-095.',
-    replace: 'Raised as RR-199.',
+    find: 'Raised as RR-095, and closed.',
+    replace: 'Raised as RR-199, and closed.',
     suite: 'tests/unit/risk-register.test.ts',
     mustFail: ['never refers to an entry that does not exist'],
   },
@@ -803,5 +803,68 @@ export const MUTATIONS: readonly Mutation[] = [
       "commercial conversation is the founder's act, not a test's.",
     suite: 'tests/unit/risk-register.test.ts',
     mustFail: ['gives every live entry an owner'],
+  },
+  /**
+   * The verification authority boundary (RR-095).
+   *
+   * Each of these reinstates a different half of the defect: accepting a value
+   * nobody observed, turning an absence into a reading, and writing a
+   * verification that does not say where its reading came from.
+   */
+  {
+    id: 'verification-accepts-an-unattested-value',
+    invariant:
+      'The action service refuses a verification value that did not come out of a re-observer, ' +
+      'before any state moves and before any evidence is written.',
+    file: 'packages/actions/src/action-service.ts',
+    find: '      assertReObservation(reobservation);\n',
+    replace: '',
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['refuses the executor reporting its own success, and records nothing'],
+    needsDatabase: true,
+  },
+  {
+    id: 'an-absence-can-confirm',
+    invariant:
+      'A re-observation that could not be attempted reaches the judgement as nothing, so the ' +
+      'only outcome it can produce is INCONCLUSIVE.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: "  return reobservation.kind === 'OBSERVED' ? reobservation.value : undefined;",
+    replace: "  return reobservation.kind === 'OBSERVED' ? reobservation.value : true;",
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['cannot confirm from an absence, however the absence is dressed up'],
+    needsDatabase: true,
+  },
+  {
+    id: 'verification-does-not-record-which-run-it-read',
+    invariant:
+      'A verification row names the integration run its reading came out of, or the reason there ' +
+      'was no run. Never neither.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: `  return reobservation.kind === 'OBSERVED'
+    ? {
+        integrationRunId: reobservation.integrationRunId,
+        observedAt: reobservation.observedAt,
+        notObservableReason: null,
+      }
+    : { integrationRunId: null, observedAt: null, notObservableReason: reobservation.reason };`,
+    replace:
+      '  return { integrationRunId: null, observedAt: null, notObservableReason: null };\n' +
+      '  void reobservation;',
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['names the collection run its reading came out of'],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-shape-check-waves-everything-through',
+    invariant:
+      'The run-time attestation check actually inspects the value, rather than trusting that the ' +
+      'compiler already did. The API boundary deserialises JSON and a cast silences the compiler.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: '  const kind = (value as { kind?: unknown } | null)?.kind;',
+    replace:
+      "  const kind = (value as { kind?: unknown } | null)?.kind ?? 'OBSERVED';\n  if (true as boolean) return;",
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['refuses every value that did not come out of a re-observer'],
   },
 ];
