@@ -734,4 +734,74 @@ export const MUTATIONS: readonly Mutation[] = [
     mustFail: ['applies every later migration against real rows'],
     needsDatabase: true,
   },
+  /**
+   * The register's own checks.
+   *
+   * This document is the artefact that says Adericel distinguishes what was
+   * measured from what was asserted, and it had seven entries contradicting
+   * themselves about whether a risk was live (RR-094). These five break each
+   * rule separately, because a single check that catches all five would not
+   * tell anybody which one had rotted.
+   */
+  {
+    id: 'register-heading-contradicts-state',
+    invariant:
+      'An entry\'s heading and its State row must give the same answer to "is this risk live".',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find: "### RR-080 — The contract's lifecycles and the implemented ones have never been reconciled",
+    replace:
+      "### RR-080 — The contract's lifecycles and the implemented ones have never been reconciled — **CLOSED 21 Oct 2026**",
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never lets a heading contradict the state it records'],
+  },
+  {
+    id: 'register-closure-without-evidence',
+    invariant:
+      'A CLOSED entry must cite evidence, not merely a mitigation it planned to carry out.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find:
+      '| **Verified**    | PR #3 (`increment-1-passport-interchange`) closed unmerged on 15 Sept 2026. ' +
+      'Confirmed against GitHub: `state: closed`, `merged: false`. The duplicate never entered the tree, ' +
+      'and ADR-0039 on the working branch is the only one. |\n',
+    replace: '',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never closes an entry without citing evidence'],
+  },
+  {
+    id: 'register-dangling-cross-reference',
+    invariant: 'Every entry this register refers to must be an entry this register defines.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    /**
+     * The defect that was actually there. RR-075's residual said "Tracked as
+     * RR-080" and no RR-080 existed, so a residual risk recorded as handled
+     * elsewhere was recorded nowhere at all — for three weeks, in the document
+     * whose job is to not let that happen.
+     */
+    find: 'Raised as RR-095.',
+    replace: 'Raised as RR-199.',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never refers to an entry that does not exist'],
+  },
+  {
+    id: 'register-cites-a-path-that-does-not-exist',
+    invariant: 'Every repository path the register cites as evidence must resolve.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find: '`packages/support/src/case.ts` carries twenty states',
+    replace: '`packages/support/src/cases.ts` carries twenty states',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['names real files wherever it cites one'],
+  },
+  {
+    id: 'register-live-entry-without-an-owner',
+    invariant: 'An OPEN or MITIGATING entry must name who owns it.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find:
+      '| **Owner**       | **Founder.** It can only be closed by a real customer, and stating it in a ' +
+      "commercial conversation is the founder's act, not a test's.",
+    replace:
+      '| **Note**        | **Founder.** It can only be closed by a real customer, and stating it in a ' +
+      "commercial conversation is the founder's act, not a test's.",
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['gives every live entry an owner'],
+  },
 ];

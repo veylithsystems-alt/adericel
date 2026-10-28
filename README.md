@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Fifty are recorded. They include: a control scoped out of assessment
+Fifty-five are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -510,6 +510,17 @@ which would report a freshly onboarded organisation as having nothing undecided.
 them break this README: renaming a command it tells you to run, dropping a
 package from the prose, pointing a link at a path that does not exist, naming a
 package that was never built, and letting a stated count drift.
+
+Five more break the [residual risk register](./docs/audit/RESIDUAL_RISK_REGISTER.md),
+which earned them. Seven of its entries said `CLOSED` in the heading and `OPEN`
+in the state row, with no evidence either way, and one recorded a residual as
+"tracked as RR-080" where no RR-080 existed. A register that disagrees with
+itself about whether a risk is live is evidence that nobody reads it, which is
+worse than the risks it lists.
+[`tests/unit/risk-register.test.ts`](./tests/unit/risk-register.test.ts) now
+refuses a heading that contradicts its state, a closure that cites no evidence,
+a live entry with no owner, a cross-reference to an entry that does not exist,
+and a cited repository path that does not resolve.
 
 Sixteen of them re-introduce the defects
 [the chaos suite](./tests/chaos/failure-injection.test.ts) found, because those
