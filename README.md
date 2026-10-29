@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Fifty-nine are recorded. They include: a control scoped out of assessment
+Sixty-one are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -568,6 +568,7 @@ The suites are separated by what a failure would mean:
 | `test:load`        | Cost per customer climbs with portfolio size, or a customer is silently dropped from a sweep   |
 | `test:soak`        | Storage grows with how many times we looked rather than with the estate                        |
 | `test:upgrade`     | A migration that is safe on an empty schema would destroy a customer's data                    |
+| `test:browser`     | The interface does not render, or renders something untrue                                     |
 | `test:mutation`    | A guard has rotted: its test would pass with the invariant broken                              |
 
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
@@ -594,6 +595,28 @@ have failed for the first time during a customer's upgrade, with their
 assurance record inside it. **Thirty-two migrations now run against a database
 already holding an MSP, an organisation and a user**, and the suite asserts its
 own premise so it cannot quietly go back to migrating nothing.
+
+`test:browser` is the one that should have existed first. Ten pages, a shell
+and a brand with rules about what colour may mean what — and 1,758 tests passed
+over an interface **nobody had ever looked at.** The first viewer would have
+been an evaluating MSP.
+
+It found two defects in the first screenful. The portfolio page — the one an MSP
+opens first and then lives in — reported `0 CRITICAL FINDINGS · 0 FAILING
+CONTROLS · 0 UNKNOWN CONTROLS` for a customer with sixteen in-scope controls and
+no assessment, because it counted assessments rather than controls. All zeroes
+reads as "nothing wrong", which is the claim a green dashboard makes, only
+quieter; and the same count fed the attention ordering, so the customer Adericel
+could say least about sorted last. One level down, every control said "No
+evidence has been collected" about an organisation whose own Proof page reported
+three usable evidence records — a cause Adericel had not established, stated as
+though it had. Both are now **16 UNKNOWN CONTROLS** and "This has never been
+assessed", verified by looking at the page rather than by reading the SQL.
+
+The suite drives the real interface against the real API over a real socket, in
+a real browser. Not a render test with mocked fetches: what breaks an interface
+is usually the seam between it and the server, and a mock is a second
+implementation of the server written by whoever wrote the client.
 
 ### A verification has to have looked at something
 

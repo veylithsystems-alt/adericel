@@ -56,7 +56,18 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
         }>(
           `SELECT c.id AS subject_id,
                   COALESCE(a.state, 'UNKNOWN') AS state,
-                  CASE WHEN a.state IS NULL THEN 'NO_EVIDENCE' ELSE a.unknown_reason END
+                  -- NOT_YET_ASSESSED, never NO_EVIDENCE.
+                  --
+                  -- These are two different facts and this used to collapse
+                  -- them. An organisation holding three usable evidence records
+                  -- was told "No evidence has been collected" for every control,
+                  -- because none had been assessed yet — a cause Adericel had
+                  -- not established, stated as though it had. The reason
+                  -- vocabulary already carries NOT_YET_ASSESSED, the interface
+                  -- already renders it, and 'organisations.ts' and
+                  -- 'services/resolution.ts' already use it. This was the odd
+                  -- one out. See RR-096.
+                  CASE WHEN a.state IS NULL THEN 'NOT_YET_ASSESSED' ELSE a.unknown_reason END
                     AS unknown_reason,
                   a.since,
                   a.last_assessed_at,

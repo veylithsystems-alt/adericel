@@ -867,4 +867,38 @@ export const MUTATIONS: readonly Mutation[] = [
     suite: 'tests/security/verification-attestation.test.ts',
     mustFail: ['refuses every value that did not come out of a re-observer'],
   },
+  /**
+   * The two honesty defects the first rendering of the interface found (RR-096).
+   *
+   * Both were individually defensible SQL and jointly a product that told an
+   * MSP everything was fine about a customer it could say nothing about.
+   */
+  {
+    id: 'portfolio-counts-only-what-was-assessed',
+    invariant:
+      'The MSP portfolio counts in-scope controls, so a control nobody has assessed yet counts ' +
+      'as unknown rather than as nothing at all.',
+    file: 'apps/api/src/routes/portfolio.ts',
+    find: "count(c.*) FILTER (WHERE a.state = 'UNKNOWN' OR a.state IS NULL)::text AS unknown,",
+    replace: "count(c.*) FILTER (WHERE a.state = 'UNKNOWN')::text AS unknown,",
+    suite: 'tests/e2e/unassessed-is-not-nothing-wrong.test.ts',
+    mustFail: ['is reported to the MSP as unknown, not as nothing wrong'],
+    needsDatabase: true,
+  },
+  {
+    id: 'unassessed-reported-as-no-evidence',
+    invariant:
+      'A control that has never been assessed reports NOT_YET_ASSESSED. It does not report ' +
+      'NO_EVIDENCE, which asserts a cause nobody established and can contradict the evidence ' +
+      'the organisation visibly holds.',
+    file: 'apps/api/src/routes/assurance.ts',
+    find: "CASE WHEN a.state IS NULL THEN 'NOT_YET_ASSESSED' ELSE a.unknown_reason END",
+    replace: "CASE WHEN a.state IS NULL THEN 'NO_EVIDENCE' ELSE a.unknown_reason END",
+    suite: 'tests/e2e/unassessed-is-not-nothing-wrong.test.ts',
+    mustFail: [
+      'says the controls have never been assessed, not that no evidence exists',
+      'holds evidence, which is why "no evidence has been collected" was a lie',
+    ],
+    needsDatabase: true,
+  },
 ];
