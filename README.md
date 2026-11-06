@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Sixty-four are recorded. They include: a control scoped out of assessment
+Sixty-six are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,

@@ -953,4 +953,33 @@ export const MUTATIONS: readonly Mutation[] = [
     mustFail: ['labels every state chip the way the presentation module says'],
     needsDatabase: true,
   },
+  /**
+   * The support lifecycle against the one the contract states (RR-080).
+   *
+   * Twenty states, seven stated stages, and until this mapping existed nothing
+   * said which was which. These drop a stage, and record a refused case as a
+   * finished one.
+   */
+  {
+    id: 'a-stated-support-stage-dropped',
+    invariant:
+      "Every stage of the contract's support lifecycle is occupied by at least one state of this " +
+      'system, so no stated obligation is quietly unmet.',
+    file: 'packages/support/src/contract-stage.ts',
+    find: "  RESOLVED: 'RESOLVED',",
+    replace: '  RESOLVED: null,',
+    suite: 'packages/support/src/contract-stage.test.ts',
+    mustFail: ['occupies every stage the contract states, so none was quietly dropped'],
+  },
+  {
+    id: 'a-refused-case-recorded-as-a-finished-one',
+    invariant:
+      'WITHDRAWN and REJECTED belong to no stage of a path to resolution, so a case that was ' +
+      'refused can never be mistaken for one that was fixed.',
+    file: 'packages/support/src/contract-stage.ts',
+    find: '  REJECTED: null,',
+    replace: "  REJECTED: 'CLOSED',",
+    suite: 'packages/support/src/contract-stage.test.ts',
+    mustFail: ['leaves exactly the two endings that are not resolutions outside the path'],
+  },
 ];
