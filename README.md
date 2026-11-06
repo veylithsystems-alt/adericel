@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Sixty-one are recorded. They include: a control scoped out of assessment
+Sixty-four are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -612,6 +612,16 @@ evidence has been collected" about an organisation whose own Proof page reported
 three usable evidence records — a cause Adericel had not established, stated as
 though it had. Both are now **16 UNKNOWN CONTROLS** and "This has never been
 assessed", verified by looking at the page rather than by reading the SQL.
+
+It also made the brand's one hard rule testable for the first time. **Green
+means `PROVEN`** — a green heading on a page about something unproven is
+Adericel lying in the place a customer looks first — and that had only ever been
+asserted in prose and in a token test that rendered nothing. The suite now
+resolves the proven token off the live page, asks every element what colour it
+actually ended up with, and fails if anything wears it that is not about
+something proven. `Unknown` is asserted to wear no state colour at all, because
+any hue would place it on the good-to-bad axis and `Unknown` is not on that
+axis.
 
 The suite drives the real interface against the real API over a real socket, in
 a real browser. Not a render test with mocked fetches: what breaks an interface

@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import { chromium, type Browser, type ConsoleMessage, type Page } from 'playwright';
+import { STATE_PRESENTATION } from '../../apps/web/src/lib/assurance-presentation.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createHarness,
@@ -353,6 +354,141 @@ describe.skipIf(!available)('the interface, rendered', () => {
     expect(overflow, 'the page is wider than the phone it is on').toBeLessThanOrEqual(1);
     await page.close();
   }, 120_000);
+
+  it('uses the proven colour for nothing but proven', async () => {
+    /**
+     * Green means PROVEN. That is a product rule, not a cosmetic one — a green
+     * heading on a page about something unproven is Adericel lying in the one
+     * place a customer looks first — and until now it was asserted only in
+     * prose and in a token test that never rendered anything (RR-097).
+     *
+     * This reads the token off the live page and then asks every element on it
+     * what colour it actually ended up. An element wearing the proven colour
+     * must belong to the proven family; nothing may borrow it for decoration.
+     */
+    const page = await open('/');
+    await signInThroughTheInterface(page);
+    await page.getByText(/UNKNOWN CONTROLS/i).waitFor({ timeout: 20_000 });
+
+    const offenders = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      /** Resolve a token to the rgb() string the browser will compare against. */
+      const resolve = (token: string): string => {
+        const probe = document.createElement('span');
+        probe.style.color = root.getPropertyValue(token).trim();
+        document.body.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      };
+      const proven = resolve('--state-proven');
+      if (proven === '' || proven === 'rgba(0, 0, 0, 0)') return ['--state-proven did not resolve'];
+
+      const found: string[] = [];
+      for (const element of document.querySelectorAll<HTMLElement>('body *')) {
+        const style = getComputedStyle(element);
+        const wearing = [
+          style.backgroundColor,
+          style.color,
+          style.borderLeftColor,
+          style.borderTopColor,
+        ].includes(proven);
+        if (!wearing) continue;
+        // Anything in the proven family is entitled to it. Everything else is
+        // using a state colour as decoration.
+        const name = `${element.tagName.toLowerCase()}.${element.className}`;
+        if (!/proven/.test(String(element.className))) found.push(name);
+      }
+      return found;
+    });
+
+    expect(
+      offenders,
+      'these elements wear the proven colour without being about something proven',
+    ).toEqual([]);
+    await page.close();
+  }, 300_000);
+
+  it('gives Unknown no colour at all, as the brand requires', async () => {
+    /**
+     * Unknown is hatched rather than coloured, because any hue would place it
+     * somewhere on the good-to-bad axis and Unknown is not on that axis. The
+     * presentation module says so in a comment; this is the assertion.
+     */
+    const page = await open('/');
+    await signInThroughTheInterface(page);
+    await page.goto(`${session.web}/organisations/${session.tenant.organisationId}`, {
+      waitUntil: 'networkidle',
+    });
+    const chips = page.locator('.state--unknown');
+    expect(await chips.count(), 'no Unknown chip rendered, so this proves nothing').toBeGreaterThan(
+      0,
+    );
+
+    const wearing = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const resolve = (token: string): string => {
+        const probe = document.createElement('span');
+        probe.style.color = root.getPropertyValue(token).trim();
+        document.body.append(probe);
+        const value = getComputedStyle(probe).color;
+        probe.remove();
+        return value;
+      };
+      const stateColours = ['--state-proven', '--state-failing', '--state-exception'].map(resolve);
+      const offenders: string[] = [];
+      for (const chip of document.querySelectorAll<HTMLElement>('.state--unknown')) {
+        const style = getComputedStyle(chip);
+        if (stateColours.includes(style.backgroundColor)) offenders.push(style.backgroundColor);
+      }
+      return offenders;
+    });
+    expect(wearing, 'an Unknown chip is wearing a state colour').toEqual([]);
+    await page.close();
+  }, 300_000);
+
+  it('labels every state chip the way the presentation module says', async () => {
+    /**
+     * The mapping from state to word lives in exactly one module, and this
+     * asserts the page honours it.
+     *
+     * WHAT IT CANNOT CATCH, SAID PLAINLY
+     *
+     * It compares the rendered page against `STATE_PRESENTATION`, which is the
+     * same module the page renders from — so changing the mapping there changes
+     * both sides and this stays green. What it does catch is a component that
+     * stops consulting the module: a hard-coded tone, a chip built by hand, a
+     * refactor that drops the lookup. That is the failure that happens; a
+     * deliberate edit to the mapping is reviewed. Mutation
+     * `chip-tone-stops-following-its-state` is the first case.
+     */
+    const page = await open('/');
+    await signInThroughTheInterface(page);
+    await page.goto(`${session.web}/organisations/${session.tenant.organisationId}`, {
+      waitUntil: 'networkidle',
+    });
+    const chips = await page.locator('.state').evaluateAll((elements) =>
+      elements.map((element) => ({
+        label: (element.textContent ?? '').trim(),
+        tone: (/state--(\w+)/.exec(String(element.className)) ?? [])[1] ?? '',
+      })),
+    );
+    expect(chips.length, 'no state chips rendered at all').toBeGreaterThan(0);
+
+    /** label -> the only tone it may wear, from STATE_PRESENTATION. */
+    const expected = new Map<string, string>();
+    for (const presentation of Object.values(STATE_PRESENTATION)) {
+      expected.set(presentation.label, presentation.tone);
+    }
+    const wrong = chips
+      // Severity chips reuse the same class and are not assurance states, so
+      // only labels the presentation module owns are judged here.
+      .filter((chip) => expected.has(chip.label))
+      .filter((chip) => expected.get(chip.label) !== chip.tone)
+      .map((chip) => `${chip.label} rendered as ${chip.tone}`);
+    expect(wrong, 'a state chip is wearing the wrong tone for its word').toEqual([]);
+    await page.close();
+  }, 300_000);
 
   it('opened every page without the browser complaining once', () => {
     /**

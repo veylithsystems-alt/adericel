@@ -901,4 +901,56 @@ export const MUTATIONS: readonly Mutation[] = [
     ],
     needsDatabase: true,
   },
+  /**
+   * The brand's one hard rule, now asserted against a rendered page (RR-097).
+   *
+   * Green means PROVEN. These paint something green that is not proven, and
+   * detach a chip's colour from the state it describes.
+   */
+  {
+    id: 'unknown-chip-painted-with-a-state-colour',
+    invariant:
+      'Unknown is hatched and has no colour, because any hue would place it on the good-to-bad ' +
+      'axis and Unknown is not on that axis.',
+    file: 'apps/web/src/styles/app.css',
+    find: `.state--unknown {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: transparent;`,
+    replace: `.state--unknown {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: var(--state-proven);`,
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['gives Unknown no colour at all, as the brand requires'],
+    needsDatabase: true,
+  },
+  {
+    id: 'the-proven-colour-used-as-decoration',
+    invariant:
+      'No element wears the proven colour unless it is about something proven. A state colour is ' +
+      'never decoration.',
+    file: 'apps/web/src/styles/app.css',
+    find: `.panel {
+  border: var(--border);
+  background: var(--surface-raised);`,
+    replace: `.panel {
+  border: var(--border);
+  background: var(--state-proven);`,
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['uses the proven colour for nothing but proven'],
+    needsDatabase: true,
+  },
+  {
+    id: 'chip-tone-stops-following-its-state',
+    invariant:
+      "A state chip's colour comes from the one module that maps states to presentation, so a " +
+      'component cannot decide a tone for itself.',
+    file: 'apps/web/src/components/State.tsx',
+    find: 'className={`state state--${presentation.tone}`}',
+    replace: "className={'state state--proven'}",
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['labels every state chip the way the presentation module says'],
+    needsDatabase: true,
+  },
 ];
