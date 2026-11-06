@@ -33,6 +33,7 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts up",
+    "ce:coverage": "tsx scripts/ce-coverage.ts",
     "db:status": "tsx --env-file-if-exists=.env scripts/migrate.ts status",
     "db:reset": "tsx --env-file-if-exists=.env scripts/migrate.ts reset",
     "db:seed": "tsx --env-file-if-exists=.env scripts/seed-demo.ts",
