@@ -713,4 +713,272 @@ export const MUTATIONS: readonly Mutation[] = [
       'names every permission that only a human may hold, so additions are deliberate',
     ],
   },
+  {
+    id: 'upgrade-suite-populates-nothing',
+    invariant:
+      'The upgrade suite plants rows before the later migrations run, so each of them is applied ' +
+      'to a populated database rather than an empty one.',
+    file: 'tests/upgrade/populated-migration.test.ts',
+    /**
+     * The suite's own premise, which is the thing most worth guarding.
+     *
+     * Every assertion in that file is about rows surviving an upgrade. Point it
+     * at a migration that does not exist and it populates nothing, migrates an
+     * empty schema, and passes — proving exactly what the test suite as a whole
+     * already proved and nothing more. That is the failure mode the chaos suite
+     * shipped with, and the reason this file asserts its own premise.
+     */
+    find: "const POPULATE_AFTER = '0001_core_tenancy_identity';",
+    replace: "const POPULATE_AFTER = '0001_core_tenancy_identity_renamed';",
+    suite: 'tests/upgrade/populated-migration.test.ts',
+    mustFail: ['applies every later migration against real rows'],
+    needsDatabase: true,
+  },
+  /**
+   * The register's own checks.
+   *
+   * This document is the artefact that says Adericel distinguishes what was
+   * measured from what was asserted, and it had seven entries contradicting
+   * themselves about whether a risk was live (RR-094). These five break each
+   * rule separately, because a single check that catches all five would not
+   * tell anybody which one had rotted.
+   */
+  {
+    id: 'register-heading-contradicts-state',
+    invariant:
+      'An entry\'s heading and its State row must give the same answer to "is this risk live".',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find: '### RR-093 — No release baseline is tagged',
+    replace: '### RR-093 — No release baseline is tagged — **CLOSED 6 Nov 2026**',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never lets a heading contradict the state it records'],
+  },
+  {
+    id: 'register-closure-without-evidence',
+    invariant:
+      'A CLOSED entry must cite evidence, not merely a mitigation it planned to carry out.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find:
+      '| **Verified**    | PR #3 (`increment-1-passport-interchange`) closed unmerged on 15 Sept 2026. ' +
+      'Confirmed against GitHub: `state: closed`, `merged: false`. The duplicate never entered the tree, ' +
+      'and ADR-0039 on the working branch is the only one. |\n',
+    replace: '',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never closes an entry without citing evidence'],
+  },
+  {
+    id: 'register-dangling-cross-reference',
+    invariant: 'Every entry this register refers to must be an entry this register defines.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    /**
+     * The defect that was actually there. RR-075's residual said "Tracked as
+     * RR-080" and no RR-080 existed, so a residual risk recorded as handled
+     * elsewhere was recorded nowhere at all — for three weeks, in the document
+     * whose job is to not let that happen.
+     */
+    find: 'Raised as RR-095, and closed.',
+    replace: 'Raised as RR-199, and closed.',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never refers to an entry that does not exist'],
+  },
+  {
+    id: 'register-cites-a-path-that-does-not-exist',
+    invariant: 'Every repository path the register cites as evidence must resolve.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find: '`packages/support/src/case.ts` carries twenty states',
+    replace: '`packages/support/src/cases.ts` carries twenty states',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['names real files wherever it cites one'],
+  },
+  {
+    id: 'register-live-entry-without-an-owner',
+    invariant: 'An OPEN or MITIGATING entry must name who owns it.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find:
+      '| **Owner**       | **Founder.** It can only be closed by a real customer, and stating it in a ' +
+      "commercial conversation is the founder's act, not a test's.",
+    replace:
+      '| **Note**        | **Founder.** It can only be closed by a real customer, and stating it in a ' +
+      "commercial conversation is the founder's act, not a test's.",
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['gives every live entry an owner'],
+  },
+  /**
+   * The verification authority boundary (RR-095).
+   *
+   * Each of these reinstates a different half of the defect: accepting a value
+   * nobody observed, turning an absence into a reading, and writing a
+   * verification that does not say where its reading came from.
+   */
+  {
+    id: 'verification-accepts-an-unattested-value',
+    invariant:
+      'The action service refuses a verification value that did not come out of a re-observer, ' +
+      'before any state moves and before any evidence is written.',
+    file: 'packages/actions/src/action-service.ts',
+    find: '      assertReObservation(reobservation);\n',
+    replace: '',
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['refuses the executor reporting its own success, and records nothing'],
+    needsDatabase: true,
+  },
+  {
+    id: 'an-absence-can-confirm',
+    invariant:
+      'A re-observation that could not be attempted reaches the judgement as nothing, so the ' +
+      'only outcome it can produce is INCONCLUSIVE.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: "  return reobservation.kind === 'OBSERVED' ? reobservation.value : undefined;",
+    replace: "  return reobservation.kind === 'OBSERVED' ? reobservation.value : true;",
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['cannot confirm from an absence, however the absence is dressed up'],
+    needsDatabase: true,
+  },
+  {
+    id: 'verification-does-not-record-which-run-it-read',
+    invariant:
+      'A verification row names the integration run its reading came out of, or the reason there ' +
+      'was no run. Never neither.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: `  return reobservation.kind === 'OBSERVED'
+    ? {
+        integrationRunId: reobservation.integrationRunId,
+        observedAt: reobservation.observedAt,
+        notObservableReason: null,
+      }
+    : { integrationRunId: null, observedAt: null, notObservableReason: reobservation.reason };`,
+    replace:
+      '  return { integrationRunId: null, observedAt: null, notObservableReason: null };\n' +
+      '  void reobservation;',
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['names the collection run its reading came out of'],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-shape-check-waves-everything-through',
+    invariant:
+      'The run-time attestation check actually inspects the value, rather than trusting that the ' +
+      'compiler already did. The API boundary deserialises JSON and a cast silences the compiler.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: '  const kind = (value as { kind?: unknown } | null)?.kind;',
+    replace:
+      "  const kind = (value as { kind?: unknown } | null)?.kind ?? 'OBSERVED';\n  if (true as boolean) return;",
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['refuses every value that did not come out of a re-observer'],
+  },
+  /**
+   * The two honesty defects the first rendering of the interface found (RR-096).
+   *
+   * Both were individually defensible SQL and jointly a product that told an
+   * MSP everything was fine about a customer it could say nothing about.
+   */
+  {
+    id: 'portfolio-counts-only-what-was-assessed',
+    invariant:
+      'The MSP portfolio counts in-scope controls, so a control nobody has assessed yet counts ' +
+      'as unknown rather than as nothing at all.',
+    file: 'apps/api/src/routes/portfolio.ts',
+    find: "count(c.*) FILTER (WHERE a.state = 'UNKNOWN' OR a.state IS NULL)::text AS unknown,",
+    replace: "count(c.*) FILTER (WHERE a.state = 'UNKNOWN')::text AS unknown,",
+    suite: 'tests/e2e/unassessed-is-not-nothing-wrong.test.ts',
+    mustFail: ['is reported to the MSP as unknown, not as nothing wrong'],
+    needsDatabase: true,
+  },
+  {
+    id: 'unassessed-reported-as-no-evidence',
+    invariant:
+      'A control that has never been assessed reports NOT_YET_ASSESSED. It does not report ' +
+      'NO_EVIDENCE, which asserts a cause nobody established and can contradict the evidence ' +
+      'the organisation visibly holds.',
+    file: 'apps/api/src/routes/assurance.ts',
+    find: "CASE WHEN a.state IS NULL THEN 'NOT_YET_ASSESSED' ELSE a.unknown_reason END",
+    replace: "CASE WHEN a.state IS NULL THEN 'NO_EVIDENCE' ELSE a.unknown_reason END",
+    suite: 'tests/e2e/unassessed-is-not-nothing-wrong.test.ts',
+    mustFail: [
+      'says the controls have never been assessed, not that no evidence exists',
+      'holds evidence, which is why "no evidence has been collected" was a lie',
+    ],
+    needsDatabase: true,
+  },
+  /**
+   * The brand's one hard rule, now asserted against a rendered page (RR-097).
+   *
+   * Green means PROVEN. These paint something green that is not proven, and
+   * detach a chip's colour from the state it describes.
+   */
+  {
+    id: 'unknown-chip-painted-with-a-state-colour',
+    invariant:
+      'Unknown is hatched and has no colour, because any hue would place it on the good-to-bad ' +
+      'axis and Unknown is not on that axis.',
+    file: 'apps/web/src/styles/app.css',
+    find: `.state--unknown {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: transparent;`,
+    replace: `.state--unknown {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: var(--state-proven);`,
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['gives Unknown no colour at all, as the brand requires'],
+    needsDatabase: true,
+  },
+  {
+    id: 'the-proven-colour-used-as-decoration',
+    invariant:
+      'No element wears the proven colour unless it is about something proven. A state colour is ' +
+      'never decoration.',
+    file: 'apps/web/src/styles/app.css',
+    find: `.panel {
+  border: var(--border);
+  background: var(--surface-raised);`,
+    replace: `.panel {
+  border: var(--border);
+  background: var(--state-proven);`,
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['uses the proven colour for nothing but proven'],
+    needsDatabase: true,
+  },
+  {
+    id: 'chip-tone-stops-following-its-state',
+    invariant:
+      "A state chip's colour comes from the one module that maps states to presentation, so a " +
+      'component cannot decide a tone for itself.',
+    file: 'apps/web/src/components/State.tsx',
+    find: 'className={`state state--${presentation.tone}`}',
+    replace: "className={'state state--proven'}",
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['labels every state chip the way the presentation module says'],
+    needsDatabase: true,
+  },
+  /**
+   * The support lifecycle against the one the contract states (RR-080).
+   *
+   * Twenty states, seven stated stages, and until this mapping existed nothing
+   * said which was which. These drop a stage, and record a refused case as a
+   * finished one.
+   */
+  {
+    id: 'a-stated-support-stage-dropped',
+    invariant:
+      "Every stage of the contract's support lifecycle is occupied by at least one state of this " +
+      'system, so no stated obligation is quietly unmet.',
+    file: 'packages/support/src/contract-stage.ts',
+    find: "  RESOLVED: 'RESOLVED',",
+    replace: '  RESOLVED: null,',
+    suite: 'packages/support/src/contract-stage.test.ts',
+    mustFail: ['occupies every stage the contract states, so none was quietly dropped'],
+  },
+  {
+    id: 'a-refused-case-recorded-as-a-finished-one',
+    invariant:
+      'WITHDRAWN and REJECTED belong to no stage of a path to resolution, so a case that was ' +
+      'refused can never be mistaken for one that was fixed.',
+    file: 'packages/support/src/contract-stage.ts',
+    find: '  REJECTED: null,',
+    replace: "  REJECTED: 'CLOSED',",
+    suite: 'packages/support/src/contract-stage.test.ts',
+    mustFail: ['leaves exactly the two endings that are not resolutions outside the path'],
+  },
 ];

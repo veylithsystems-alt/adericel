@@ -8,7 +8,7 @@ import {
   type AutonomyLevel,
   type Severity,
 } from '@adericel/domain';
-import { createActionService, createCollectionService } from '@adericel/actions';
+import { createActionService, createCollectionService, createReObserver } from '@adericel/actions';
 import { AdericelError } from '@adericel/shared';
 import { compilePolicy } from '@adericel/policy';
 import type { AppContext } from '../context.js';
@@ -457,24 +457,51 @@ export function registerActionRoutes(server: FastifyInstance, app: AppContext): 
           throw new AdericelError('INTERNAL_ERROR', 'No capability for this action type');
         }
         if (!action.integrationId || !action.targetExternalId) {
-          return service.verify(params.id, undefined);
+          // Nothing to re-run, so nothing is claimed. This says which of the
+          // two it was, and can only reach INCONCLUSIVE from here.
+          const reobserver = createReObserver({
+            ctx,
+            clock: app.clock,
+            collection: createCollectionService({
+              ctx,
+              clock: app.clock,
+              logger: request.adericel.logger,
+              connectors: app.connectors,
+              correlationId: request.adericel.correlationId,
+              actor: deps.actor,
+              unsealCredentials: app.unsealCredentials,
+            }),
+          });
+          return service.verify(
+            params.id,
+            reobserver.notObservable(
+              capability.verification.predicate,
+              action.integrationId ? 'NO_TARGET' : 'NO_INTEGRATION',
+            ),
+          );
         }
 
-        const collection = createCollectionService({
+        const reobserver = createReObserver({
           ctx,
           clock: app.clock,
-          logger: request.adericel.logger,
-          connectors: app.connectors,
-          correlationId: request.adericel.correlationId,
-          actor: deps.actor,
-          unsealCredentials: app.unsealCredentials,
+          collection: createCollectionService({
+            ctx,
+            clock: app.clock,
+            logger: request.adericel.logger,
+            connectors: app.connectors,
+            correlationId: request.adericel.correlationId,
+            actor: deps.actor,
+            unsealCredentials: app.unsealCredentials,
+          }),
         });
-        const observed = await collection.reobserve(
-          action.integrationId,
-          action.targetExternalId,
-          capability.verification.predicate,
+        return service.verify(
+          params.id,
+          await reobserver.reobserve(
+            action.integrationId,
+            action.targetExternalId,
+            capability.verification.predicate,
+          ),
         );
-        return service.verify(params.id, observed);
       });
 
       await audit(app, request, {

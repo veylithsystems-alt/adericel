@@ -312,13 +312,17 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
           'reassess and outbox drain, and asserting cost per organisation does not climb with ' +
           'portfolio size (209.5 ms/org in a full sweep against 185.3 one at a time); ' +
           'pnpm test:soak — ninety simulated days, asserting observations, evidence, claims and ' +
-          'the state projection are exactly unchanged over an unchanged estate',
+          'the state projection are exactly unchanged over an unchanged estate; ' +
+          'pnpm test:upgrade — thirty-two migrations applied to a database already holding an ' +
+          'MSP, an organisation and a user, which had only ever been migrated empty',
       ),
       VERIFIED(
-        'Two guards proved by deliberate breakage: lowering the sweep batch limit below the ' +
-          'portfolio size, so the customers past it are silently never collected from; and ' +
+        'Three guards proved by deliberate breakage: lowering the sweep batch limit below the ' +
+          'portfolio size, so the customers past it are silently never collected from; ' +
           'disabling the evidence refresh branch, which is the ruinous-but-correct version of ' +
-          'the recency fix that writes a row per collection',
+          'the recency fix that writes a row per collection; and pointing the upgrade suite at ' +
+          'a migration that does not exist, so it populates nothing and migrates an empty ' +
+          'schema while appearing to pass',
       ),
       // No OPERATIONAL attestation: one machine, synthetic portfolio, never
       // operated. The numbers are honest about the design and say nothing

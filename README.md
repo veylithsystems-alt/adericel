@@ -502,7 +502,7 @@ as the exact edit that breaks it and the exact tests that must then fail.
 reports a mutation whose tests still pass as **SURVIVED** — meaning the guard has
 rotted, not that the mutation is wrong. CI runs it on every push.
 
-Forty-nine are recorded. They include: a control scoped out of assessment
+Sixty-six are recorded. They include: a control scoped out of assessment
 presenting outwardly as `PROVEN`; a build signing off a release condition that
 needs a named person; a crosswalk marked `EQUIVALENT` being allowed to determine
 an assurance state; and the resolution queue reading only the state projection,
@@ -510,6 +510,17 @@ which would report a freshly onboarded organisation as having nothing undecided.
 them break this README: renaming a command it tells you to run, dropping a
 package from the prose, pointing a link at a path that does not exist, naming a
 package that was never built, and letting a stated count drift.
+
+Five more break the [residual risk register](./docs/audit/RESIDUAL_RISK_REGISTER.md),
+which earned them. Seven of its entries said `CLOSED` in the heading and `OPEN`
+in the state row, with no evidence either way, and one recorded a residual as
+"tracked as RR-080" where no RR-080 existed. A register that disagrees with
+itself about whether a risk is live is evidence that nobody reads it, which is
+worse than the risks it lists.
+[`tests/unit/risk-register.test.ts`](./tests/unit/risk-register.test.ts) now
+refuses a heading that contradicts its state, a closure that cites no evidence,
+a live entry with no owner, a cross-reference to an entry that does not exist,
+and a cited repository path that does not resolve.
 
 Sixteen of them re-introduce the defects
 [the chaos suite](./tests/chaos/failure-injection.test.ts) found, because those
@@ -556,6 +567,8 @@ The suites are separated by what a failure would mean:
 | `test:chaos`       | A broken dependency produced a better answer than it should, or a working one produced a worse |
 | `test:load`        | Cost per customer climbs with portfolio size, or a customer is silently dropped from a sweep   |
 | `test:soak`        | Storage grows with how many times we looked rather than with the estate                        |
+| `test:upgrade`     | A migration that is safe on an empty schema would destroy a customer's data                    |
+| `test:browser`     | The interface does not render, or renders something untrue                                     |
 | `test:mutation`    | A guard has rotted: its test would pass with the invariant broken                              |
 
 `test:tenancy` and `test:security` exist as their own jobs deliberately. A red
@@ -569,10 +582,70 @@ time had 1,677 tests passing over a defect that made a healthy estate go dark
 on day seven. A suite that never advances a clock cannot tell a product that
 maintains assurance from one that snapshots it.
 
-`test:load` and `test:soak` exist for the same reason, and were written next
-because of what `test:chaos` found. Each opens a dimension nothing had tested,
+`test:load`, `test:soak` and `test:upgrade` exist for the same reason, and were
+written next because of what `test:chaos` found. Each opens a dimension nothing had tested,
 and the first dimension opened contained four critical defects. Their measured
 numbers are below.
+
+`test:upgrade` is the one whose absence would have been found by a customer
+rather than by us. Every migration here had only ever run against an empty
+schema, because the harness rebuilds the database for each run — so a migration
+that is correct on an empty table and destroys data on a populated one would
+have failed for the first time during a customer's upgrade, with their
+assurance record inside it. **Thirty-two migrations now run against a database
+already holding an MSP, an organisation and a user**, and the suite asserts its
+own premise so it cannot quietly go back to migrating nothing.
+
+`test:browser` is the one that should have existed first. Ten pages, a shell
+and a brand with rules about what colour may mean what — and 1,758 tests passed
+over an interface **nobody had ever looked at.** The first viewer would have
+been an evaluating MSP.
+
+It found two defects in the first screenful. The portfolio page — the one an MSP
+opens first and then lives in — reported `0 CRITICAL FINDINGS · 0 FAILING
+CONTROLS · 0 UNKNOWN CONTROLS` for a customer with sixteen in-scope controls and
+no assessment, because it counted assessments rather than controls. All zeroes
+reads as "nothing wrong", which is the claim a green dashboard makes, only
+quieter; and the same count fed the attention ordering, so the customer Adericel
+could say least about sorted last. One level down, every control said "No
+evidence has been collected" about an organisation whose own Proof page reported
+three usable evidence records — a cause Adericel had not established, stated as
+though it had. Both are now **16 UNKNOWN CONTROLS** and "This has never been
+assessed", verified by looking at the page rather than by reading the SQL.
+
+It also made the brand's one hard rule testable for the first time. **Green
+means `PROVEN`** — a green heading on a page about something unproven is
+Adericel lying in the place a customer looks first — and that had only ever been
+asserted in prose and in a token test that rendered nothing. The suite now
+resolves the proven token off the live page, asks every element what colour it
+actually ended up with, and fails if anything wears it that is not about
+something proven. `Unknown` is asserted to wear no state colour at all, because
+any hue would place it on the good-to-bad axis and `Unknown` is not on that
+axis.
+
+The suite drives the real interface against the real API over a real socket, in
+a real browser. Not a render test with mocked fetches: what breaks an interface
+is usually the seam between it and the server, and a mock is a second
+implementation of the server written by whoever wrote the client.
+
+### A verification has to have looked at something
+
+The action lifecycle ends `EXECUTED → VERIFYING → CONFIRMED`, and the step that
+matters is the middle one: Adericel re-observes the customer's system rather
+than believing the executor's report of its own success. That was true of the
+code path, and not true of the boundary. `verify(actionId, observedValue:
+unknown)` took the deciding value **from its caller**. The one caller
+re-observed; the type permitted one that did not, and a `CONFIRMED` verification
+writes evidence that moves assurance state.
+
+Re-observation is now attestable. The only way to obtain a value `verify` will
+accept is to perform the re-observation, because the module that owns the brand
+owns the act — there is no exported constructor, deliberately. The check runs
+again at run time, because the API boundary deserialises JSON and a cast
+silences a compiler. And a verification row now names the `integration_runs`
+row its reading came out of, by foreign key, so an invented run identifier is
+refused by Postgres rather than by a convention. "We re-observed" is a record
+somebody can follow instead of a sentence in a comment.
 
 **A clean dependency audit is not a property of this code.** During one build
 session `pnpm audit` reported clean, then two high-severity advisories, then

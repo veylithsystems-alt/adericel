@@ -115,8 +115,15 @@ export interface CollectionService {
     >[0][number][],
     options: { integrationId: string | null; sourceSystem: string },
   ): Promise<IngestOutcome>;
-  /** Re-read one predicate for one subject, used by action verification. */
-  reobserve(integrationId: string, subjectExternalId: string, predicate: string): Promise<unknown>;
+  /**
+   * Re-observation deliberately does not live here.
+   *
+   * It moved to `reobservation.ts`, which owns a brand it does not export, so
+   * the only way to obtain a value the action service will verify against is
+   * to actually perform the re-observation. Leaving a `reobserve` here that
+   * returned a bare `unknown` would reinstate the hole (RR-095): a caller
+   * could pass anything of that type to `verify`.
+   */
 }
 
 export function createCollectionService(deps: CollectionServiceDeps): CollectionService {
@@ -728,22 +735,6 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
         correlationId,
       });
       return process(recorded.recorded, options.integrationId, options.sourceSystem);
-    },
-
-    async reobserve(integrationId, subjectExternalId, predicate): Promise<unknown> {
-      // Verification re-runs the connector and reads the claim that results.
-      // It deliberately goes back to the source rather than trusting the
-      // execution's own report of success.
-      await service.runIntegration(integrationId, 'VERIFICATION');
-      const row = await ctx.one<{ value: unknown }>(
-        `SELECT c.value FROM claims c
-         JOIN graph_nodes n ON n.id = c.subject_node_id
-         WHERE c.organisation_id = $1 AND c.predicate = $2 AND n.external_id = $3
-           AND c.status IN ('CANDIDATE', 'CONFIRMED')
-         ORDER BY c.asserted_at DESC LIMIT 1`,
-        [ctx.organisationId, predicate, subjectExternalId],
-      );
-      return row?.value;
     },
   };
 
