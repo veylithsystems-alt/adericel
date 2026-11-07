@@ -56,14 +56,6 @@
     "name": "monthlyChargeMinor"
   },
   {
-    "file": "packages/domain/src/contract-lifecycle.ts",
-    "name": "unmappedActionStates"
-  },
-  {
-    "file": "packages/domain/src/contract-lifecycle.ts",
-    "name": "unrealisedExecutionStages"
-  },
-  {
     "file": "packages/domain/src/finding.ts",
     "name": "isExceptionActive"
   },

@@ -748,9 +748,8 @@ export const MUTATIONS: readonly Mutation[] = [
     invariant:
       'An entry\'s heading and its State row must give the same answer to "is this risk live".',
     file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
-    find: "### RR-080 — The contract's lifecycles and the implemented ones have never been reconciled",
-    replace:
-      "### RR-080 — The contract's lifecycles and the implemented ones have never been reconciled — **CLOSED 21 Oct 2026**",
+    find: '### RR-093 — No release baseline is tagged',
+    replace: '### RR-093 — No release baseline is tagged — **CLOSED 6 Nov 2026**',
     suite: 'tests/unit/risk-register.test.ts',
     mustFail: ['never lets a heading contradict the state it records'],
   },
