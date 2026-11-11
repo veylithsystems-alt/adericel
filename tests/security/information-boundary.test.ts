@@ -312,15 +312,36 @@ describe.skipIf(!available)('the walls, under live requests', () => {
     });
 
     it('cannot see the company running the platform', async () => {
+      /**
+       * Two different correct answers, and neither is 200.
+       *
+       * The company routes are not registered on a product deployment, so the
+       * answer here is 404 — stronger than a refusal, because there is nothing
+       * to probe. On a company deployment they are present and the surface
+       * boundary refuses them, which is 403.
+       * `tests/company/veylith-boundary.test.ts` asserts the strict 403 with
+       * the routes actually registered; this asserts that a client view gets
+       * neither the data nor a hint, whichever deployment it is.
+       */
       for (const path of [
         '/v1/veylith/exceptions',
         '/v1/veylith/autonomy',
         '/v1/veylith/processes',
         '/v1/veylith/events',
         '/v1/veylith/decisions',
-        '/v1/system/health',
-        '/v1/system/outbox',
       ]) {
+        const response = await harness.server.inject({
+          method: 'GET',
+          url: path,
+          headers: bearer(clientToken),
+        });
+        expect([403, 404], `${path} answered ${response.statusCode}`).toContain(
+          response.statusCode,
+        );
+      }
+      // The platform's own observability is a product surface, registered on
+      // every deployment, so it must be refused rather than absent.
+      for (const path of ['/v1/system/health', '/v1/system/outbox']) {
         const response = await harness.server.inject({
           method: 'GET',
           url: path,
@@ -356,20 +377,41 @@ describe.skipIf(!available)('the walls, under live requests', () => {
     });
 
     it('cannot see the company running the platform', async () => {
-      for (const path of ['/v1/veylith/exceptions', '/v1/veylith/autonomy', '/v1/system/outbox']) {
+      // Absent on a product deployment, refused on a company one; see the
+      // client view above for why both are correct.
+      for (const path of ['/v1/veylith/exceptions', '/v1/veylith/autonomy']) {
         const response = await harness.server.inject({
           method: 'GET',
           url: path,
           headers: bearer(mspToken),
         });
-        expect(response.statusCode, `${path} was served to an MSP`).toBe(403);
+        expect([403, 404], `${path} answered ${response.statusCode}`).toContain(
+          response.statusCode,
+        );
       }
+      const outbox = await harness.server.inject({
+        method: 'GET',
+        url: '/v1/system/outbox',
+        headers: bearer(mspToken),
+      });
+      expect(outbox.statusCode, '/v1/system/outbox was served to an MSP').toBe(403);
     });
   });
 
   describe('the internal control room', () => {
-    it('sees how the company is running', async () => {
-      for (const path of ['/v1/veylith/exceptions', '/v1/veylith/autonomy', '/v1/system/outbox']) {
+    it('sees the platform surfaces that are its own', async () => {
+      /**
+       * Narrowed, deliberately.
+       *
+       * This used to assert that the company routes answered 200 to a platform
+       * administrator, which required them to be registered — so this file
+       * could only pass with Veylith's code present, and the product's own
+       * repository could not run it. The company half moved to
+       * `tests/company/veylith-boundary.test.ts`; what stays is the product
+       * surface a platform administrator is entitled to, which is the half this
+       * suite is about.
+       */
+      for (const path of ['/v1/system/outbox']) {
         const response = await harness.server.inject({
           method: 'GET',
           url: path,
