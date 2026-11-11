@@ -9,10 +9,25 @@ import {
   DEFAULT_COMPANY_POLICY,
 } from '@adericel/vaol';
 import { AdericelError } from '@adericel/shared';
-import type { AppContext } from '../context.js';
-import { audit, requirePlatform } from '../middleware/request-context.js';
-import { retentionSchedule } from '../services/retention.js';
-import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
+/**
+ * Everything this file needs from the product, through the product's public
+ * surface.
+ *
+ * It used to live inside `apps/api/src` and reach into the app with relative
+ * imports, which is why the product could not be extracted into its own
+ * repository without editing manifests on the way out. It is now a consumer of
+ * `@adericel/api` like any other, and the dependency points company → product
+ * with nothing pointing back.
+ */
+import {
+  audit,
+  parseBody,
+  parseParams,
+  parseQuery,
+  requirePlatform,
+  retentionSchedule,
+  type AppContext,
+} from '@adericel/api';
 
 /**
  * The internal control room.

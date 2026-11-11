@@ -78,6 +78,7 @@
     "@adericel/support": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
     "@adericel/vaol": "workspace:*",
+    "@adericel/veylith": "workspace:*",
     "@adericel/worker": "workspace:*",
     "@eslint/js": "^9.37.0",
     "@fontsource/inter": "^5.3.0",

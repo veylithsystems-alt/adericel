@@ -26,7 +26,6 @@
     "@adericel/triage": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
     "@adericel/value": "workspace:*",
-    "@adericel/vaol": "workspace:*",
     "@fastify/cors": "^11.1.0",
     "@fastify/helmet": "^13.0.1",
     "@fastify/multipart": "^9.2.1",
