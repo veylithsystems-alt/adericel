@@ -289,7 +289,7 @@ quietly left blank.
 
 ## What is in this repository
 
-Twenty workspace packages. The dependency direction is acyclic and enforced by a
+Eighteen workspace packages. The dependency direction is acyclic and enforced by a
 test rather than by intent: `shared` → `domain` → {`graph`, `evidence`, `policy`,
 `truth-engine`} → everything else → `apps`. Nothing `truth-engine` depends on can
 perform I/O.
@@ -311,7 +311,6 @@ perform I/O.
 | Package                                            | What it is, and what it refuses to do                                                                                                                                                           |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`packages/actions`](./packages/actions)           | The action lifecycle: propose → approve → execute → verify. Dispatch is never success; an outcome that cannot be established goes to reconciliation.                                            |
-| [`packages/autonomy`](./packages/autonomy)         | A five-valued authority engine. Pure, and `UNKNOWN` never permits.                                                                                                                              |
 | [`packages/containment`](./packages/containment)   | Governed containment C0–C5, its authority model and recovery preconditions. No level withholds an organisation's own assurance record, and automation can enter containment but never leave it. |
 | [`packages/integrations`](./packages/integrations) | One connector contract, SSRF-guarded egress, and a connector that declares what it can observe. A connector never decides assurance truth.                                                      |
 | [`packages/inference`](./packages/inference)       | Local-first inference. Sovereignty is a classification the code enforces: an external provider does not start without a written acknowledgement, and extraction must quote the document.        |
@@ -330,9 +329,8 @@ perform I/O.
 
 **The company layer**, which a customer never receives.
 
-| Package                            | What it is                                                                                                                                                                       |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`packages/vaol`](./packages/vaol) | Veylith's own operating layer: the autonomy gate, the exception queue, the business ledger, the commercial pipeline. Off by default and absent from a product build — see below. |
+| Package | What it is |
+| ------- | ---------- |
 
 **Everything else.**
 

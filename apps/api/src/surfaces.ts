@@ -83,6 +83,12 @@ const COMMON_ROUTES = new Set([
   'POST /v1/auth/mfa/totp/confirm',
   'DELETE /v1/auth/mfa/totp',
   'GET /v1/capabilities',
+  /**
+   * The retention schedule. A property of the software, naming no
+   * organisation, and the answer to a question any person may ask about
+   * themselves — so it belongs to every surface equally.
+   */
+  'GET /v1/retention',
   'GET /v1/rulesets',
   'GET /v1/connectors',
   'GET /v1/graph/schema',

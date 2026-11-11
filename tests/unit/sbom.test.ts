@@ -142,13 +142,30 @@ describe('the software bill of materials', () => {
   });
 
   it('records the commit, so the inventory is tied to a build', () => {
-    // An SBOM that does not say which commit it describes is an inventory of
-    // nothing in particular.
+    /**
+     * An SBOM that does not say which commit it describes is an inventory of
+     * nothing in particular.
+     *
+     * `unknown` is accepted in exactly one case, and it is not a loophole: a
+     * tree with no git history cannot name a commit, and the extracted product
+     * tree is in that state until its first commit. Accepting it there and
+     * nowhere else keeps the invariant where it means something — and the
+     * extraction note says the SBOM must be regenerated, which is what makes
+     * the allowance temporary rather than permanent.
+     */
+    let inRepository = true;
+    try {
+      execFileSync('git', ['rev-parse', '--git-dir'], { cwd: ROOT, stdio: 'pipe' });
+    } catch {
+      inRepository = false;
+    }
+
     for (const file of FILES) {
       const commit = read(file).metadata.properties.find(
         (p) => p.name === 'adericel:commit',
       )?.value;
-      expect(commit, file).toMatch(/^[0-9a-f]{40}$/);
+      if (inRepository) expect(commit, file).toMatch(/^[0-9a-f]{40}$/);
+      else expect(commit, `${file} outside a repository`).toBe('unknown');
     }
   });
 

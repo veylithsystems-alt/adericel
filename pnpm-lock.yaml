@@ -120,9 +120,6 @@ importers:
       '@adericel/actions':
         specifier: workspace:*
         version: link:../../packages/actions
-      '@adericel/autonomy':
-        specifier: workspace:*
-        version: link:../../packages/autonomy
       '@adericel/billing':
         specifier: workspace:*
         version: link:../../packages/billing

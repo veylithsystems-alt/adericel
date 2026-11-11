@@ -12,6 +12,7 @@ import { predicatesForConnectorFrom } from '@adericel/integrations';
 import { referencedPredicates } from '@adericel/truth-engine';
 import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
+import { retentionSchedule } from '../services/retention.js';
 import { audit, requireOrganisation } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery, organisationParam } from '../middleware/validation.js';
 import { explainEvidenceGaps } from '../services/observation-coverage.js';
@@ -721,6 +722,27 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
 
       return reply.status(200).send(result);
     },
+  );
+
+  /**
+   * What this deployment holds about a person, and for how long.
+   *
+   * COMMON on purpose: the right to know belongs to the person rather than to a
+   * surface, the answer is a property of the software and names no
+   * organisation, and it is identical for every caller.
+   *
+   * It had no route at all until now. `retentionSchedule()` was implemented,
+   * tested, and reachable only through Veylith's internal control room — so
+   * Adericel could tell the company what it retained and could not tell the
+   * people it retained it about. Found by extracting the product and running
+   * the reachability check against the tree a customer would actually receive
+   * (RR-086's shape, with a data-protection edge).
+   *
+   * Read straight from the same registry the retention sweep runs from, so a
+   * published schedule cannot describe a policy the code does not implement.
+   */
+  server.get('/v1/retention', { preHandler: server.authenticate }, async (_request, reply) =>
+    reply.status(200).send({ schedule: retentionSchedule() }),
   );
 
   /** The rulesets this build can run, with their hashes. */

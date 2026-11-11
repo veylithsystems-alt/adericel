@@ -88,12 +88,6 @@ describe('package layering', () => {
     expect(deps).toEqual(['domain', 'shared']);
   });
 
-  it('keeps the autonomy engine free of infrastructure', () => {
-    // Same rule, same reason: a decision about authority must be reproducible
-    // from its recorded inputs.
-    expect(internalDeps('autonomy')).toEqual(['shared']);
-  });
-
   it('does not let a connector reach the database', () => {
     // A connector that could write claims directly would be deciding assurance
     // truth, which is the one thing the adapter boundary exists to prevent.

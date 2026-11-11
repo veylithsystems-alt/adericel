@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@adericel/actions": "workspace:*",
-    "@adericel/autonomy": "workspace:*",
     "@adericel/billing": "workspace:*",
     "@adericel/containment": "workspace:*",
     "@adericel/domain": "workspace:*",

@@ -27,7 +27,6 @@ COPY packages/graph/package.json         packages/graph/
 COPY packages/evidence/package.json      packages/evidence/
 COPY packages/truth-engine/package.json  packages/truth-engine/
 COPY packages/policy/package.json        packages/policy/
-COPY packages/autonomy/package.json      packages/autonomy/
 COPY packages/value/package.json         packages/value/
 COPY packages/triage/package.json        packages/triage/
 COPY packages/questionnaire/package.json packages/questionnaire/
@@ -81,7 +80,6 @@ COPY --from=build /app/packages/graph/dist         packages/graph/dist/
 COPY --from=build /app/packages/evidence/dist      packages/evidence/dist/
 COPY --from=build /app/packages/truth-engine/dist  packages/truth-engine/dist/
 COPY --from=build /app/packages/policy/dist        packages/policy/dist/
-COPY --from=build /app/packages/autonomy/dist      packages/autonomy/dist/
 COPY --from=build /app/packages/value/dist         packages/value/dist/
 COPY --from=build /app/packages/triage/dist        packages/triage/dist/
 COPY --from=build /app/packages/questionnaire/dist packages/questionnaire/dist/
@@ -146,8 +144,10 @@ CMD ["node", "apps/api/dist/main.js"]
 #   docker build -f infrastructure/docker/Dockerfile --target company -t veylith/adericel .
 FROM runtime AS company
 USER root
+COPY packages/autonomy/package.json packages/autonomy/
 COPY packages/vaol/package.json packages/vaol/
 COPY apps/veylith/package.json apps/veylith/
+COPY --from=build /app/packages/autonomy/dist packages/autonomy/dist/
 COPY --from=build /app/packages/vaol/dist   packages/vaol/dist/
 COPY --from=build /app/apps/veylith/dist    apps/veylith/dist/
 USER node
