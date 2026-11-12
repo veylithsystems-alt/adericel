@@ -39,9 +39,42 @@ const available = await databaseAvailable();
 const ROOT = join(import.meta.dirname, '..', '..');
 const TEST_PASSWORD = 'Test-password-2026!';
 
-/** Chromium is in the image; Playwright finds it through PLAYWRIGHT_BROWSERS_PATH. */
+/**
+ * Chromium, from wherever this machine actually has one.
+ *
+ * `PLAYWRIGHT_BROWSERS_PATH` points at a browser set installed with the image,
+ * and the pinned Playwright version expects a specific build number inside it.
+ * When the two disagree — the image ships a newer build than the pinned library
+ * asks for — the default launch fails with "Executable doesn't exist" and
+ * advises running `playwright install`, which would download a second copy of
+ * Chromium on every machine and is exactly what the image exists to avoid.
+ *
+ * So the default is tried first, and on failure the image's own binary is used
+ * directly. Stated rather than silently worked around: this suite is about
+ * whether the interface renders, and it should not fail for the version number
+ * of a browser build.
+ */
 async function launch(): Promise<Browser> {
-  return chromium.launch({ args: ['--no-sandbox'] });
+  const args = ['--no-sandbox'];
+  try {
+    return await chromium.launch({ args });
+  } catch (error) {
+    const { existsSync, readdirSync } = await import('node:fs');
+    const root = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/opt/pw-browsers';
+    const candidates = existsSync(root)
+      ? readdirSync(root)
+          .filter((name) => name.startsWith('chromium-'))
+          .map((name) => `${root}/${name}/chrome-linux64/chrome`)
+          .concat(
+            readdirSync(root)
+              .filter((name) => name.startsWith('chromium-'))
+              .map((name) => `${root}/${name}/chrome-linux/chrome`),
+          )
+      : [];
+    const executablePath = candidates.find((candidate) => existsSync(candidate));
+    if (executablePath === undefined) throw error;
+    return chromium.launch({ args, executablePath });
+  }
 }
 
 /**
