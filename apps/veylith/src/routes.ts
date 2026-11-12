@@ -6,6 +6,7 @@ import {
   createExceptionQueue,
   createMetricsService,
   createOperator,
+  COMPANY_PERSONAL_DATA,
   DEFAULT_COMPANY_POLICY,
 } from '@adericel/vaol';
 import { AdericelError } from '@adericel/shared';
@@ -89,7 +90,9 @@ export function registerVeylithRoutes(server: FastifyInstance, app: AppContext):
           : Math.floor((Date.parse(app.clock.nowIso()) - Date.parse(lastRun)) / 3_600_000);
 
       return reply.status(200).send({
-        schedule: retentionSchedule(),
+        // Product plus company: this deployment holds both, and the schedule
+        // must say so. A customer's deployment holds only the first.
+        schedule: retentionSchedule(COMPANY_PERSONAL_DATA),
         lastRunAt: lastRun,
         hoursSinceLastRun: hoursSince,
         // The sweep is scheduled daily. Anything past 48 hours means it has

@@ -1,6 +1,7 @@
 import {
   PERSONAL_DATA_REGISTRY,
   timeLimitedEntries,
+  type AdditionalPersonalData,
   type PersonalDataEntry,
 } from '@adericel/domain';
 import type { Database } from '@adericel/graph';
@@ -107,14 +108,25 @@ function sweepTreatment(entry: PersonalDataEntry): 'DELETE' | 'PSEUDONYMISE' {
  */
 export async function sweepRetention(
   app: RetentionDeps,
-  options: { readonly dryRun?: boolean } = {},
+  options: {
+    readonly dryRun?: boolean;
+    /**
+     * Personal data this deployment holds beyond the product's own register.
+     *
+     * Empty for a customer. Veylith's deployment adds the data the company
+     * holds as a controller — see `COMPANY_PERSONAL_DATA`. The sweep must see
+     * them or the company's own retention periods would never be enforced,
+     * which is the failure mode of moving them out of the shared register.
+     */
+    readonly additionalPersonalData?: AdditionalPersonalData;
+  } = {},
 ): Promise<RetentionReport> {
   const applied = options.dryRun !== true;
   const ranAt = app.clock.nowIso();
   const nowMs = app.clock.nowEpochMs();
   const outcomes: RetentionOutcome[] = [];
 
-  for (const entry of timeLimitedEntries()) {
+  for (const entry of timeLimitedEntries(options.additionalPersonalData ?? [])) {
     const days = entry.retention.days;
     const timestampColumn = entry.retention.timestampColumn;
     if (days === null || timestampColumn === null) continue;
@@ -190,7 +202,7 @@ export async function sweepRetention(
  * Read straight from the same constant the sweep runs from, so a published
  * retention schedule cannot describe a policy the code does not implement.
  */
-export function retentionSchedule(): readonly {
+export function retentionSchedule(extra: AdditionalPersonalData = []): readonly {
   entry: string;
   subject: string;
   role: string;
@@ -201,7 +213,7 @@ export function retentionSchedule(): readonly {
   rationale: string;
   onErasure: string;
 }[] {
-  return PERSONAL_DATA_REGISTRY.map((entry) => ({
+  return [...PERSONAL_DATA_REGISTRY, ...extra].map((entry) => ({
     entry: entryName(entry),
     subject: entry.subject,
     role: entry.role,
