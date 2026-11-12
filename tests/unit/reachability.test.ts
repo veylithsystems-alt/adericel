@@ -1,6 +1,10 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findUnreached } from '../../scripts/reachability.js';
 import baseline from './reachability-baseline.json' with { type: 'json' };
+
+const ROOT = join(import.meta.dirname, '..', '..');
 
 /**
  * Behaviour that is written, exported, tested, and never invoked.
@@ -71,7 +75,20 @@ describe('every exported behaviour is reached by something', () => {
      * line has to come out — so the list always describes the debt that
      * actually exists rather than the debt that existed in October.
      */
-    const stale = [...known].filter((entry) => !unreached.some((item) => key(item) === entry));
+    /**
+     * An entry whose file is not in this tree is absent, not fixed.
+     *
+     * The product tree does not carry the company layer, so a baseline entry
+     * naming a company file is neither unreached nor wired up there — it simply
+     * is not present, and failing on it would make the product's own repository
+     * fail this check for being the product. Checked against the filesystem
+     * rather than assumed, so a genuinely deleted file in this repository still
+     * fails as it should.
+     */
+    const present = (entry: string): boolean => existsSync(join(ROOT, entry.split('::')[0] ?? ''));
+    const stale = [...known]
+      .filter(present)
+      .filter((entry) => !unreached.some((item) => key(item) === entry));
     expect(
       stale,
       'These baseline entries are no longer unreached — they have been wired up or deleted. ' +

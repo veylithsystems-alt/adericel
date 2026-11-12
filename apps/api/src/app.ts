@@ -42,7 +42,30 @@ import { buildOpenApiDocument } from './openapi.js';
  * handler is installed before routes so a failure during route registration is
  * still reported in the standard shape.
  */
-export async function buildServer(app: AppContext): Promise<FastifyInstance> {
+/**
+ * A deployment's own route registrar.
+ *
+ * Deliberately the same shape as the product's own `register*Routes` functions,
+ * so the company layer composes exactly as a product surface does and gets no
+ * privileged hook of its own.
+ */
+export type RouteRegistrar = (server: FastifyInstance, app: AppContext) => void;
+
+export interface BuildServerOptions {
+  /**
+   * Registrars a deployment adds on top of the product's own surfaces.
+   *
+   * Empty for every customer deployment. A company deployment passes Veylith's
+   * control room here. There is no way to reach into the product and ask for
+   * them: whatever is in this array is what the entry point chose to pass.
+   */
+  readonly additionalRoutes?: readonly RouteRegistrar[];
+}
+
+export async function buildServer(
+  app: AppContext,
+  options?: BuildServerOptions,
+): Promise<FastifyInstance> {
   const server = Fastify({
     // Fastify's own request logging is disabled; Adericel emits one structured
     // line per request in the onResponse hook, with the correlation id attached.
@@ -162,24 +185,26 @@ export async function buildServer(app: AppContext): Promise<FastifyInstance> {
   registerGraphRoutes(server, app);
   registerIntegrationRoutes(server, app);
   /**
-   * The company layer, and only where it belongs.
+   * Anything a deployment composes on top, registered last among the routes.
    *
-   * These routes serve Veylith's own control room. A customer self-hosting
-   * Adericel gets none of them registered at all — not refused by
-   * authorisation, not present. An unregistered path resolves to no surface,
-   * which `decide` already refuses, but not registering it is stronger: there
-   * is nothing to probe and nothing to get wrong later.
+   * This is where Veylith's own control room arrives on a company deployment —
+   * and the point is that **this file cannot name it.** The product app used to
+   * hold a company route file and a dynamic import behind a flag, which kept
+   * the company layer out of the product's module graph but not out of its
+   * source tree: `apps/api` declared the company package in its manifest and
+   * its TypeScript project referenced it, so the product could not be extracted
+   * into its own repository without editing manifests on the way out. A
+   * separation that needs a patch script to hold is one that eventually does
+   * not hold.
    *
-   * `ADERICEL_COMPANY_LAYER` defaults to off. See `config.ts` for why that
-   * direction is the safe one.
+   * So the composition is inverted. The product knows only that a deployment
+   * may hand it extra registrars; the company's own entry point is the
+   * deployment that hands it the company ones, and it depends on this app
+   * rather than the other way round. `tests/unit/architecture.test.ts` asserts
+   * the product names nothing company, in its source and in its manifests.
    */
-  if (app.config.companyLayerEnabled) {
-    // Dynamic, and that is the substance rather than a style choice: a static
-    // import would put `@adericel/vaol` in the module graph of every
-    // deployment, so a product build could not be shipped without the company
-    // layer even though it never calls it.
-    const { registerVeylithRoutes } = await import('./routes/veylith.js');
-    registerVeylithRoutes(server, app);
+  for (const register of options?.additionalRoutes ?? []) {
+    register(server, app);
   }
   registerPortfolioRoutes(server, app);
   /**

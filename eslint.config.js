@@ -9,6 +9,10 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
+      // Scratch output, including an extracted product tree. Linting a copy of
+      // the repository reports every finding twice and, worse, reports them at
+      // paths nobody can fix.
+      'var/**',
       'apps/web/dist/**',
       'workflows/n8n/adericel.n8n.json',
     ],

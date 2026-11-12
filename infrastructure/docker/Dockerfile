@@ -27,8 +27,6 @@ COPY packages/graph/package.json         packages/graph/
 COPY packages/evidence/package.json      packages/evidence/
 COPY packages/truth-engine/package.json  packages/truth-engine/
 COPY packages/policy/package.json        packages/policy/
-COPY packages/autonomy/package.json      packages/autonomy/
-COPY packages/vaol/package.json          packages/vaol/
 COPY packages/value/package.json         packages/value/
 COPY packages/triage/package.json        packages/triage/
 COPY packages/questionnaire/package.json packages/questionnaire/
@@ -82,8 +80,6 @@ COPY --from=build /app/packages/graph/dist         packages/graph/dist/
 COPY --from=build /app/packages/evidence/dist      packages/evidence/dist/
 COPY --from=build /app/packages/truth-engine/dist  packages/truth-engine/dist/
 COPY --from=build /app/packages/policy/dist        packages/policy/dist/
-COPY --from=build /app/packages/autonomy/dist      packages/autonomy/dist/
-COPY --from=build /app/packages/vaol/dist          packages/vaol/dist/
 COPY --from=build /app/packages/value/dist         packages/value/dist/
 COPY --from=build /app/packages/triage/dist        packages/triage/dist/
 COPY --from=build /app/packages/questionnaire/dist packages/questionnaire/dist/
@@ -112,22 +108,48 @@ CMD ["node", "apps/api/dist/main.js"]
 # ------------------------------------------------------------------- product
 # Adericel as a customer receives it.
 #
-# Identical to `runtime` with one thing removed: Veylith's own operating layer.
-# An MSP self-hosting Adericel has no business holding the company's autonomy
-# gate, exception queue, business ledger or commercial pipeline, and until
-# ADR-0049 they received all four.
+# `runtime` above is already this: it copies no company manifest and no company
+# compiled output, because the product's own app names neither.
 #
-# Removing the compiled output rather than the manifest is deliberate. The
-# manifest stays so pnpm's symlink tree is intact and the image starts; the code
-# is absent, so `await import('@adericel/vaol')` fails loudly if anybody ever
-# sets ADERICEL_COMPANY_LAYER on a product image. A silent success there would be
-# worse than a crash: it would mean the separation was decorative.
+# This target used to delete things — `rm -rf packages/vaol/dist` and the
+# compiled company route module — because the product's app declared the company
+# layer and reached it through a guarded dynamic import. The deletion made the
+# guard fail loudly rather than silently, which was right for that design, and
+# it meant the separation was maintained by a removal step. Forgetting the step
+# shipped Veylith's autonomy gate, exception queue and business ledger to a
+# customer.
+#
+# The composition is now inverted, so there is nothing to remove. This target
+# remains so the documented build command keeps working and an operator can say
+# which image they built.
 #
 # Build with:
 #   docker build -f infrastructure/docker/Dockerfile --target product -t adericel/product .
 FROM runtime AS product
-USER root
-RUN rm -rf packages/vaol/dist apps/api/dist/routes/veylith.js apps/api/dist/routes/veylith.js.map
-USER node
 ENV ADERICEL_COMPANY_LAYER=false
 CMD ["node", "apps/api/dist/main.js"]
+
+# ------------------------------------------------------------------- company
+# Veylith's own deployment: the product, plus the company layer composed on top.
+#
+# A separate target rather than a flag on the product image. The product image
+# has no company code in it to switch on, which is the point — a configuration
+# mistake on a customer's instance cannot produce Veylith's control room,
+# because the bytes are not there.
+#
+# Note the direction: this adds to the product. Nothing is removed from the
+# product image to make it, so there is no removal step to forget.
+#
+# Build with:
+#   docker build -f infrastructure/docker/Dockerfile --target company -t veylith/adericel .
+FROM runtime AS company
+USER root
+COPY packages/autonomy/package.json packages/autonomy/
+COPY packages/vaol/package.json packages/vaol/
+COPY apps/veylith/package.json apps/veylith/
+COPY --from=build /app/packages/autonomy/dist packages/autonomy/dist/
+COPY --from=build /app/packages/vaol/dist   packages/vaol/dist/
+COPY --from=build /app/apps/veylith/dist    apps/veylith/dist/
+USER node
+ENV ADERICEL_COMPANY_LAYER=true
+CMD ["node", "apps/veylith/dist/main.js"]

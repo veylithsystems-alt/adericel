@@ -86,6 +86,29 @@ const NUMBER_WORDS: Record<string, number> = Object.fromEntries(
   Array.from({ length: 1000 }, (_, value) => [inWords(value), value]),
 );
 
+/**
+ * The company's own workspaces, which the product's README does not document.
+ *
+ * `packages/vaol` is Veylith's operating layer, `packages/autonomy` is the
+ * policy compiler for what **the company** may do unattended, and
+ * `apps/veylith` is Veylith's deployment. The README belongs to the product,
+ * and the product ships none of them — so a README listing them would describe
+ * software its reader does not have. Named here once rather than special-cased
+ * in four tests.
+ *
+ * A customer organisation's own autonomy level is a different thing and lives
+ * in `packages/domain`, which the product keeps.
+ */
+const COMPANY_PACKAGES = new Set(['vaol', 'autonomy']);
+
+/** The packages the product actually contains. */
+function productPackages(): readonly string[] {
+  return readdirSync(join(ROOT, 'packages'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => !COMPANY_PACKAGES.has(name));
+}
+
 describe('the README describes the repository that exists', () => {
   /**
    * `lists every package` used to live here, checking that each package name
@@ -120,9 +143,11 @@ describe('the README describes the repository that exists', () => {
     const stated = /\b([a-z-]+)\s+workspace packages\b/i.exec(readme)?.[1]?.toLowerCase();
     if (stated === undefined) return; // No claim made, nothing to be wrong about.
 
-    const actual = readdirSync(join(ROOT, 'packages'), { withFileTypes: true }).filter((entry) =>
-      entry.isDirectory(),
-    ).length;
+    // Counted over the product's packages. The company's operating layer is not
+    // the product's to count, and in the extracted product tree it is not there
+    // at all — a count including it was wrong in both trees for opposite
+    // reasons.
+    const actual = productPackages().length;
     expect(
       NUMBER_WORDS[stated],
       `The README says "${stated} workspace packages" and there are ${actual}.`,
@@ -190,14 +215,36 @@ describe('the decision records are indexed', () => {
   });
 });
 
-describe('the migrations are contiguous', () => {
-  it('numbers them without gaps or duplicates', () => {
+describe('the migrations are numbered honestly', () => {
+  it('numbers them without duplicates, and strictly increasing', () => {
+    /**
+     * Contiguity was the wrong invariant, and the extracted product tree proved
+     * it.
+     *
+     * The rule used to be "no gaps", on the reasoning that a gap means a
+     * migration was deleted rather than superseded. That holds in a tree that
+     * carries every layer — and the product carries one. Veylith's three
+     * migrations occupy numbers in the shared sequence, so removing the company
+     * layer leaves gaps **by construction**, and a product repository would
+     * have failed this check on the day it was created for doing exactly the
+     * right thing.
+     *
+     * What the check was really for is preserved: no two migrations share an
+     * identity, and the order is unambiguous. A deleted migration is caught by
+     * the ledger instead — the runner refuses a schema whose applied set does
+     * not match the files, which is a stronger statement than a numbering
+     * convention.
+     */
     const files = readdirSync(join(ROOT, 'database', 'migrations')).filter((f) =>
       f.endsWith('.sql'),
     );
     const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
-    expect(new Set(numbers).size).toBe(numbers.length);
-    expect(numbers).toEqual(numbers.map((_, index) => index + 1));
+    expect(numbers.length, 'no migrations found at all').toBeGreaterThan(10);
+    expect(new Set(numbers).size, 'two migrations share a number').toBe(numbers.length);
+    for (const [index, number] of numbers.entries()) {
+      if (index === 0) continue;
+      expect(number, 'the sequence is not increasing').toBeGreaterThan(numbers[index - 1] ?? 0);
+    }
   });
 
   it('gives every migration a down path', () => {
@@ -436,9 +483,16 @@ describe('the README explains every package, rather than listing it', () => {
    */
   const prose = readme.replace(/```[\s\S]*?```/g, '');
 
-  const packages = readdirSync(join(ROOT, 'packages'), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+  /**
+   * The product's packages. Veylith's operating layer is not among them.
+   *
+   * The README belongs to the product, and the product ships no company layer —
+   * so requiring the README to explain `packages/vaol` required it to describe
+   * software its reader does not have, and requiring a resolvable link to it
+   * made the README unusable in the extracted product tree, where the path is
+   * not there. Both were wrong for the same reason.
+   */
+  const packages = productPackages();
 
   it('finds packages to check', () => {
     // A guard on the guard. An empty list would make the checks below vacuous,

@@ -250,19 +250,4 @@ describe('tenant-scoped routes', () => {
     }
     expect(offenders).toEqual([]);
   });
-
-  it('checks a platform permission on every company route', () => {
-    const source = readFileSync(join(ROUTES, 'veylith.ts'), 'utf8');
-    const registration = /server\.(get|post|put|patch|delete)\(/g;
-    const offenders: string[] = [];
-    let match: RegExpExecArray | null;
-    while ((match = registration.exec(source)) !== null) {
-      const rest = source.slice(match.index);
-      const nextIndex = rest.slice(1).search(/\n {2}server\.(get|post|put|patch|delete)\(/);
-      const body = nextIndex === -1 ? rest : rest.slice(0, nextIndex + 1);
-      const path = /['"`](\/[^'"`]*)['"`]/.exec(body)?.[1] ?? '';
-      if (!/requirePlatform\(/.test(body)) offenders.push(path);
-    }
-    expect(offenders).toEqual([]);
-  });
 });

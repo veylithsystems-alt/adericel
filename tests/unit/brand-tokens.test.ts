@@ -192,15 +192,27 @@ const distributionLockups = REQUIRED_ASSETS.filter((file) => file.startsWith('lo
 
 describe('v1.2 §8 — the invalid exception value', () => {
   it('appears nowhere in the repository', async () => {
-    // The v1.1 sheet printed an eight-character string for --c-exception that
-    // is not a valid hex colour. §8 requires it removed from the entire
-    // repository including generated asset metadata, so this walks the tracked
-    // tree rather than checking the files this suite happens to know about.
-    const { execFileSync } = await import('node:child_process');
+    /**
+     * The v1.1 sheet printed an eight-character string for `--c-exception` that
+     * is not a valid hex colour. §8 requires it gone from the entire repository
+     * including generated asset metadata, so this walks the whole tree rather
+     * than the files this suite happens to know about.
+     *
+     * A filesystem walk rather than `git ls-files`, and that is a fix rather
+     * than a preference. The git version crashed in the extracted product tree,
+     * which has no history yet — and it was weaker anyway: an untracked file
+     * carrying the banned value would have passed.
+     */
+    const { readdirSync } = await import('node:fs');
     const repo = fileURLToPath(new URL('../../', import.meta.url));
-    const tracked = execFileSync('git', ['ls-files'], { cwd: repo, encoding: 'utf8' })
-      .split('\n')
-      .filter(Boolean);
+    const skip = new Set(['node_modules', 'dist', '.git', 'var', 'coverage']);
+    const walk = (dir: string, prefix = ''): string[] =>
+      readdirSync(`${repo}${dir}`, { withFileTypes: true }).flatMap((entry) => {
+        if (skip.has(entry.name)) return [];
+        const path = prefix === '' ? entry.name : `${prefix}/${entry.name}`;
+        return entry.isDirectory() ? walk(`${dir}${entry.name}/`, path) : [path];
+      });
+    const tracked = walk('');
 
     const banned = ['#', '9', '6', '6', '6', '0', '1', 'A'].join('');
     const offenders: string[] = [];
