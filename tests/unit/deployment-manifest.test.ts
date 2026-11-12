@@ -64,6 +64,71 @@ describe('runtime image manifest', () => {
     expect(missing, 'these packages would not resolve inside the image').toEqual([]);
   });
 
+  it('copies the manifest of every package the image compiles', () => {
+    /**
+     * A different set from "what the server needs", and the difference is what
+     * broke the image build.
+     *
+     * The check above walks the dependency closure of the API and the worker —
+     * correctly, for the question it asks. But the build stage runs `tsc -b`
+     * over `tsconfig.build.json`, which walks **every** project reference, and
+     * a package the apps do not depend on still has to compile. `resolution`
+     * and `crosswalk` had no manifest copied, so pnpm never installed their
+     * dependencies and the build failed with `Cannot find module 'zod'` —
+     * neither of them being in the closure this suite had been checking.
+     */
+    const references =
+      (
+        JSON.parse(readFileSync(path.join(root, 'tsconfig.build.json'), 'utf8')) as {
+          references?: { path: string }[];
+        }
+      ).references ?? [];
+    const compiled = references
+      .map((reference) => /^\.\/packages\/([a-z-]+)$/.exec(reference.path)?.[1])
+      .filter((name): name is string => name !== undefined);
+
+    // The premise: a reference list that parsed to nothing would pass vacuously.
+    expect(compiled.length, 'no package references found in tsconfig.build.json').toBeGreaterThan(
+      10,
+    );
+
+    const missing = compiled
+      .filter((name) => !dockerfile.includes(`packages/${name}/package.json`))
+      .sort();
+    expect(
+      missing,
+      'the image compiles these packages and copies no manifest for them, so their ' +
+        'dependencies will not be installed',
+    ).toEqual([]);
+  });
+
+  it('builds every app project the build configuration references', () => {
+    /**
+     * The same failure one level up. `tsconfig.build.json` gained
+     * `apps/veylith`, the build stage copied only `apps/api` and `apps/worker`,
+     * and `tsc -b` stopped with "Cannot read file
+     * '/app/apps/veylith/tsconfig.json'".
+     */
+    const references =
+      (
+        JSON.parse(readFileSync(path.join(root, 'tsconfig.build.json'), 'utf8')) as {
+          references?: { path: string }[];
+        }
+      ).references ?? [];
+    const apps = references
+      .map((reference) => /^\.\/apps\/([a-z-]+)$/.exec(reference.path)?.[1])
+      .filter((name): name is string => name !== undefined)
+      // The interface is built by its own job and its own Dockerfile.
+      .filter((name) => name !== 'web');
+
+    expect(apps.length, 'no app references found in tsconfig.build.json').toBeGreaterThan(1);
+    const missing = apps.filter((name) => !dockerfile.includes(`COPY apps/${name}/ apps/${name}/`));
+    expect(
+      missing,
+      'the build compiles these apps and the build stage does not copy their source',
+    ).toEqual([]);
+  });
+
   it('copies the build output of every package the server needs', () => {
     const needed = serverPackages();
     const missing = [...needed]

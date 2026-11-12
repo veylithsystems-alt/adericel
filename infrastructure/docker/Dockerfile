@@ -32,6 +32,8 @@ COPY packages/triage/package.json        packages/triage/
 COPY packages/questionnaire/package.json packages/questionnaire/
 COPY packages/inference/package.json packages/inference/
 COPY packages/containment/package.json packages/containment/
+COPY packages/resolution/package.json packages/resolution/
+COPY packages/crosswalk/package.json packages/crosswalk/
 COPY packages/support/package.json packages/support/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
@@ -51,6 +53,11 @@ COPY tsconfig.base.json tsconfig.build.json tsconfig.json ./
 COPY packages/ packages/
 COPY apps/api/ apps/api/
 COPY apps/worker/ apps/worker/
+# The company layer's own app, because `tsconfig.build.json` references it and
+# `tsc -b` walks every reference. It stays in this intermediate stage: `runtime`
+# below copies named product outputs only, so no company bytes reach a product
+# image, and the `company` target copies its dist deliberately.
+COPY apps/veylith/ apps/veylith/
 
 # `tsc -b` walks the project references, so this builds every package in
 # dependency order and fails the build if any of them does not compile.

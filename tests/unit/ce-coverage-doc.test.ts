@@ -24,11 +24,25 @@ const DOC = join(ROOT, 'docs', 'product', 'CYBER_ESSENTIALS_COVERAGE.md');
 function generated(): string {
   // Run the generator rather than importing it, so this fails if the script
   // itself has stopped working — the failure mode of every generated artefact.
-  return execFileSync('npx', ['tsx', 'scripts/ce-coverage.ts', '--check'], {
-    cwd: ROOT,
-    encoding: 'utf8',
-    maxBuffer: 16 * 1024 * 1024,
-  });
+  /**
+   * `--conditions=development` so the generator resolves workspace packages to
+   * their source, the way this repository's own dev scripts do.
+   *
+   * Without it the subprocess resolves `@adericel/*` to `dist`, which exists
+   * after a build and not before — so this passed locally and failed in CI's
+   * unit job, which deliberately does not build. Running the generator rather
+   * than importing it is still the right call, because it fails when the script
+   * itself breaks; it just has to run the way a developer runs it.
+   */
+  return execFileSync(
+    'npx',
+    ['tsx', '--conditions=development', 'scripts/ce-coverage.ts', '--check'],
+    {
+      cwd: ROOT,
+      encoding: 'utf8',
+      maxBuffer: 16 * 1024 * 1024,
+    },
+  );
 }
 
 /** Prettier reformats the committed file, so compare on content not layout. */
