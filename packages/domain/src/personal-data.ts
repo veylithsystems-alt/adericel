@@ -302,30 +302,6 @@ export const PERSONAL_DATA_REGISTRY: readonly PersonalDataEntry[] = [
   },
 
   // ---------------------------------------------------------------------------
-  // Business contacts Veylith approached. Controller, legitimate interests,
-  // B2B only.
-  // ---------------------------------------------------------------------------
-  {
-    table: 'veylith.prospects',
-    columns: ['contact_email', 'contact_name'],
-    subject: 'PROSPECT',
-    role: 'CONTROLLER',
-    purpose: 'Approach an MSP about Adericel, and remember not to approach it twice.',
-    lawfulBasis: 'LEGITIMATE_INTERESTS',
-    retention: {
-      policy: 'FIXED_PERIOD',
-      days: 730,
-      timestampColumn: 'updated_at',
-      rationale:
-        'Two years without engagement, after which continuing to hold a named ' +
-        "person's details for a conversation that never happened is not a " +
-        'legitimate interest any more.',
-    },
-    erasure: 'DELETE',
-    specialCategory: NO_SPECIAL_CATEGORY,
-  },
-
-  // ---------------------------------------------------------------------------
   // People inside a customer's estate. Veylith is a processor. These are the
   // records a customer's own staff appear in, observed through connectors.
   // ---------------------------------------------------------------------------
@@ -425,14 +401,32 @@ export const PERSONAL_DATA_REGISTRY: readonly PersonalDataEntry[] = [
   },
 ];
 
+/**
+ * Entries a deployment adds to the product's own register.
+ *
+ * Empty for a customer. Veylith's own deployment adds the personal data the
+ * company holds as a controller — prospective customers it approached — which
+ * used to sit in the register above and therefore in every customer's copy of
+ * it. A customer reading their retention schedule was told Adericel retains
+ * "prospect" data, which is Veylith's marketing and nothing the customer's
+ * deployment holds. Wrong in a document whose whole job is to say truthfully
+ * what is held and for how long, and found by extracting the product and
+ * checking the register against the schema the product actually creates.
+ */
+export type AdditionalPersonalData = readonly PersonalDataEntry[];
+
 /** Every table named in the register, deduplicated. */
-export function registeredTables(): readonly string[] {
-  return [...new Set(PERSONAL_DATA_REGISTRY.map((entry) => entry.table))].sort();
+export function registeredTables(extra: AdditionalPersonalData = []): readonly string[] {
+  return [...new Set([...PERSONAL_DATA_REGISTRY, ...extra].map((entry) => entry.table))].sort();
 }
 
 /** Every entry with a fixed retention period, which is what the sweep acts on. */
-export function timeLimitedEntries(): readonly PersonalDataEntry[] {
-  return PERSONAL_DATA_REGISTRY.filter((entry) => entry.retention.policy === 'FIXED_PERIOD');
+export function timeLimitedEntries(
+  extra: AdditionalPersonalData = [],
+): readonly PersonalDataEntry[] {
+  return [...PERSONAL_DATA_REGISTRY, ...extra].filter(
+    (entry) => entry.retention.policy === 'FIXED_PERIOD',
+  );
 }
 
 /**
