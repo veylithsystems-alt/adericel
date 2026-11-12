@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Adericel, as its own repository.
@@ -82,6 +83,14 @@ export const COMPANY_OWNED: readonly { readonly path: string; readonly why: stri
   {
     path: 'tests/unit/product-extract.test.ts',
     why: 'Tests the derivation, so it lives with the derivation.',
+  },
+  {
+    path: 'scripts/reduce-to-company.ts',
+    why: 'Reduces THIS repository to the company layer. Meaningless in the product, which has no company layer to reduce to.',
+  },
+  {
+    path: 'tests/unit/reduce-to-company.test.ts',
+    why: 'Tests that reduction, including its refusal to run before the product repository is populated.',
   },
 ];
 
@@ -246,7 +255,21 @@ export function extractionNote(): string {
   ].join('\n');
 }
 
-if (process.argv.includes('--plan')) {
+/**
+ * Only when run directly.
+ *
+ * Without this the main block executed on **import**, so
+ * `tests/unit/product-extract.test.ts` extracted a copy of the repository into
+ * `var/product` every time it loaded the module — which is how a stray tree
+ * came to sit inside the repository and get linted. A module that does work
+ * when imported is a module nobody can safely import.
+ */
+const runDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (!runDirectly) {
+  // Imported for its functions; do nothing.
+} else if (process.argv.includes('--plan')) {
   const result = plan();
   process.stdout.write(`${result.kept.length} kept, ${result.removed.length} removed\n`);
   for (const entry of COMPANY_OWNED) {
