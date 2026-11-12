@@ -19,6 +19,6 @@
     "@adericel/shared": "workspace:*",
     "@adericel/domain": "workspace:*",
     "@adericel/graph": "workspace:*",
-    "zod": "^4.1.11"
+    "zod": "^4.6.7"
   }
 }
