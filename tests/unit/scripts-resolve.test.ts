@@ -42,6 +42,20 @@ describe('the commands this repository offers', () => {
         // A glob is a pattern, not a path; `vitest run tests/unit` is a
         // directory. Both are out of scope for this check.
         if (token.includes('*')) continue;
+        /**
+         * Build outputs are out of scope, and leaving them in was a defect.
+         *
+         * `start:api` names `apps/api/dist/main.js`, which exists after a build
+         * and not before. This check passed locally because a build had run and
+         * failed in CI's unit job, which deliberately does not build — so the
+         * repository's own fast-feedback job was red for a path that was never
+         * supposed to be in the tree.
+         *
+         * What the check is for survives: a command naming a **source** file
+         * that does not exist. `pnpm dev` pointing at a script nobody committed
+         * is the defect it was written for, and that is still caught.
+         */
+        if (/(^|\/)dist\//.test(token)) continue;
         if (!existsSync(join(ROOT, token))) missing.push(`${name} -> ${token}`);
       }
     }

@@ -32,6 +32,8 @@ COPY packages/triage/package.json        packages/triage/
 COPY packages/questionnaire/package.json packages/questionnaire/
 COPY packages/inference/package.json packages/inference/
 COPY packages/containment/package.json packages/containment/
+COPY packages/resolution/package.json packages/resolution/
+COPY packages/crosswalk/package.json packages/crosswalk/
 COPY packages/support/package.json packages/support/
 COPY packages/actions/package.json       packages/actions/
 COPY packages/integrations/package.json  packages/integrations/
@@ -41,8 +43,28 @@ COPY apps/api/package.json               apps/api/
 COPY apps/worker/package.json            apps/worker/
 COPY apps/web/package.json               apps/web/
 
+# ---------------------------------------------------------- build manifests
+# The company layer's manifests, which the product image must not carry.
+#
+# `pnpm build` runs `tsc -b tsconfig.build.json`, and `tsc -b` walks project
+# references transitively: `apps/veylith` references `packages/vaol`, which
+# references `packages/autonomy`. All three compile inside the build stage, so
+# all three need their dependencies installed — and pnpm installs dependencies
+# only for a package whose manifest is present when it runs. Without these the
+# build failed with `Cannot find module 'zod'` and `Cannot find module
+# 'fastify'` in code that compiles perfectly well outside the image.
+#
+# They are added in a stage of their own, after `manifests`, because `runtime`
+# copies from `manifests`: that stage is what defines the product image, and a
+# company manifest in it would name Veylith's autonomy gate and business ledger
+# inside a customer's image.
+FROM manifests AS build-manifests
+COPY packages/autonomy/package.json packages/autonomy/
+COPY packages/vaol/package.json packages/vaol/
+COPY apps/veylith/package.json apps/veylith/
+
 # --------------------------------------------------------------------- build
-FROM manifests AS build
+FROM build-manifests AS build
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile
@@ -51,6 +73,11 @@ COPY tsconfig.base.json tsconfig.build.json tsconfig.json ./
 COPY packages/ packages/
 COPY apps/api/ apps/api/
 COPY apps/worker/ apps/worker/
+# The company layer's own app, because `tsconfig.build.json` references it and
+# `tsc -b` walks every reference. It stays in this intermediate stage: `runtime`
+# below copies named product outputs only, so no company bytes reach a product
+# image, and the `company` target copies its dist deliberately.
+COPY apps/veylith/ apps/veylith/
 
 # `tsc -b` walks the project references, so this builds every package in
 # dependency order and fails the build if any of them does not compile.
