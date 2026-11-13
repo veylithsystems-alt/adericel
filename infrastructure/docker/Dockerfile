@@ -43,8 +43,28 @@ COPY apps/api/package.json               apps/api/
 COPY apps/worker/package.json            apps/worker/
 COPY apps/web/package.json               apps/web/
 
+# ---------------------------------------------------------- build manifests
+# The company layer's manifests, which the product image must not carry.
+#
+# `pnpm build` runs `tsc -b tsconfig.build.json`, and `tsc -b` walks project
+# references transitively: `apps/veylith` references `packages/vaol`, which
+# references `packages/autonomy`. All three compile inside the build stage, so
+# all three need their dependencies installed — and pnpm installs dependencies
+# only for a package whose manifest is present when it runs. Without these the
+# build failed with `Cannot find module 'zod'` and `Cannot find module
+# 'fastify'` in code that compiles perfectly well outside the image.
+#
+# They are added in a stage of their own, after `manifests`, because `runtime`
+# copies from `manifests`: that stage is what defines the product image, and a
+# company manifest in it would name Veylith's autonomy gate and business ledger
+# inside a customer's image.
+FROM manifests AS build-manifests
+COPY packages/autonomy/package.json packages/autonomy/
+COPY packages/vaol/package.json packages/vaol/
+COPY apps/veylith/package.json apps/veylith/
+
 # --------------------------------------------------------------------- build
-FROM manifests AS build
+FROM build-manifests AS build
 
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile

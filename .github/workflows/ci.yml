@@ -187,7 +187,19 @@ jobs:
   # looks. This is the job that notices.
   mutation:
     name: Mutation testing
-    runs-on: ubuntu-latest
+    # Pinned, where every other job tracks `ubuntu-latest`.
+    #
+    # `ubuntu-latest` became Ubuntu 26.04, and Playwright refuses to install a
+    # browser's system dependencies on a release it does not yet support:
+    # "Cannot install dependencies for ubuntu26.04-x64". The job failed in 34
+    # seconds, before a single mutation had been applied.
+    #
+    # The browser is a test dependency, so the version that matters is the one
+    # Playwright supports, not the newest one GitHub offers. This moves to
+    # ubuntu-26.04 when the pinned Playwright supports it; until then a pin is
+    # honest about what the suite needs, and a job that cannot start its browser
+    # cannot report a surviving mutation either way.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
