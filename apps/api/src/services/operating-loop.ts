@@ -1,4 +1,5 @@
 import { createAssessmentService, createCollectionService } from '@adericel/actions';
+import { predicatesForConnectorFrom } from '@adericel/integrations';
 import { buildExceptionQueue, EXCEPTION_KINDS_BY_KEY } from '@adericel/triage';
 import { newCorrelationId } from '@adericel/shared';
 import type { AppContext } from '../context.js';
@@ -187,6 +188,7 @@ export async function runLoopCycle(
             clock: app.clock,
             logger: app.logger,
             rulesets: app.rulesets,
+            predicatesForConnector: predicatesForConnectorFrom(app.connectors),
             actor: 'operating-loop',
             correlationId,
           });

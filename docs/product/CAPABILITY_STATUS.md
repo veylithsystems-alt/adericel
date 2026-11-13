@@ -52,7 +52,9 @@ pipeline is not evidence of any of them, and
 | Backup and restore | `OPERATIONAL` | `VERIFIED` | 3 |
 | Every claimed guard, proved by breaking it on every build | `OPERATIONAL` | — | 3 |
 | White-label presentation for MSPs | `DESIGNED` | — | 7 |
-| SBOM and signed releases | `DESIGNED` | — | 7 |
+| Software bill of materials per deployable | `OPERATIONAL` | — | 3 |
+| What Adericel says when its dependencies fail | `VERIFIED` | — | 4 |
+| Behaviour at portfolio scale and over sustained operation | `VERIFIED` | — | 4 |
 
 ## What establishes each status
 
@@ -166,7 +168,7 @@ Every claimed guard, proved by breaking it on every build is attested to OPERATI
 - **DESIGNED** (person) — Contract: security and privacy claims require executable tests where possible
 - **IMPLEMENTED** (check) — tests/mutation/registry.ts; scripts/mutation-test.ts
 - **TESTED** (check) — tests/unit/mutation-registry.test.ts checks the registry is well formed; the runner itself was exercised against a deliberately unguarded mutation and reported it as SURVIVED with a non-zero exit
-- **VERIFIED** (check) — Twenty-five recorded mutations all killed by their named tests, run by CI rather than by hand. The runner refuses a dirty working tree, restores every file it touched including artefacts a suite regenerated, and reports a stale or ambiguous match as an error rather than a pass
+- **VERIFIED** (check) — Thirty-three recorded mutations all killed by their named tests, run by CI rather than by hand. The runner refuses a dirty working tree, restores every file it touched including artefacts a suite regenerated, and reports a stale or ambiguous match as an error rather than a pass
 - **OPERATIONAL** (check) — A required CI job on every push
 
 ### White-label presentation for MSPs
@@ -175,11 +177,33 @@ White-label presentation for MSPs is attested to DESIGNED. 7 further status(es) 
 
 - **DESIGNED** (person) — Contract §38
 
-### SBOM and signed releases
+### Software bill of materials per deployable
 
-SBOM and signed releases is attested to DESIGNED. 7 further status(es) remain unestablished, and nothing here implies them.
+Software bill of materials per deployable is attested to OPERATIONAL. 3 further status(es) remain unestablished, and nothing here implies them.
 
-- **DESIGNED** (person) — Contract §36; supply-chain task
+- **DESIGNED** (person) — Contract: dependency integrity, under the security requirements
+- **IMPLEMENTED** (check) — scripts/sbom.ts — CycloneDX 1.5, from the resolved lockfile
+- **TESTED** (check) — tests/unit/sbom.test.ts
+- **VERIFIED** (check) — Four guards proved by deliberate breakage: collapsing two installed versions of one package into a single row, merging the development tree into the production inventory, adding a timestamp that destroys reproducibility, and omitting the commit the inventory describes
+- **OPERATIONAL** (check) — A CI job on every push, retaining each inventory for 90 days
+
+### What Adericel says when its dependencies fail
+
+What Adericel says when its dependencies fail is attested to VERIFIED. 4 further status(es) remain unestablished, and nothing here implies them.
+
+- **DESIGNED** (person) — Contract: failure modes explicit, and the DEGRADED/BLOCKED distinction under the assurance-state requirements
+- **IMPLEMENTED** (check) — packages/domain/src/collection-failure.ts — a closed set of failure codes and total maps to the repair each one names; packages/integrations/src/impairment.ts — impairment derived from integration health; packages/actions/src/assessment-service.ts — gathered and passed to the engine as input, inside the assessment digest
+- **TESTED** (check) — tests/chaos/failure-injection.test.ts — sixteen tests over six classified refusals, schema drift, an omitted subject, an omitted field, and two twenty-day runs of a healthy estate, one per recency anchor; packages/domain/src/collection-failure.test.ts; packages/integrations/src/impairment.test.ts
+- **VERIFIED** (check) — Ten guards proved by deliberate breakage, each re-introducing a defect this suite found: a re-observation recorded as nothing; each recency anchor separately, because breaking only one of them survived; evidence identity losing its subject; the engine receiving no impairment; a reason computed and never persisted; silent drift recorded as a success; a connector manifest hand-listing its predicates; a failure code guessed from an error message; and a withdrawn consent routed to an engineer who cannot repair it
+
+### Behaviour at portfolio scale and over sustained operation
+
+Behaviour at portfolio scale and over sustained operation is attested to VERIFIED. 4 further status(es) remain unestablished, and nothing here implies them.
+
+- **DESIGNED** (person) — RR-085, and the operations sizing note in docs/operations/vps-sizing.md
+- **IMPLEMENTED** (check) — tests/load/portfolio-scale.test.ts and tests/soak/sustained-operation.test.ts, driven from the hundred-customer portfolio in proof/
+- **TESTED** (check) — pnpm test:load — a hundred organisations under one MSP, measuring provision, collect, reassess and outbox drain, and asserting cost per organisation does not climb with portfolio size (209.5 ms/org in a full sweep against 185.3 one at a time); pnpm test:soak — ninety simulated days, asserting observations, evidence, claims and the state projection are exactly unchanged over an unchanged estate; pnpm test:upgrade — thirty-two migrations applied to a database already holding an MSP, an organisation and a user, which had only ever been migrated empty
+- **VERIFIED** (check) — Three guards proved by deliberate breakage: lowering the sweep batch limit below the portfolio size, so the customers past it are silently never collected from; disabling the evidence refresh branch, which is the ruinous-but-correct version of the recency fix that writes a row per collection; and pointing the upgrade suite at a migration that does not exist, so it populates nothing and migrates an empty schema while appearing to pass
 
 ## What this means for production readiness
 

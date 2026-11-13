@@ -64,7 +64,25 @@ describe('a product install applies the product layer only', () => {
     const product = await loadMigrations(MIGRATIONS, 'product');
     const ids = new Set(product.map((migration) => migration.id));
 
-    expect(manifest.company.length).toBeGreaterThan(0);
+    /**
+     * An empty company list is a legitimate state, and asserting otherwise was
+     * wrong.
+     *
+     * In the extracted product tree there are no company migrations, so the
+     * manifest names none — and this test demanded at least one, failing a tree
+     * that was correct. What the test is actually for is that nothing in the
+     * company list reaches a product install, so it asserts that; and that the
+     * list is not empty *while company migrations exist*, which is the real
+     * premise and is checked against the files rather than against a constant.
+     */
+    const companyFiles = (await loadMigrations(MIGRATIONS, 'all')).filter((migration) =>
+      /veylith/i.test(migration.id),
+    );
+    expect(
+      manifest.company.length,
+      'company migrations exist and the manifest names none of them',
+    ).toBe(companyFiles.length);
+
     for (const id of manifest.company) {
       expect(ids.has(id), `${id} must not be applied on a product install`).toBe(false);
     }

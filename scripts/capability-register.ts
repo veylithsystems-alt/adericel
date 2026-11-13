@@ -232,7 +232,7 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
           'SURVIVED with a non-zero exit',
       ),
       VERIFIED(
-        'Twenty-five recorded mutations all killed by their named tests, run by CI rather than by ' +
+        'Thirty-three recorded mutations all killed by their named tests, run by CI rather than by ' +
           'hand. The runner refuses a dirty working tree, restores every file it touched ' +
           'including artefacts a suite regenerated, and reports a stale or ambiguous match as ' +
           'an error rather than a pass',
@@ -247,7 +247,86 @@ export const CAPABILITY_REGISTER: readonly Capability[] = [
   },
   {
     key: 'signed-releases',
-    title: 'SBOM and signed releases',
-    attestations: [DESIGNED('Contract §36; supply-chain task')],
+    title: 'Software bill of materials per deployable',
+    attestations: [
+      DESIGNED('Contract: dependency integrity, under the security requirements'),
+      IMPLEMENTED('scripts/sbom.ts — CycloneDX 1.5, from the resolved lockfile'),
+      TESTED('tests/unit/sbom.test.ts'),
+      VERIFIED(
+        'Four guards proved by deliberate breakage: collapsing two installed versions of one ' +
+          'package into a single row, merging the development tree into the production ' +
+          'inventory, adding a timestamp that destroys reproducibility, and omitting the ' +
+          'commit the inventory describes',
+      ),
+      OPERATIONAL('A CI job on every push, retaining each inventory for 90 days'),
+    ],
+  },
+  {
+    key: 'failure-behaviour',
+    title: 'What Adericel says when its dependencies fail',
+    attestations: [
+      DESIGNED(
+        'Contract: failure modes explicit, and the DEGRADED/BLOCKED distinction under the ' +
+          'assurance-state requirements',
+      ),
+      IMPLEMENTED(
+        'packages/domain/src/collection-failure.ts — a closed set of failure codes and total ' +
+          'maps to the repair each one names; packages/integrations/src/impairment.ts — ' +
+          'impairment derived from integration health; packages/actions/src/assessment-service.ts ' +
+          '— gathered and passed to the engine as input, inside the assessment digest',
+      ),
+      TESTED(
+        'tests/chaos/failure-injection.test.ts — sixteen tests over six classified refusals, ' +
+          'schema drift, an omitted subject, an omitted field, and two twenty-day runs of a ' +
+          'healthy estate, one per recency anchor; packages/domain/src/collection-failure.test.ts; ' +
+          'packages/integrations/src/impairment.test.ts',
+      ),
+      VERIFIED(
+        'Ten guards proved by deliberate breakage, each re-introducing a defect this suite ' +
+          'found: a re-observation recorded as nothing; each recency anchor separately, because ' +
+          'breaking only one of them survived; evidence identity losing its subject; the engine ' +
+          'receiving no impairment; a reason computed and never persisted; silent drift recorded ' +
+          'as a success; a connector manifest hand-listing its predicates; a failure code ' +
+          'guessed from an error message; and a withdrawn consent routed to an engineer who ' +
+          'cannot repair it',
+      ),
+      // Deliberately no OPERATIONAL attestation. These are injected faults
+      // against the real assessment path, not observed incidents: no connector
+      // has failed in production because nothing is in production. Load and
+      // soak behaviour is unmeasured and tracked as RR-085. Attesting
+      // OPERATIONAL here with an evidence string that says it is not would be
+      // the exact dishonesty this register exists to catch.
+    ],
+  },
+  {
+    key: 'scale-and-sustained-operation',
+    title: 'Behaviour at portfolio scale and over sustained operation',
+    attestations: [
+      DESIGNED('RR-085, and the operations sizing note in docs/operations/vps-sizing.md'),
+      IMPLEMENTED(
+        'tests/load/portfolio-scale.test.ts and tests/soak/sustained-operation.test.ts, driven ' +
+          'from the hundred-customer portfolio in proof/',
+      ),
+      TESTED(
+        'pnpm test:load — a hundred organisations under one MSP, measuring provision, collect, ' +
+          'reassess and outbox drain, and asserting cost per organisation does not climb with ' +
+          'portfolio size (209.5 ms/org in a full sweep against 185.3 one at a time); ' +
+          'pnpm test:soak — ninety simulated days, asserting observations, evidence, claims and ' +
+          'the state projection are exactly unchanged over an unchanged estate; ' +
+          'pnpm test:upgrade — thirty-two migrations applied to a database already holding an ' +
+          'MSP, an organisation and a user, which had only ever been migrated empty',
+      ),
+      VERIFIED(
+        'Three guards proved by deliberate breakage: lowering the sweep batch limit below the ' +
+          'portfolio size, so the customers past it are silently never collected from; ' +
+          'disabling the evidence refresh branch, which is the ruinous-but-correct version of ' +
+          'the recency fix that writes a row per collection; and pointing the upgrade suite at ' +
+          'a migration that does not exist, so it populates nothing and migrates an empty ' +
+          'schema while appearing to pass',
+      ),
+      // No OPERATIONAL attestation: one machine, synthetic portfolio, never
+      // operated. The numbers are honest about the design and say nothing
+      // about a Tuesday in production — tracked as RR-087.
+    ],
   },
 ];

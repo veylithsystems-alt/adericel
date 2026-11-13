@@ -52,7 +52,33 @@ function toRecord(row: ObservationRow): ObservationRecord {
 }
 
 export interface RecordObservationsResult {
+  /**
+   * Every observation this run persisted — new content and re-observations
+   * alike.
+   *
+   * Re-observations are included deliberately, and this is the single most
+   * important line in this file. An estate whose facts do not change produces
+   * identical payloads on every collection, so content deduplication means
+   * almost every run of a healthy integration is "all duplicates". When those
+   * were dropped here, nothing downstream ran: no evidence was refreshed, so
+   * the recency of every stable fact froze at its first collection, so every
+   * such fact aged out of its freshness window and its control went UNKNOWN.
+   *
+   * A flawless estate, collected successfully every day by a connector that
+   * never failed, went undetermined on day seven and stayed there. Almost
+   * every security fact is stable — that is the point of securing it — so this
+   * was most of the product, and every light stayed green throughout.
+   *
+   * So: deduplicate the *storage*, never the *fact that we looked again*.
+   */
   readonly recorded: readonly ObservationRecord[];
+  /**
+   * How many of `recorded` were re-observations rather than new content.
+   *
+   * Reported rather than hidden: an operator reading a run wants the difference
+   * between forty devices that changed and forty that were confirmed unchanged,
+   * and the second is the normal, healthy case.
+   */
   readonly duplicates: number;
 }
 
@@ -88,15 +114,31 @@ export function createObservationRepository(
             ? (options.subjectNodeIdByExternalId?.get(observation.subjectExternalId) ?? null)
             : null);
 
-        const row = await ctx.one<ObservationRow>(
+        /**
+         * On conflict, refresh — never do nothing.
+         *
+         * `GREATEST` so a backfill or an out-of-order page can never make a
+         * fact look fresher than the newest reading actually taken, in either
+         * direction.
+         *
+         * `xmax = 0` distinguishes an insert from an update on the way out, so
+         * the caller can report how many facts were confirmed unchanged
+         * without a second query.
+         */
+        const row = await ctx.one<ObservationRow & { inserted: boolean }>(
           `INSERT INTO observations
              (organisation_id, integration_id, integration_run_id, kind, source_system,
               subject_external_id, subject_node_id, payload, payload_hash, observed_at, collected_at,
               correlation_id)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12)
            ON CONFLICT (organisation_id, kind, COALESCE(subject_external_id, ''), payload_hash)
-           DO NOTHING
-           RETURNING ${COLUMNS}`,
+           DO UPDATE SET
+             collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),
+             observed_at = GREATEST(observations.observed_at, EXCLUDED.observed_at),
+             integration_run_id = EXCLUDED.integration_run_id,
+             correlation_id = EXCLUDED.correlation_id,
+             subject_node_id = COALESCE(EXCLUDED.subject_node_id, observations.subject_node_id)
+           RETURNING ${COLUMNS}, (xmax = 0) AS inserted`,
           [
             ctx.organisationId,
             options.integrationId,
@@ -113,8 +155,12 @@ export function createObservationRepository(
           ],
         );
 
-        if (row) recorded.push(toRecord(row));
-        else duplicates += 1;
+        // `one` rather than `oneOrFail` because a row-level security policy can
+        // legitimately hide the result; an absent row is not a duplicate.
+        if (row) {
+          recorded.push(toRecord(row));
+          if (!row.inserted) duplicates += 1;
+        }
       }
 
       return { recorded, duplicates };

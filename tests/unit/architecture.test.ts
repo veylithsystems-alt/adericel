@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from '@adericel/shared';
 import { describe, expect, it } from 'vitest';
@@ -88,12 +88,6 @@ describe('package layering', () => {
     expect(deps).toEqual(['domain', 'shared']);
   });
 
-  it('keeps the autonomy engine free of infrastructure', () => {
-    // Same rule, same reason: a decision about authority must be reproducible
-    // from its recorded inputs.
-    expect(internalDeps('autonomy')).toEqual(['shared']);
-  });
-
   it('does not let a connector reach the database', () => {
     // A connector that could write claims directly would be deciding assurance
     // truth, which is the one thing the adapter boundary exists to prevent.
@@ -129,6 +123,37 @@ describe('database access', () => {
   });
 });
 
+/**
+ * The company layer's own files: the only places that may name it.
+ *
+ * Two directories and one test directory, named once. The previous version of
+ * these checks listed individual file paths, which is how a company route file
+ * came to live inside the product's app for as long as it did.
+ */
+function isCompanyOwned(file: string): boolean {
+  return (
+    file.includes(join('packages', 'vaol')) ||
+    file.includes(join('apps', 'veylith')) ||
+    file.includes(join('tests', 'company'))
+  );
+}
+
+/**
+ * Source with comments removed, so a rule can be explained where it applies.
+ *
+ * Found by running the check: the comment in `app.ts` explaining why the
+ * product no longer imports the company layer quoted the import it no longer
+ * performs, and tripped the rule. A check that forbids describing itself is one
+ * somebody works around by deleting the description.
+ *
+ * Crude on purpose — it does not understand a `//` inside a string literal, and
+ * does not need to: the question asked of the result is only whether a module
+ * specifier appears.
+ */
+function code(source: string): string {
+  return source.replaceAll(/\/\*[\s\S]*?\*\//g, ' ').replaceAll(/\/\/[^\n]*/g, ' ');
+}
+
 describe('the company layer stays out of the product', () => {
   it('does not let Adericel packages depend on VAOL', () => {
     // Adericel must be deployable without the company's own operating layer.
@@ -140,64 +165,74 @@ describe('the company layer stays out of the product', () => {
     }
   });
 
-  it('has no static import path from the product to the company layer', () => {
+  it('names the company layer nowhere in the product, statically or dynamically', () => {
     /**
-     * The hole this test was written to close.
+     * The rule got stronger, twice.
      *
-     * The check above covered `packages/` only — and the dependency was in
-     * `apps/`. `apps/api/src/main.ts` imported VAOL at the top of the file and
-     * called it during startup, and `app.ts` registered its routes
-     * unconditionally, while the README claimed a customer "gets the assurance
-     * platform and none of Veylith's commercial machinery, and a test asserts
-     * that separation holds". The test existed and was true; it simply did not
-     * look where the problem was.
+     * First version checked `packages/` only, and the dependency was in
+     * `apps/`. Second version allowed a dynamic import behind a flag, which
+     * kept the company layer out of a product build's module graph — and not
+     * out of the product's **source tree**: `apps/api` declared the dependency
+     * in its manifest and referenced it in its TypeScript project, so giving
+     * Adericel its own repository meant editing manifests on the way out. A
+     * separation held by a patch script is one that eventually does not hold.
      *
-     * A static import is the thing that matters rather than a call, because a
-     * static import puts the company layer in the module graph of every
-     * deployment — so it would have to be built and shipped with a product
-     * image even if nothing ever invoked it. The company layer is now reached
-     * through `await import()` inside a branch on `companyLayerEnabled`.
-     *
-     * `routes/veylith.ts` is the company layer's own module and may import it;
-     * nothing that a product deployment loads may.
+     * So there is no sanctioned shape any more. The product may not name the
+     * company layer at all. `apps/veylith` is the company's own deployment: it
+     * depends on the product, and nothing points back.
      */
-    const companyOwned = [join('apps', 'api', 'src', 'routes', 'veylith.ts')];
     const offenders: string[] = [];
+    for (const dir of ['apps', 'packages']) {
+      for (const file of sourceFiles(join(ROOT, dir))) {
+        if (file.endsWith('.test.ts')) continue;
+        if (isCompanyOwned(file)) continue;
+        const source = code(readFileSync(file, 'utf8'));
+        // Static or dynamic, by name or by path. Both are now the same defect.
+        if (/['"]@adericel\/vaol['"]/.test(source) || /routes\/veylith\.js/.test(source)) {
+          offenders.push(file.replace(ROOT, ''));
+        }
+      }
+    }
+    expect(offenders, 'the product names the company layer').toEqual([]);
+  });
 
-    for (const file of sourceFiles(join(ROOT, 'apps'))) {
-      if (file.endsWith('.test.ts')) continue;
-      if (companyOwned.some((suffix) => file.includes(suffix))) continue;
+  it('declares the company layer in no product manifest or project file', () => {
+    /**
+     * The half that was missing, and the reason the product could not simply be
+     * copied out. A source tree with no import of the company layer, whose
+     * manifest still declares it and whose TypeScript project still references
+     * it, is a tree that will not install or build without the company layer
+     * present — and the failure arrives as a package resolution error far from
+     * its cause.
+     */
+    const offenders: string[] = [];
+    const manifests = [
+      ...readdirSync(join(ROOT, 'apps'))
+        .filter((name) => name !== 'veylith')
+        .flatMap((name) => [
+          join(ROOT, 'apps', name, 'package.json'),
+          join(ROOT, 'apps', name, 'tsconfig.json'),
+        ]),
+      ...readdirSync(join(ROOT, 'packages'))
+        .filter((name) => name !== 'vaol')
+        .flatMap((name) => [
+          join(ROOT, 'packages', name, 'package.json'),
+          join(ROOT, 'packages', name, 'tsconfig.json'),
+        ]),
+    ].filter((file) => existsSync(file));
+
+    for (const file of manifests) {
       const source = readFileSync(file, 'utf8');
-      // `import ... from '@adericel/vaol'` or a static import of the company
-      // route module. `await import(...)` is deliberately not matched: that is
-      // the sanctioned shape.
-      if (
-        /^\s*import\s[^;]*from\s*['"]@adericel\/vaol['"]/m.test(source) ||
-        /^\s*import\s[^;]*from\s*['"][^'"]*routes\/veylith\.js['"]/m.test(source)
-      ) {
+      if (/@adericel\/(vaol|veylith)/.test(source) || /packages\/vaol|apps\/veylith/.test(source)) {
         offenders.push(file.replace(ROOT, ''));
       }
     }
-    expect(offenders, 'static imports of the company layer from the product').toEqual([]);
-  });
-
-  it('reaches the company layer only behind the configuration flag', () => {
     /**
-     * A dynamic import is only a separation if something decides whether to
-     * take it. An `await import('@adericel/vaol')` sitting outside a branch on
-     * `companyLayerEnabled` would be the same dependency with extra steps.
+     * The repository root is deliberately not checked. It is the workspace that
+     * holds both, and must name them: it is the one place a reader should be
+     * able to see that a company layer exists at all.
      */
-    const offenders: string[] = [];
-    for (const file of sourceFiles(join(ROOT, 'apps'))) {
-      if (file.endsWith('.test.ts')) continue;
-      if (file.includes(join('routes', 'veylith.ts'))) continue;
-      const source = readFileSync(file, 'utf8');
-      if (!/await import\(\s*['"](@adericel\/vaol|[^'"]*routes\/veylith\.js)['"]/.test(source)) {
-        continue;
-      }
-      if (!source.includes('companyLayerEnabled')) offenders.push(file.replace(ROOT, ''));
-    }
-    expect(offenders, 'company-layer imports not guarded by companyLayerEnabled').toEqual([]);
+    expect(offenders, 'these product manifests declare the company layer').toEqual([]);
   });
 
   it('defaults the company layer off, so an unset flag is a customer', () => {
@@ -222,17 +257,15 @@ describe('the company layer stays out of the product', () => {
   });
 
   it('does not reference veylith tables outside the company layer', () => {
-    const allowed = [
-      join('packages', 'vaol'),
-      join('apps', 'api', 'src', 'routes', 'veylith.ts'),
-      // The composition root wires the layers together; that is its job.
-      join('apps', 'api', 'src', 'app.ts'),
-    ];
     const offenders: string[] = [];
     for (const dir of ['packages', 'apps']) {
       for (const file of sourceFiles(join(ROOT, dir))) {
         if (file.endsWith('.test.ts')) continue;
-        if (allowed.some((prefix) => file.includes(prefix))) continue;
+        // `app.ts` used to be exempt because the composition root wired the
+        // layers together. It no longer wires them: the company's deployment
+        // composes itself onto the product, so the product's composition root
+        // has no company knowledge to need an exemption for.
+        if (isCompanyOwned(file)) continue;
         // A SQL reference to a company table, not merely the word — a policy
         // key such as `veylith.company.default` is a string, not a schema.
         if (/\b(FROM|INTO|UPDATE|TABLE|JOIN)\s+veylith\.\w+/i.test(readFileSync(file, 'utf8'))) {

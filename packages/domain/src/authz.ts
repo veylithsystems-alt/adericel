@@ -35,6 +35,16 @@ export const PERMISSIONS = [
   'msp:organisation:read',
   'msp:organisation:manage',
   'msp:member:manage',
+  /**
+   * Erase a person from the platform.
+   *
+   * Separate from `msp:member:manage`, which is about what somebody may do.
+   * This is about whether they exist, it cannot be undone, and it is the one
+   * MSP permission whose subject is a human being rather than a
+   * configuration. Collapsing it into member management would mean every
+   * person who can change a colleague's role can also erase them.
+   */
+  'msp:member:erase',
   'msp:baseline:manage',
   'msp:billing:read',
   'msp:billing:manage',
@@ -151,6 +161,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, readonly Permission[]>> = {
     'msp:organisation:read',
     'msp:organisation:manage',
     'msp:member:manage',
+    'msp:member:erase',
     'msp:baseline:manage',
     'msp:billing:read',
     'msp:billing:manage',
@@ -330,6 +341,11 @@ export const HUMAN_ONLY_PERMISSIONS: ReadonlySet<Permission> = new Set<Permissio
   // there; this makes the rule hold wherever authorisation is asked, including
   // from a future caller that forgets.
   'org:exception:approve',
+  // Erasing a person is irreversible and its subject is a human being. No
+  // automation, workflow or service identity may decide it — and in
+  // particular, an n8n workflow holding a service token must not be able to
+  // remove somebody from the platform.
+  'msp:member:erase',
 ]);
 
 /**
@@ -358,6 +374,10 @@ export const SURFACE_DENIAL_PREFIX = 'surface-boundary: ';
 export const MFA_REQUIRED_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>([
   'org:action:approve',
   'org:exception:approve',
+  // A stolen session must not be enough to erase somebody. The act is
+  // irreversible, so a second factor presented in this session is the minimum
+  // worth asking for.
+  'msp:member:erase',
 ]);
 
 function grantIsLive(grant: Grant, atIso: string): boolean {
