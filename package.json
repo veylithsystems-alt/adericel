@@ -33,7 +33,7 @@
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts up",
-    "ce:coverage": "tsx scripts/ce-coverage.ts",
+    "ce:coverage": "tsx --conditions=development scripts/ce-coverage.ts",
     "db:status": "tsx --env-file-if-exists=.env scripts/migrate.ts status",
     "db:reset": "tsx --env-file-if-exists=.env scripts/migrate.ts reset",
     "db:seed": "tsx --env-file-if-exists=.env scripts/seed-demo.ts",
@@ -52,8 +52,8 @@
     "verify:restore": "tsx --env-file-if-exists=.env scripts/verify-restore.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm test",
     "db:migrate:product": "MIGRATION_LAYER=product tsx --env-file-if-exists=.env scripts/migrate.ts up",
-    "docs:operating-model": "tsx scripts/generate-operating-model.ts",
-    "docs:capability-status": "tsx scripts/generate-capability-status.ts",
+    "docs:operating-model": "tsx --conditions=development scripts/generate-operating-model.ts",
+    "docs:capability-status": "tsx --conditions=development scripts/generate-capability-status.ts",
     "release:position": "tsx scripts/release-position.ts",
     "check:reachability": "tsx --conditions=development scripts/reachability.ts",
     "test:mutation": "tsx scripts/mutation-test.ts",
@@ -61,7 +61,7 @@
   },
   "dependencies": {
     "@adericel/resolution": "workspace:*",
-    "pg": "^8.16.3"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@adericel/actions": "workspace:*",
@@ -85,14 +85,14 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.18.0",
     "@types/pg": "^8.15.5",
-    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/coverage-v8": "^5.0.2",
     "eslint": "^9.37.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fontkit": "^2.0.4",
     "playwright": "1.56.1",
     "prettier": "^3.6.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.46.0",
     "vitest": "^5.0.0"
   },
