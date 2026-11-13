@@ -6,6 +6,7 @@ import {
   NOT_YET_CAPABILITY_STATES,
   declaredDocumentationState,
 } from '@adericel/domain';
+import { MUTATIONS } from '../mutation/registry.js';
 
 /**
  * Documentation that matches the code.
@@ -21,6 +22,92 @@ import {
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
+
+/**
+ * Number words, generated rather than listed.
+ *
+ * Both counts below used to read from a hand-written map that stopped at
+ * twenty-five and at fifty-five. Extending it was a chore nobody remembered,
+ * and the failure it produced was "that is not a number this test knows" —
+ * which looks like a broken test rather than a count that needs updating. A
+ * guard whose maintenance cost falls on the person it is meant to help is a
+ * guard that eventually gets deleted.
+ */
+const UNITS = [
+  'zero',
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+  'thirteen',
+  'fourteen',
+  'fifteen',
+  'sixteen',
+  'seventeen',
+  'eighteen',
+  'nineteen',
+] as const;
+const TENS = [
+  '',
+  '',
+  'twenty',
+  'thirty',
+  'forty',
+  'fifty',
+  'sixty',
+  'seventy',
+  'eighty',
+  'ninety',
+] as const;
+
+/** The English for a number from 0 to 999, in the form this README uses. */
+function inWords(value: number): string {
+  if (value < 20) return UNITS[value];
+  if (value < 100) {
+    const tens = TENS[Math.floor(value / 10)];
+    const unit = value % 10;
+    return unit === 0 ? tens : `${tens}-${UNITS[unit]}`;
+  }
+  const hundreds = `${UNITS[Math.floor(value / 100)]} hundred`;
+  const rest = value % 100;
+  return rest === 0 ? hundreds : `${hundreds} and ${inWords(rest)}`;
+}
+
+/** Every number word up to 999, mapped back to its value. */
+const NUMBER_WORDS: Record<string, number> = Object.fromEntries(
+  Array.from({ length: 1000 }, (_, value) => [inWords(value), value]),
+);
+
+/**
+ * The company's own workspaces, which the product's README does not document.
+ *
+ * `packages/vaol` is Veylith's operating layer, `packages/autonomy` is the
+ * policy compiler for what **the company** may do unattended, and
+ * `apps/veylith` is Veylith's deployment. The README belongs to the product,
+ * and the product ships none of them — so a README listing them would describe
+ * software its reader does not have. Named here once rather than special-cased
+ * in four tests.
+ *
+ * A customer organisation's own autonomy level is a different thing and lives
+ * in `packages/domain`, which the product keeps.
+ */
+const COMPANY_PACKAGES = new Set(['vaol', 'autonomy']);
+
+/** The packages the product actually contains. */
+function productPackages(): readonly string[] {
+  return readdirSync(join(ROOT, 'packages'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => !COMPANY_PACKAGES.has(name));
+}
 
 describe('the README describes the repository that exists', () => {
   /**
@@ -53,28 +140,39 @@ describe('the README describes the repository that exists', () => {
      * A count in prose is allowed here on exactly one condition: something
      * fails when it drifts.
      */
-    const words: Record<string, number> = {
-      sixteen: 16,
-      seventeen: 17,
-      eighteen: 18,
-      nineteen: 19,
-      twenty: 20,
-      'twenty-one': 21,
-      'twenty-two': 22,
-      'twenty-three': 23,
-      'twenty-four': 24,
-      'twenty-five': 25,
-    };
     const stated = /\b([a-z-]+)\s+workspace packages\b/i.exec(readme)?.[1]?.toLowerCase();
     if (stated === undefined) return; // No claim made, nothing to be wrong about.
 
-    const actual = readdirSync(join(ROOT, 'packages'), { withFileTypes: true }).filter((entry) =>
-      entry.isDirectory(),
-    ).length;
+    // Counted over the product's packages. The company's operating layer is not
+    // the product's to count, and in the extracted product tree it is not there
+    // at all — a count including it was wrong in both trees for opposite
+    // reasons.
+    const actual = productPackages().length;
     expect(
-      words[stated],
+      NUMBER_WORDS[stated],
       `The README says "${stated} workspace packages" and there are ${actual}.`,
     ).toBe(actual);
+  });
+
+  it('states the mutation count correctly, or not at all', () => {
+    /**
+     * Same rule as the package count, and this one earns its keep more.
+     *
+     * "Thirty-three are recorded" was true when it was written and silently
+     * false ten mutations later. A number that describes the strength of the
+     * test suite is exactly the number a reader uses to decide how much to
+     * trust it, so it is the last place a stale figure is harmless.
+     */
+    const stated = /\b([a-z-]+)\s+are recorded\b/i.exec(readme)?.[1]?.toLowerCase();
+    if (stated === undefined) return; // No claim made, nothing to be wrong about.
+    expect(
+      Object.keys(NUMBER_WORDS),
+      `The README says "${stated} are recorded"; that is not a number this test knows.`,
+    ).toContain(stated);
+    expect(
+      NUMBER_WORDS[stated],
+      `The README says "${stated} are recorded" and the registry holds ${MUTATIONS.length}.`,
+    ).toBe(MUTATIONS.length);
   });
 
   it('does not state a count that nothing verifies', () => {
@@ -117,14 +215,36 @@ describe('the decision records are indexed', () => {
   });
 });
 
-describe('the migrations are contiguous', () => {
-  it('numbers them without gaps or duplicates', () => {
+describe('the migrations are numbered honestly', () => {
+  it('numbers them without duplicates, and strictly increasing', () => {
+    /**
+     * Contiguity was the wrong invariant, and the extracted product tree proved
+     * it.
+     *
+     * The rule used to be "no gaps", on the reasoning that a gap means a
+     * migration was deleted rather than superseded. That holds in a tree that
+     * carries every layer — and the product carries one. Veylith's three
+     * migrations occupy numbers in the shared sequence, so removing the company
+     * layer leaves gaps **by construction**, and a product repository would
+     * have failed this check on the day it was created for doing exactly the
+     * right thing.
+     *
+     * What the check was really for is preserved: no two migrations share an
+     * identity, and the order is unambiguous. A deleted migration is caught by
+     * the ledger instead — the runner refuses a schema whose applied set does
+     * not match the files, which is a stronger statement than a numbering
+     * convention.
+     */
     const files = readdirSync(join(ROOT, 'database', 'migrations')).filter((f) =>
       f.endsWith('.sql'),
     );
     const numbers = files.map((f) => Number(f.slice(0, 4))).sort((a, b) => a - b);
-    expect(new Set(numbers).size).toBe(numbers.length);
-    expect(numbers).toEqual(numbers.map((_, index) => index + 1));
+    expect(numbers.length, 'no migrations found at all').toBeGreaterThan(10);
+    expect(new Set(numbers).size, 'two migrations share a number').toBe(numbers.length);
+    for (const [index, number] of numbers.entries()) {
+      if (index === 0) continue;
+      expect(number, 'the sequence is not increasing').toBeGreaterThan(numbers[index - 1] ?? 0);
+    }
   });
 
   it('gives every migration a down path', () => {
@@ -363,9 +483,16 @@ describe('the README explains every package, rather than listing it', () => {
    */
   const prose = readme.replace(/```[\s\S]*?```/g, '');
 
-  const packages = readdirSync(join(ROOT, 'packages'), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+  /**
+   * The product's packages. Veylith's operating layer is not among them.
+   *
+   * The README belongs to the product, and the product ships no company layer —
+   * so requiring the README to explain `packages/vaol` required it to describe
+   * software its reader does not have, and requiring a resolvable link to it
+   * made the README unusable in the extracted product tree, where the path is
+   * not there. Both were wrong for the same reason.
+   */
+  const packages = productPackages();
 
   it('finds packages to check', () => {
     // A guard on the guard. An empty list would make the checks below vacuous,

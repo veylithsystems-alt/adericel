@@ -8,8 +8,10 @@ import {
   type BaselineControlDefinition,
   type CommercialState,
   type OrganisationControlOverride,
+  MFA_DENIAL_PREFIX,
 } from '@adericel/domain';
 import { AdericelError } from '@adericel/shared';
+import { eraseDataSubject } from '../services/erasure.js';
 import type { AppContext } from '../context.js';
 import { audit, requireMsp, requirePrincipal } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
@@ -26,6 +28,19 @@ import { provisionOrganisation } from '../services/onboarding.js';
  */
 
 const mspParam = z.object({ mspId: z.string().uuid() });
+const mspMemberParam = z.object({ mspId: z.string().uuid(), userId: z.string().uuid() });
+
+/**
+ * Why an erasure was carried out, in somebody's own words.
+ *
+ * Ten characters is not a formality. An irreversible act on a person needs a
+ * sentence a reader can weigh a year later, and "yes" or "ok" is not one. The
+ * service enforces the same floor; the schema states it at the edge so the
+ * caller is told before anything happens rather than after.
+ */
+const erasureRequestSchema = z.object({
+  reason: z.string().min(10, 'State why this erasure is being carried out.').max(2000),
+});
 
 export function registerMspRoutes(server: FastifyInstance, app: AppContext): void {
   server.get('/v1/msps/:mspId', { preHandler: server.authenticate }, async (request, reply) => {
@@ -454,4 +469,120 @@ export function registerMspRoutes(server: FastifyInstance, app: AppContext): voi
           : DEFAULT_PLANS,
     });
   });
+
+  /**
+   * Erase yourself.
+   *
+   * The self-service half of the subject's right, and the safety argument is
+   * structural rather than procedural: **there is no user identifier in this
+   * request.** The subject is `principal.userId` and nothing else, so there is
+   * no parameter to tamper with and no path by which this route can erase
+   * somebody other than the caller. A route that took a target and checked it
+   * matched the caller would be one refactor away from not checking.
+   *
+   * Veylith Systems is the controller for a platform user's own account data,
+   * so acting directly on their request is both lawful and the right thing to
+   * do. That is **not** true of a person observed inside a customer's estate:
+   * for them Veylith is a processor, the controller is the customer, and
+   * `DATA_SUBJECT_KINDS` in the domain says their request is answered by the
+   * customer with Adericel's assistance. There is deliberately no self-service
+   * route for that case — accepting one would mean acting on an unauthenticated
+   * claim to be a named person, outside the processing agreement, and it would
+   * let somebody erase the record of a privileged account by claiming to be
+   * its owner.
+   *
+   * A second factor is required. The act cannot be undone, and a stolen
+   * session should not be enough to do it.
+   */
+  server.post('/v1/me/erasure', { preHandler: server.authenticate }, async (request, reply) => {
+    const principal = requirePrincipal(request);
+    const body = parseBody(request, erasureRequestSchema);
+
+    // A human, personally. A service token that happened to carry a user id
+    // must not be able to erase the person it was issued for.
+    if (principal.principalType !== 'USER') {
+      throw new AdericelError('FORBIDDEN', 'Only a person may erase themselves', {
+        safeDetails: { principalType: principal.principalType },
+      });
+    }
+    if (!principal.mfaSatisfied) {
+      throw new AdericelError('FORBIDDEN', `${MFA_DENIAL_PREFIX}erasing yourself`, {
+        safeDetails: { reason: 'second factor required' },
+      });
+    }
+
+    /**
+     * Audited before, not after.
+     *
+     * The erasure removes this person's sessions, so the request's own
+     * principal stops resolving part-way through. Writing the audit entry
+     * first means an interrupted erasure still leaves a record that it was
+     * attempted, by whom, and why.
+     */
+    await audit(app, request, {
+      action: 'data_subject.erasure.self',
+      resourceType: 'User',
+      resourceId: principal.principalId,
+      outcome: 'SUCCESS',
+      reason: body.reason,
+      metadata: { requestedBy: 'self' },
+    });
+
+    const report = await eraseDataSubject(app, principal.principalId, { reason: body.reason });
+    return reply.status(200).send(report);
+  });
+
+  /**
+   * Erase a member of this MSP, on their behalf.
+   *
+   * The other half, and it exists because the self-service route needs a
+   * working login. Somebody who has left, lost their access, or never
+   * completed signup cannot sign in to exercise a right they still hold.
+   *
+   * Scoped to this MSP's own members, checked against the database rather than
+   * inferred from the caller's token: a target in another MSP is a cross-tenant
+   * act and is refused as not found rather than as forbidden, because
+   * confirming the person exists would itself disclose something.
+   *
+   * No four-eyes requirement, deliberately. A one-person MSP is a real and
+   * common shape — Veylith Systems is one — and requiring a second approver
+   * would make a lawful erasure impossible for exactly the operators least
+   * able to work around it. The protections that do apply: a human principal,
+   * a second factor, an explicit permission that is not bundled with member
+   * management, a stated reason, and an audit entry. The act also preserves
+   * rather than destroys the approval trail, pseudonymising the person's
+   * identity in it, so erasing somebody cannot be used to hide what they
+   * authorised.
+   */
+  server.post(
+    '/v1/msps/:mspId/members/:userId/erasure',
+    { preHandler: server.authenticate },
+    async (request, reply) => {
+      const { mspId, userId } = parseParams(request, mspMemberParam);
+      await requireMsp(app, request, mspId, 'msp:member:erase');
+      const body = parseBody(request, erasureRequestSchema);
+
+      const member = await app.db.withPlatform(async (ctx) =>
+        ctx.one<{ id: string }>(`SELECT id FROM users WHERE id = $1 AND msp_id = $2`, [
+          userId,
+          mspId,
+        ]),
+      );
+      if (!member) {
+        throw new AdericelError('NOT_FOUND', 'No such member of this MSP');
+      }
+
+      await audit(app, request, {
+        action: 'data_subject.erasure.on_behalf',
+        resourceType: 'User',
+        resourceId: userId,
+        outcome: 'SUCCESS',
+        reason: body.reason,
+        metadata: { requestedBy: 'msp', mspId },
+      });
+
+      const report = await eraseDataSubject(app, userId, { reason: body.reason });
+      return reply.status(200).send(report);
+    },
+  );
 }

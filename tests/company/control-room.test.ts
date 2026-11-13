@@ -1,3 +1,4 @@
+import { registerVeylithRoutes } from '@adericel/veylith';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   bearer,
@@ -36,7 +37,17 @@ describe.skipIf(!available)('the control room', () => {
      * explicitly, which is also what makes it a test of the company layer
      * rather than of whatever happens to be wired up.
      */
-    harness = await createHarness({ env: { ADERICEL_COMPANY_LAYER: 'true' } });
+    /**
+     * A company deployment: the product, with Veylith's routes composed on.
+     *
+     * The flag alone no longer produces the company surface — the product holds
+     * no company code to switch on. The entry point that wants it hands it in,
+     * which is what `apps/veylith` does in production and what this does here.
+     */
+    harness = await createHarness({
+      env: { ADERICEL_COMPANY_LAYER: 'true' },
+      additionalRoutes: [registerVeylithRoutes],
+    });
     await harness.truncate();
     tenant = await seedTenant(harness, { slug: 'control-corp', records: [] });
     customerToken = await signIn(harness, 'owner-control-corp@test.invalid');

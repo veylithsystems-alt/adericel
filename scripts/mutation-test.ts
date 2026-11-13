@@ -67,8 +67,27 @@ async function databaseAvailable(): Promise<boolean> {
   }
 }
 
-/** Run one suite and return the names of the tests that failed. */
-function failingTests(suite: string): readonly string[] {
+/**
+ * What a suite did when it was run against the mutated source.
+ *
+ * `failed` holds the names of tests that failed by name, which is the only
+ * thing a `mustFail` entry can be checked against. `unattributed` holds the
+ * files that failed *outside* any test — a `beforeAll` that threw, an import
+ * that blew up — which produce no test name at all.
+ *
+ * The distinction was found by running the harness. A suite whose premise is
+ * asserted in `beforeAll` reports zero failed tests and every test `skipped`
+ * when that premise breaks, so the harness called a genuinely-guarded
+ * invariant SURVIVED and said "nothing failed at all" while the suite had in
+ * fact failed loudly. Collapsing the two cases is how a harness lies.
+ */
+interface SuiteOutcome {
+  readonly failed: readonly string[];
+  readonly unattributed: readonly string[];
+}
+
+/** Run one suite and report which tests failed, and whether it failed outside them. */
+function failingTests(suite: string): SuiteOutcome {
   try {
     execFileSync(
       'pnpm',
@@ -84,18 +103,32 @@ function failingTests(suite: string): readonly string[] {
   }
   try {
     const report = JSON.parse(readFileSync(path.join(ROOT, '.mutation-report.json'), 'utf8')) as {
-      testResults?: { assertionResults?: { title: string; status: string }[] }[];
+      testResults?: {
+        name?: string;
+        status?: string;
+        assertionResults?: { title: string; status: string }[];
+      }[];
     };
-    return (report.testResults ?? []).flatMap((file) =>
-      (file.assertionResults ?? [])
-        .filter((test) => test.status === 'failed')
-        .map((test) => test.title),
-    );
+    const files = report.testResults ?? [];
+    return {
+      failed: files.flatMap((file) =>
+        (file.assertionResults ?? [])
+          .filter((test) => test.status === 'failed')
+          .map((test) => test.title),
+      ),
+      unattributed: files
+        .filter(
+          (file) =>
+            file.status === 'failed' &&
+            !(file.assertionResults ?? []).some((test) => test.status === 'failed'),
+        )
+        .map((file) => path.relative(ROOT, file.name ?? 'unknown file')),
+    };
   } catch {
     // No parseable report at all: the suite did not run. Reported rather than
     // treated as a kill, because a compile error failing everything proves
     // nothing about the guard.
-    return [];
+    return { failed: [], unattributed: [] };
   }
 }
 
@@ -165,28 +198,40 @@ async function run(): Promise<void> {
 
     try {
       writeFileSync(file, original.replace(mutation.find, mutation.replace), 'utf8');
-      const failed = failingTests(mutation.suite);
+      const { failed, unattributed } = failingTests(mutation.suite);
       const missing = mutation.mustFail.filter(
         (name) => !failed.some((actual) => actual.includes(name)),
       );
 
-      results.push(
-        missing.length === 0
-          ? {
-              mutation,
-              outcome: 'KILLED',
-              detail: `${mutation.mustFail.length} named test(s) failed, as they must.`,
-            }
-          : {
-              mutation,
-              outcome: 'SURVIVED',
-              detail:
-                `These tests did NOT fail with the guard broken:\n      ${missing.join('\n      ')}` +
-                (failed.length > 0
-                  ? `\n    (what did fail: ${failed.join('; ')})`
-                  : '\n    (nothing failed at all)'),
-            },
-      );
+      if (missing.length === 0) {
+        results.push({
+          mutation,
+          outcome: 'KILLED',
+          detail: `${mutation.mustFail.length} named test(s) failed, as they must.`,
+        });
+      } else if (unattributed.length > 0) {
+        // The suite failed, but outside any test, so no `mustFail` name can be
+        // checked against it. Not a kill — the guard cannot be attributed — and
+        // not "nothing failed", which would be a lie. The fix is in the suite:
+        // assert the thing inside a test that has a title.
+        results.push({
+          mutation,
+          outcome: 'AMBIGUOUS',
+          detail:
+            `${unattributed.join(', ')} failed outside any test — a hook or an import, which ` +
+            'carries no test name. Move the assertion into a test body so the kill can be named.',
+        });
+      } else {
+        results.push({
+          mutation,
+          outcome: 'SURVIVED',
+          detail:
+            `These tests did NOT fail with the guard broken:\n      ${missing.join('\n      ')}` +
+            (failed.length > 0
+              ? `\n    (what did fail: ${failed.join('; ')})`
+              : '\n    (nothing failed at all)'),
+        });
+      }
     } finally {
       writeFileSync(file, original, 'utf8');
       // Verified rather than assumed. A restoration that silently failed would

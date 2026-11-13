@@ -1,4 +1,5 @@
 export * from './assurance.js';
+export * from './collection-failure.js';
 export * from './graph.js';
 export * from './evidence.js';
 export * from './observation.js';

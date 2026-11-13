@@ -1,4 +1,8 @@
 import {
+  COLLECTION_FAILURE_CODES,
+  type BlockedReason,
+  type CollectionFailureCode,
+  type DegradedReason,
   aggregateAssurance,
   isUnsubstantiated,
   type AssessmentRecord,
@@ -10,7 +14,13 @@ import {
   type Severity,
   type UnknownReason,
 } from '@adericel/domain';
+import {
+  effectiveLevel,
+  impairmentsFor as containmentImpairmentsFor,
+  type ContainmentLevel,
+} from '@adericel/containment';
 import { createClaimRepository, createEvidenceRepository } from '@adericel/evidence';
+import { sourceImpairments, type IntegrationHealthFacts } from '@adericel/integrations';
 import { publish, type TenantContext } from '@adericel/graph';
 import {
   AdericelError,
@@ -47,6 +57,22 @@ export interface AssessmentServiceDeps {
   readonly rulesets: RulesetRegistry;
   readonly actor: string;
   readonly correlationId: string;
+  /**
+   * Which predicates a connector supplies, by connector key.
+   *
+   * Required, not optional, and that is the point. This is what lets a control
+   * whose source has broken report DEGRADED / CREDENTIAL_EXPIRED instead of
+   * UNKNOWN / INSUFFICIENT_EVIDENCE. An earlier version of the system had the
+   * engine's impairment logic written and tested and *nothing supplying the
+   * input*, so DEGRADED was unreachable in production and every broken
+   * connector told an engineer to go and connect something that was already
+   * connected. An optional dependency would let that happen again silently;
+   * a required one makes forgetting it a compile error.
+   *
+   * Takes a connector key rather than a registry so this package does not have
+   * to know how connectors are looked up, and so a test can supply two lines.
+   */
+  readonly predicatesForConnector: (connectorKey: string) => readonly string[];
 }
 
 export interface ControlRow {
@@ -135,6 +161,46 @@ export interface ReplayResult {
   readonly explanation: string;
 }
 
+/**
+ * Whether a stored failure code is still one the system understands.
+ *
+ * The column is text, written by a possibly older release. Narrowing by
+ * membership rather than casting means an unrecognised value degrades to "not
+ * classified", which is honest, instead of travelling on as a reason the
+ * resolution queue has no mapping for.
+ */
+function isFailureCode(value: string | null): value is CollectionFailureCode {
+  return value !== null && (COLLECTION_FAILURE_CODES as readonly string[]).includes(value);
+}
+
+/**
+ * One child's determination, as a rollup sees it.
+ *
+ * A rollup used to receive only the states. That was enough to aggregate and
+ * not enough to explain: a requirement could be DEGRADED without being able to
+ * say why, so an operator reading the framework level learned that something
+ * was impaired and had to go and find out what.
+ */
+interface ChildState {
+  readonly state: AssuranceState;
+  readonly degradedReason: DegradedReason | null;
+  readonly blockedReason: BlockedReason | null;
+}
+
+interface ChildStateRow {
+  state: string;
+  degraded_reason: string | null;
+  blocked_reason: string | null;
+}
+
+function toChildState(row: ChildStateRow): ChildState {
+  return {
+    state: row.state as AssuranceState,
+    degradedReason: (row.degraded_reason as DegradedReason | null) ?? null,
+    blockedReason: (row.blocked_reason as BlockedReason | null) ?? null,
+  };
+}
+
 export function createAssessmentService(deps: AssessmentServiceDeps): AssessmentService {
   const { ctx, clock, rulesets, actor, correlationId } = deps;
   const claims = createClaimRepository(ctx, clock);
@@ -166,6 +232,133 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
    * cost proportional to the rule rather than to the size of the tenant, and it
    * makes the input digest a faithful record of what was actually consulted.
    */
+  /**
+   * Why Adericel cannot currently collect something, in words an operator can
+   * act on.
+   *
+   * Two sources, deliberately separate:
+   *
+   *   - A connector that is failing. The repair is technical: re-authorise,
+   *     grant a scope, wait out a throttle, fix a configuration.
+   *   - An estate under containment. Nothing is broken. Somebody decided it
+   *     was not safe to keep looking, which is a completely different fact and
+   *     must not read as "nobody has looked".
+   *
+   * Both are facts about the world, so both arrive as engine *input* and land
+   * inside the assessment digest. That is what keeps replay honest: re-running
+   * a historical assessment reproduces what Adericel reported at the time,
+   * including that a source was broken then and is fine now.
+   *
+   * The engine applies the safety rule, not this function: impairment may only
+   * ever rename an UNKNOWN. So being generous here — an impairment for every
+   * predicate an unhealthy integration declares — cannot touch a real
+   * determination, and a control still reading SATISFIED on evidence inside
+   * its freshness window stays SATISFIED while its source is dead. That is the
+   * correct answer; connector health is where the dead source is reported in
+   * the meantime.
+   */
+  async function gatherImpairments(): Promise<
+    readonly {
+      predicate: string;
+      kind: 'DEGRADED' | 'BLOCKED';
+      reason: DegradedReason | BlockedReason;
+      detail: string;
+    }[]
+  > {
+    const rows = await ctx.many<{
+      id: string;
+      name: string;
+      connector_key: string;
+      status: string;
+      consecutive_failures: number;
+      last_success_at: Date | null;
+      containment_level: string;
+      contained_since: Date | null;
+      org_containment_level: string;
+      latest_failure_code: string | null;
+    }>(
+      `SELECT i.id, i.name, i.connector_key, i.status, i.consecutive_failures,
+              i.last_success_at, i.containment_level, i.contained_since,
+              o.containment_level AS org_containment_level,
+              (SELECT r.error_code
+                 FROM integration_runs r
+                WHERE r.integration_id = i.id AND r.error_code IS NOT NULL
+                ORDER BY r.started_at DESC
+                LIMIT 1) AS latest_failure_code
+         FROM integrations i
+         JOIN organisations o ON o.id = i.organisation_id
+        WHERE i.organisation_id = $1`,
+      [ctx.organisationId],
+    );
+
+    /**
+     * What each integration has actually been answering.
+     *
+     * The manifest's declared predicate list is a *claim about* a connector,
+     * hand-maintained and therefore capable of being wrong — and when it is
+     * wrong by omission, impairment silently stops working for the predicates
+     * it forgot, so the operator gets INSUFFICIENT_EVIDENCE ("connect
+     * something") in place of the repair. That is exactly how this defect was
+     * found: a connector collected `device.managed` for months without
+     * declaring it.
+     *
+     * `claims.source_integration_id` is not a claim about the connector, it is
+     * the record of what the connector did. Taking the union of the two means
+     * a declaration that is wrong by omission is corrected by observation, and
+     * an integration that broke before it ever answered is still covered by
+     * its declaration.
+     */
+    const observed = await ctx.many<{ integration_id: string; predicate: string }>(
+      `SELECT DISTINCT source_integration_id AS integration_id, predicate
+         FROM claims
+        WHERE organisation_id = $1 AND source_integration_id IS NOT NULL`,
+      [ctx.organisationId],
+    );
+    const observedByIntegration = new Map<string, Set<string>>();
+    for (const row of observed) {
+      const bucket = observedByIntegration.get(row.integration_id) ?? new Set<string>();
+      bucket.add(row.predicate);
+      observedByIntegration.set(row.integration_id, bucket);
+    }
+    const predicatesFor = (integrationId: string, connectorKey: string): readonly string[] => [
+      ...new Set([
+        ...deps.predicatesForConnector(connectorKey),
+        ...(observedByIntegration.get(integrationId) ?? []),
+      ]),
+    ];
+
+    const health: IntegrationHealthFacts[] = rows.map((row) => ({
+      integrationId: row.id,
+      name: row.name,
+      connectorKey: row.connector_key,
+      status: row.status,
+      // Validated rather than cast. A code that is no longer in the vocabulary
+      // — an older release wrote it, or a migration renamed it — must read as
+      // "unclassified" rather than be passed through as a reason nothing
+      // downstream can map, which would reach an operator as a blank.
+      latestFailureCode: isFailureCode(row.latest_failure_code) ? row.latest_failure_code : null,
+      consecutiveFailures: row.consecutive_failures,
+      lastSuccessAt: row.last_success_at?.toISOString() ?? null,
+      predicates: predicatesFor(row.id, row.connector_key),
+    }));
+
+    const fromSources = sourceImpairments({ integrations: health });
+
+    const fromContainment = rows.flatMap((row) =>
+      containmentImpairmentsFor({
+        level: effectiveLevel([
+          row.containment_level as ContainmentLevel,
+          row.org_containment_level as ContainmentLevel,
+        ]),
+        predicates: predicatesFor(row.id, row.connector_key),
+        since: row.contained_since?.toISOString() ?? 'an earlier date',
+        reason: 'security containment',
+      }),
+    );
+
+    return [...fromSources, ...fromContainment];
+  }
+
   async function buildInput(
     control: ControlRow,
     ruleset: Ruleset,
@@ -182,6 +375,7 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       });
     }
     const predicates = ruleRequiredPredicates(rule);
+    const impairments = await gatherImpairments();
 
     const subjectRows =
       rule.subjectKinds.length === 0
@@ -266,6 +460,10 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       organisationClaims: organisationClaims.map(toClaimFacts),
       evidence,
       observedSubjectKinds: observedRows.map((row) => row.kind),
+      // Narrowed to the predicates this rule actually needs. An impairment on
+      // a predicate the rule never reads is noise in the digest, and the
+      // digest is what replay compares.
+      impairments: impairments.filter((impairment) => predicates.includes(impairment.predicate)),
       activeExceptions: exceptionRows.map((row) => ({
         id: row.id,
         subjectNodeId: row.subject_node_id,
@@ -321,6 +519,8 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
     outcome: {
       state: AssuranceState;
       unknownReason: UnknownReason | null;
+      degradedReason: DegradedReason | null;
+      blockedReason: BlockedReason | null;
       rationale: string;
       reasoning: readonly ReasoningStep[];
       claimIds: readonly string[];
@@ -350,12 +550,24 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
     const changed = previousState !== outcome.state;
 
     const inserted = await ctx.oneOrFail<{ id: string; created_at: Date }>(
+      /**
+       * `degraded_reason` and `blocked_reason` are written here, not only
+       * `unknown_reason`.
+       *
+       * Both columns, and the CHECK constraints that tie each to its state,
+       * were added with the vocabulary and then never written, because nothing
+       * supplied impairment so no assessment could reach DEGRADED or BLOCKED.
+       * The read side had already been fixed to prefer the stored column — over
+       * a column nothing populated — which is a reminder that a fix to a reader
+       * proves nothing about the writer.
+       */
       `INSERT INTO assessments
-         (organisation_id, node_id, subject_kind, subject_id, state, unknown_reason, rationale,
+         (organisation_id, node_id, subject_kind, subject_id, state, unknown_reason,
+          degraded_reason, blocked_reason, rationale,
           reasoning, trigger, engine_version, ruleset_key, ruleset_version, ruleset_hash, rule_key,
           input_digest, evidence_ids, claim_ids, previous_assessment_id, state_changed, assessed_at,
           correlation_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15,
+       VALUES ($1, $2, $3, $4, $5, $6, $22, $23, $7, $8::jsonb, $9, $10, $11, $12, $13, $14, $15,
                $16::uuid[], $17::uuid[], $18, $19, $20, $21)
        RETURNING id, created_at`,
       [
@@ -380,18 +592,26 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
         changed,
         outcome.provenance.assessedAt,
         correlationId,
+        outcome.degradedReason,
+        outcome.blockedReason,
       ],
       'Assessment',
     );
 
     await ctx.query(
       `INSERT INTO assurance_states
-         (organisation_id, subject_kind, subject_id, state, unknown_reason, assessment_id,
+         (organisation_id, subject_kind, subject_id, state, unknown_reason,
+          degraded_reason, blocked_reason, assessment_id,
           previous_state, since, last_assessed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+       VALUES ($1, $2, $3, $4, $5, $9, $10, $6, $7, $8, $8)
        ON CONFLICT (organisation_id, subject_kind, subject_id) DO UPDATE SET
          state = EXCLUDED.state,
          unknown_reason = EXCLUDED.unknown_reason,
+         -- Overwritten rather than coalesced. A control that was DEGRADED for a
+         -- credential and is now DEGRADED for a throttle must say so; keeping
+         -- the first reason would send an engineer to re-do work already done.
+         degraded_reason = EXCLUDED.degraded_reason,
+         blocked_reason = EXCLUDED.blocked_reason,
          assessment_id = EXCLUDED.assessment_id,
          previous_state = assurance_states.state,
          -- The "since" timestamp only moves when the state actually changes, so
@@ -409,6 +629,8 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
         inserted.id,
         previousState,
         outcome.provenance.assessedAt,
+        outcome.degradedReason,
+        outcome.blockedReason,
       ],
     );
 
@@ -647,8 +869,8 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
 
     async rollUpRequirement(requirementId, asOf): Promise<AssessmentOutput | null> {
       const asOfIso = asOf ?? clock.nowIso();
-      const rows = await ctx.many<{ state: string }>(
-        `SELECT a.state
+      const rows = await ctx.many<ChildStateRow>(
+        `SELECT a.state, a.degraded_reason, a.blocked_reason
          FROM control_requirements cr
          JOIN assurance_states a
            ON a.organisation_id = cr.organisation_id
@@ -656,41 +878,30 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
          WHERE cr.organisation_id = $1 AND cr.requirement_id = $2`,
         [ctx.organisationId, requirementId],
       );
-      return rollUp(
-        'REQUIREMENT',
-        requirementId,
-        rows.map((r) => r.state as AssuranceState),
-        asOfIso,
-      );
+      return rollUp('REQUIREMENT', requirementId, rows.map(toChildState), asOfIso);
     },
 
     async rollUpFramework(frameworkId, asOf): Promise<AssessmentOutput | null> {
       const asOfIso = asOf ?? clock.nowIso();
-      const rows = await ctx.many<{ state: string }>(
-        `SELECT a.state
+      const rows = await ctx.many<ChildStateRow>(
+        `SELECT a.state, a.degraded_reason, a.blocked_reason
          FROM requirements r
          JOIN assurance_states a
            ON a.subject_kind = 'REQUIREMENT' AND a.subject_id = r.id AND a.organisation_id = $1
          WHERE r.framework_id = $2`,
         [ctx.organisationId, frameworkId],
       );
-      return rollUp(
-        'FRAMEWORK',
-        frameworkId,
-        rows.map((r) => r.state as AssuranceState),
-        asOfIso,
-      );
+      return rollUp('FRAMEWORK', frameworkId, rows.map(toChildState), asOfIso);
     },
 
     async rollUpOrganisation(asOf): Promise<AssessmentOutput | null> {
       const asOfIso = asOf ?? clock.nowIso();
-      const rows = await ctx.many<{ state: string }>(
-        `SELECT state FROM assurance_states
+      const rows = await ctx.many<ChildStateRow>(
+        `SELECT state, degraded_reason, blocked_reason FROM assurance_states
          WHERE organisation_id = $1 AND subject_kind = 'FRAMEWORK'`,
         [ctx.organisationId],
       );
-      const states = rows.map((r) => r.state as AssuranceState);
-      return rollUp('ORGANISATION', ctx.organisationId, states, asOfIso);
+      return rollUp('ORGANISATION', ctx.organisationId, rows.map(toChildState), asOfIso);
     },
 
     async replay(assessmentId): Promise<ReplayResult> {
@@ -856,10 +1067,28 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
   async function rollUp(
     subjectKind: AssessmentSubjectKind,
     subjectId: string,
-    states: readonly AssuranceState[],
+    children: readonly ChildState[],
     asOfIso: string,
   ): Promise<AssessmentOutput | null> {
+    const states = children.map((child) => child.state);
     const aggregate = aggregateAssurance(states);
+    /**
+     * A rolled-up reason, only where the children agree.
+     *
+     * A requirement whose four controls are all degraded because the same
+     * credential expired has one answer, and saying it at the requirement
+     * level saves an operator four clicks. Four controls degraded for four
+     * different reasons have no single answer, and inventing one — picking the
+     * first, or the most common — would send somebody to do one repair when
+     * four are needed. In that case the reason is null and the explanation
+     * sends the reader to the children, which is where the truth is.
+     */
+    const agreedReason = <T extends string>(pick: (child: ChildState) => T | null): T | null => {
+      const reasons = new Set(
+        children.filter((child) => pick(child) !== null).map((child) => pick(child) as T),
+      );
+      return reasons.size === 1 ? [...reasons][0]! : null;
+    };
     const reasoning: ReasoningStep[] = [
       {
         step: 'aggregate',
@@ -889,6 +1118,10 @@ export function createAssessmentService(deps: AssessmentServiceDeps): Assessment
       {
         state: aggregate.state,
         unknownReason: aggregate.state === 'UNKNOWN' ? 'INSUFFICIENT_EVIDENCE' : null,
+        degradedReason:
+          aggregate.state === 'DEGRADED' ? agreedReason((child) => child.degradedReason) : null,
+        blockedReason:
+          aggregate.state === 'BLOCKED' ? agreedReason((child) => child.blockedReason) : null,
         rationale: isUnsubstantiated(aggregate.state)
           ? `Cannot be determined: of ${aggregate.inScope} child subject(s), ` +
             `${aggregate.counts.UNKNOWN} unknown, ${aggregate.counts.DEGRADED} degraded ` +

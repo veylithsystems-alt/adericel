@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@adericel/actions": "workspace:*",
-    "@adericel/autonomy": "workspace:*",
     "@adericel/billing": "workspace:*",
     "@adericel/containment": "workspace:*",
     "@adericel/domain": "workspace:*",
@@ -26,7 +25,6 @@
     "@adericel/triage": "workspace:*",
     "@adericel/truth-engine": "workspace:*",
     "@adericel/value": "workspace:*",
-    "@adericel/vaol": "workspace:*",
     "@fastify/cors": "^11.1.0",
     "@fastify/helmet": "^13.0.1",
     "@fastify/multipart": "^9.2.1",
@@ -34,7 +32,7 @@
     "fastify": "^5.6.1",
     "jose": "^6.1.0",
     "pg": "^8.16.3",
-    "zod": "^4.1.11"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/pg": "^8.15.5"

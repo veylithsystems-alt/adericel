@@ -68,12 +68,22 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
           last_assessed_at: Date | null;
         }>(
           `SELECT o.id AS organisation_id, o.name, o.slug, o.status,
-             count(a.*) FILTER (WHERE a.state = 'SATISFIED')::text AS satisfied,
-             count(a.*) FILTER (WHERE a.state = 'NOT_SATISFIED')::text AS not_satisfied,
-             count(a.*) FILTER (WHERE a.state = 'PARTIALLY_SATISFIED')::text AS partially,
-             count(a.*) FILTER (WHERE a.state = 'UNKNOWN')::text AS unknown,
-             count(a.*) FILTER (WHERE a.state = 'EXCEPTED')::text AS excepted,
-             count(a.*) FILTER (WHERE a.state = 'NOT_APPLICABLE')::text AS not_applicable,
+             -- Counted over CONTROLS, not over assessments.
+             --
+             -- This used to count rows in 'assurance_states', so a control that
+             -- had never been assessed counted as nothing at all. An
+             -- organisation with sixteen in-scope controls and no assessment
+             -- reported zero unknown, zero failing and zero satisfied — all
+             -- zeroes, on the first page an MSP sees, which reads as "nothing
+             -- wrong". The assurance page one level down already said the
+             -- opposite, and its own comment warns about exactly this. See the
+             -- note in 'assurance.ts' and RR-096.
+             count(c.*) FILTER (WHERE a.state = 'SATISFIED')::text AS satisfied,
+             count(c.*) FILTER (WHERE a.state = 'NOT_SATISFIED')::text AS not_satisfied,
+             count(c.*) FILTER (WHERE a.state = 'PARTIALLY_SATISFIED')::text AS partially,
+             count(c.*) FILTER (WHERE a.state = 'UNKNOWN' OR a.state IS NULL)::text AS unknown,
+             count(c.*) FILTER (WHERE a.state = 'EXCEPTED')::text AS excepted,
+             count(c.*) FILTER (WHERE a.state = 'NOT_APPLICABLE')::text AS not_applicable,
              (SELECT count(*)::text FROM findings f
                WHERE f.organisation_id = o.id AND f.severity = 'CRITICAL'
                  AND f.status IN ('OPEN','ACKNOWLEDGED','IN_REMEDIATION')) AS critical_findings,
@@ -100,8 +110,12 @@ export function registerPortfolioRoutes(server: FastifyInstance, app: AppContext
                WHERE i.organisation_id = o.id AND i.status = 'DEGRADED') AS degraded_integrations,
              max(a.last_assessed_at) AS last_assessed_at
            FROM organisations o
+           LEFT JOIN controls c
+             ON c.organisation_id = o.id AND c.enabled
            LEFT JOIN assurance_states a
-             ON a.organisation_id = o.id AND a.subject_kind = 'CONTROL'
+             ON a.organisation_id = c.organisation_id
+            AND a.subject_kind = 'CONTROL'
+            AND a.subject_id = c.id
            WHERE o.msp_id = $1 AND o.status <> 'CLOSED'
            GROUP BY o.id, o.name, o.slug, o.status
            ORDER BY o.name`,

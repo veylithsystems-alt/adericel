@@ -1,0 +1,186 @@
+[
+  {
+    "file": "apps/api/src/auth/tokens.ts",
+    "name": "safeCompare"
+  },
+  {
+    "file": "apps/api/src/middleware/idempotency.ts",
+    "name": "purgeExpiredIdempotencyKeys"
+  },
+  {
+    "file": "apps/api/src/services/billing.ts",
+    "name": "lapseExpiredGracePeriods"
+  },
+  {
+    "file": "apps/api/src/services/break-glass.ts",
+    "name": "outstandingBreakGlass"
+  },
+  {
+    "file": "apps/api/src/services/onboarding-tasks.ts",
+    "name": "completeOnboardingTask"
+  },
+  {
+    "file": "packages/containment/src/level.ts",
+    "name": "levelRank"
+  },
+  {
+    "file": "packages/crosswalk/src/crosswalk.ts",
+    "name": "reverseOf"
+  },
+  {
+    "file": "packages/crosswalk/src/crosswalk.ts",
+    "name": "setProblems"
+  },
+  {
+    "file": "packages/domain/src/authz.ts",
+    "name": "accessibleMspIds"
+  },
+  {
+    "file": "packages/domain/src/authz.ts",
+    "name": "accessibleOrganisationIds"
+  },
+  {
+    "file": "packages/domain/src/authz.ts",
+    "name": "hasPlatformScope"
+  },
+  {
+    "file": "packages/domain/src/autonomy.ts",
+    "name": "canExecuteAtAll"
+  },
+  {
+    "file": "packages/domain/src/autonomy.ts",
+    "name": "requiresHumanApproval"
+  },
+  {
+    "file": "packages/domain/src/billing.ts",
+    "name": "monthlyChargeMinor"
+  },
+  {
+    "file": "packages/domain/src/finding.ts",
+    "name": "isExceptionActive"
+  },
+  {
+    "file": "packages/domain/src/graph.ts",
+    "name": "edgeRule"
+  },
+  {
+    "file": "packages/domain/src/graph.ts",
+    "name": "isAssetKind"
+  },
+  {
+    "file": "packages/domain/src/surface.ts",
+    "name": "surfacesFor"
+  },
+  {
+    "file": "packages/domain/src/truth-state.ts",
+    "name": "isAuthoritative"
+  },
+  {
+    "file": "packages/graph/src/audit.ts",
+    "name": "listAuditPlatform"
+  },
+  {
+    "file": "packages/graph/src/events.ts",
+    "name": "replayDeadLetter"
+  },
+  {
+    "file": "packages/inference/src/extraction.ts",
+    "name": "extractGrounded"
+  },
+  {
+    "file": "packages/integrations/src/manifest.ts",
+    "name": "healthIsDegraded"
+  },
+  {
+    "file": "packages/integrations/src/normalise.ts",
+    "name": "payloadKeysForKind"
+  },
+  {
+    "file": "packages/policy/src/cyber-essentials-v3-3.ts",
+    "name": "ceRequirementsByTheme"
+  },
+  {
+    "file": "packages/questionnaire/src/intake/detect.ts",
+    "name": "proposeQuestionnaireLayout"
+  },
+  {
+    "file": "packages/questionnaire/src/intake/writeback.ts",
+    "name": "planWriteBack"
+  },
+  {
+    "file": "packages/questionnaire/src/render.ts",
+    "name": "renderAnswer"
+  },
+  {
+    "file": "packages/questionnaire/src/render.ts",
+    "name": "statesOtherThan"
+  },
+  {
+    "file": "packages/shared/src/canonical.ts",
+    "name": "shortHash"
+  },
+  {
+    "file": "packages/shared/src/clock.ts",
+    "name": "isoOrNull"
+  },
+  {
+    "file": "packages/shared/src/ids.ts",
+    "name": "asId"
+  },
+  {
+    "file": "packages/shared/src/ids.ts",
+    "name": "newId"
+  },
+  {
+    "file": "packages/shared/src/logger.ts",
+    "name": "isLogLevel"
+  },
+  {
+    "file": "packages/shared/src/redaction.ts",
+    "name": "maskToken"
+  },
+  {
+    "file": "packages/shared/src/result.ts",
+    "name": "isErr"
+  },
+  {
+    "file": "packages/shared/src/result.ts",
+    "name": "isOk"
+  },
+  {
+    "file": "packages/shared/src/result.ts",
+    "name": "mapResult"
+  },
+  {
+    "file": "packages/shared/src/result.ts",
+    "name": "unwrapOr"
+  },
+  {
+    "file": "packages/support/src/case.ts",
+    "name": "isTerminal"
+  },
+  {
+    "file": "packages/support/src/diagnostics.ts",
+    "name": "verifyDiagnosticBundle"
+  },
+  {
+    "file": "packages/truth-engine/src/kleene.ts",
+    "name": "isKnown"
+  },
+  {
+    "file": "packages/value/src/intervention.ts",
+    "name": "classifiableAuditActions"
+  },
+  {
+    "file": "packages/value/src/intervention.ts",
+    "name": "excludedAuditActions"
+  },
+  {
+    "file": "packages/value/src/outcome.ts",
+    "name": "buildOutcomeScorecard"
+  },
+  {
+    "file": "packages/value/src/outcome.ts",
+    "name": "scorecardByClass"
+  }
+]
