@@ -17,6 +17,12 @@ import type { ConnectorRegistry, ExecutionResult } from '@adericel/integrations'
 import { evaluatePolicy, type CompiledPolicy, type PolicyDecision } from '@adericel/policy';
 import { AdericelError, contentHash, type Clock, type Logger } from '@adericel/shared';
 import { evaluateVerification } from './verification.js';
+import {
+  assertReObservation,
+  provenanceOf,
+  readingOf,
+  type ReObservation,
+} from './reobservation.js';
 
 /**
  * Action lifecycle.
@@ -211,7 +217,7 @@ export interface ActionService {
     approverUserId: string,
   ): Promise<ApproveResult>;
   execute(actionId: string): Promise<ExecuteResult>;
-  verify(actionId: string, observedValue: unknown): Promise<VerifyResult>;
+  verify(actionId: string, reobservation: ReObservation): Promise<VerifyResult>;
   cancel(actionId: string, reason: string): Promise<ActionRecord>;
   getById(actionId: string): Promise<ActionRecord | null>;
   requireById(actionId: string): Promise<ActionRecord>;
@@ -968,7 +974,11 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
       return { action: finalAction, execution: result, alreadyExecuted: false, refused: null };
     },
 
-    async verify(actionId, observedValue): Promise<VerifyResult> {
+    async verify(actionId, reobservation): Promise<VerifyResult> {
+      // Before anything else, and before any state moves. An unattested value
+      // is a programming error in the caller, not an inconclusive reading
+      // (RR-095), so it is refused rather than recorded.
+      assertReObservation(reobservation);
       const now = clock.nowIso();
       const action = await service.requireById(actionId);
       if (action.state !== 'VERIFYING') {
@@ -986,14 +996,18 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
         predicate: capability.verification.predicate,
         expectedValue: capability.verification.expectedValue,
         comparison: capability.verification.comparison ?? 'EQUALS',
-        observedValue,
+        // `NOT_OBSERVABLE` arrives here as `undefined`, by the same door as a
+        // run that produced no claim. Neither can reach CONFIRMED.
+        observedValue: readingOf(reobservation),
         executedAt: action.executedAt,
       });
+      const provenance = provenanceOf(reobservation);
 
       const verification = await ctx.oneOrFail<{ id: string }>(
         `INSERT INTO verifications
-           (organisation_id, node_id, action_id, method, outcome, detail, attempt, verified_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (organisation_id, node_id, action_id, method, outcome, detail, attempt, verified_at,
+            integration_run_id, observed_at, not_observable_reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          RETURNING id`,
         [
           ctx.organisationId,
@@ -1004,6 +1018,11 @@ export function createActionService(deps: ActionServiceDeps): ActionService {
           detail,
           action.attemptCount,
           now,
+          // The provenance is the point: a verification row now either names
+          // the run its reading came out of, or names why there was no run.
+          provenance.integrationRunId,
+          provenance.observedAt,
+          provenance.notObservableReason,
         ],
         'Verification',
       );

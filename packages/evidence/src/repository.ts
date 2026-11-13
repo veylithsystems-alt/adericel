@@ -191,14 +191,42 @@ export function createEvidenceRepository(ctx: TenantContext, clock: Clock): Evid
       const collectedAt = input.collectedAt ?? now;
       const validFrom = input.validFrom ?? input.observedAt ?? collectedAt;
 
-      // Identity is content-based. Two collections of the same configuration
-      // snapshot are the same evidence; recording both would inflate the
-      // evidence base without adding assurance.
+      /**
+       * Identity is content *and subject*.
+       *
+       * Two collections of the same configuration snapshot about the same
+       * subject are the same evidence, and recording both would inflate the
+       * evidence base without adding assurance. Two subjects that happen to be
+       * configured identically are NOT the same evidence, and treating them as
+       * one is an attribution failure, not an optimisation.
+       *
+       * It was treated as one. `sourceReference` was missing from this digest,
+       * so a fleet of identically-imaged laptops collapsed into a single
+       * evidence row: `source_reference` named whichever device was collected
+       * first, the row was attached to every one of them, and a customer
+       * asking for the proof that *their* laptop was encrypted was handed a
+       * record about somebody else's. For a product that sells walking a
+       * conclusion back to the response that produced it, that is a
+       * correctness failure at the centre of the claim.
+       *
+       * It also hid a dropped subject. A device that silently stopped being
+       * reported kept its proof fresh, because every identical device still
+       * being collected refreshed the row they shared — so the failure a
+       * uniform estate is most exposed to was the one it could not see. The
+       * more uniform the estate, the worse it got.
+       *
+       * `input.contentHash` still wins where a caller supplies one. That is
+       * for file-backed evidence — an uploaded policy document — where
+       * identity genuinely is the bytes: the same PDF is the same artefact
+       * however many subjects it covers, and `evidence_subjects` is how it
+       * covers them.
+       */
       const digest =
         input.contentHash ??
         contentHash({
           sourceSystem: input.sourceSystem,
           sourceType: input.sourceType,
+          sourceReference: input.sourceReference ?? null,
           payload: input.payload ?? null,
           storageKey: input.storageKey ?? null,
         });
@@ -215,16 +243,29 @@ export function createEvidenceRepository(ctx: TenantContext, clock: Clock): Evid
       );
 
       if (existing) {
-        // Refresh the collection timestamp so freshness reflects that we have
-        // just re-observed the same fact, without creating a duplicate record.
+        /**
+         * Refresh recency, so freshness reflects that we have just re-observed
+         * the same fact, without creating a duplicate record.
+         *
+         * `observed_at` as well as `collected_at`, because usability is
+         * anchored on `observed_at ?? collected_at` — the source's own account
+         * of when the fact was true, which is the right anchor and therefore
+         * the one that has to move. Refreshing only `collected_at` would leave
+         * every connector that reports a vendor timestamp ageing out exactly as
+         * before, and the defect would look fixed in the fixture.
+         *
+         * `GREATEST` on both, so a backfill or an out-of-order page can never
+         * make a fact look fresher than the newest reading actually taken.
+         */
         const refreshed = await ctx.oneOrFail<EvidenceRow>(
           `UPDATE evidence
            SET collected_at = GREATEST(collected_at, $3::timestamptz),
+               observed_at = GREATEST(observed_at, $5::timestamptz),
                valid_until = COALESCE($4::timestamptz, valid_until),
                metadata = metadata || jsonb_build_object('recollectedAt', $3::text)
            WHERE id = $1 AND organisation_id = $2
            RETURNING ${COLUMNS}`,
-          [existing.id, ctx.organisationId, collectedAt, validUntil],
+          [existing.id, ctx.organisationId, collectedAt, validUntil, input.observedAt ?? null],
           'Evidence',
         );
         if (input.subjectNodeIds.length > 0) {

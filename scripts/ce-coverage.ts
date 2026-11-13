@@ -1,0 +1,175 @@
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  CE_V3_3_REQUIREMENTS,
+  ceObservationGaps,
+  summariseCeCoverage,
+  type CeRequirement,
+} from '@adericel/policy';
+import {
+  googleWorkspaceManifest,
+  microsoftEntraManifest,
+  microsoftIntuneManifest,
+  type ConnectorManifest,
+} from '@adericel/integrations';
+
+/**
+ * What Adericel can actually observe against Cyber Essentials v3.3, measured.
+ *
+ * WHY THIS IS GENERATED
+ *
+ * The machinery to compute this existed and nothing printed the answer. The
+ * coverage test deliberately asserts no number — correctly, because the number
+ * moves as connectors land — so the one figure that decides whether this
+ * product is sellable was computable and unrecorded.
+ *
+ * It is the first question an MSP asks and the first thing a commercial
+ * conversation needs: not "does it support Cyber Essentials" but "how many of
+ * the twenty-six requirements can it see for itself, how many need somebody to
+ * attest, and which ones can it not reach at all". A product that answers that
+ * honestly is worth more than one that says "full coverage" and leaves the MSP
+ * to discover the gaps in front of their own customer.
+ *
+ * Generated rather than written, and checked for drift by
+ * `tests/unit/ce-coverage-doc.test.ts`, because a coverage figure in a document
+ * somebody maintains by hand is a number that was true once.
+ */
+
+/**
+ * The connectors whose predicates count.
+ *
+ * The same three the coverage test uses, and for the same reason:
+ * `generic-http` declares whatever an operator configures, `adericel-self`
+ * observes Adericel rather than a customer, and `demo-fixture` supplies
+ * everything by construction. Counting any of them would let this figure be
+ * improved by connecting nothing real.
+ */
+const COUNTED: readonly ConnectorManifest[] = [
+  microsoftEntraManifest,
+  microsoftIntuneManifest,
+  googleWorkspaceManifest,
+];
+
+const ROOT = join(import.meta.dirname, '..');
+const OUT = join(ROOT, 'docs', 'product', 'CYBER_ESSENTIALS_COVERAGE.md');
+
+function suppliedPredicates(): readonly string[] {
+  return [
+    ...new Set(COUNTED.flatMap((m) => (m.collect ?? []).flatMap((c) => c.predicates))),
+  ].sort();
+}
+
+/** The word an MSP should read, not the enum. */
+const OBSERVABILITY_LABEL: Readonly<Record<CeRequirement['observability'], string>> = {
+  OBSERVED: 'Observed',
+  PARTIAL: 'Partly observed',
+  ATTESTED_ONLY: 'Needs an attestation',
+  NOT_OBSERVABLE: 'Cannot be observed',
+};
+
+function table(requirements: readonly CeRequirement[], missingOf: Map<string, string[]>): string {
+  const rows = requirements.map((requirement) => {
+    const missing = missingOf.get(requirement.id) ?? [];
+    return [
+      `\`${requirement.id}\``,
+      requirement.theme.replaceAll('_', ' ').toLowerCase(),
+      requirement.requirement,
+      OBSERVABILITY_LABEL[requirement.observability],
+      missing.length === 0 ? '—' : missing.map((p) => `\`${p}\``).join(', '),
+      requirement.note ?? '',
+    ].join(' | ');
+  });
+  // Trailing pipes on purpose: Prettier writes them, and a generator whose
+  // output differs from the formatted file by punctuation makes the drift check
+  // compare layout instead of content.
+  return [
+    '| Requirement | Theme | What it asks | Today | Predicates not supplied | Why |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...rows.map((row) => `| ${row} |`),
+  ].join('\n');
+}
+
+export function render(): string {
+  const supplied = suppliedPredicates();
+  const summary = summariseCeCoverage();
+  const gaps = ceObservationGaps(supplied);
+  const missingOf = new Map(gaps.map((gap) => [gap.requirementId, [...gap.missing]]));
+  const unchecked = CE_V3_3_REQUIREMENTS.filter((r) => !r.sourceChecked).length;
+  const percent = Math.round(summary.continuousCoverage * 1000) / 10;
+
+  const themes = [...new Set(CE_V3_3_REQUIREMENTS.map((r) => r.theme))];
+  const byTheme = themes
+    .map((theme) => {
+      const inTheme = CE_V3_3_REQUIREMENTS.filter((r) => r.theme === theme);
+      const observed = inTheme.filter((r) => r.observability === 'OBSERVED').length;
+      return `| ${theme.replaceAll('_', ' ').toLowerCase()} | ${observed} of ${inTheme.length} |`;
+    })
+    .join('\n');
+
+  return `# Cyber Essentials v3.3 — what Adericel observes
+
+**Documentation state:** ASSUMED
+
+_The figure below is measured. The model it is measured against is not, so_
+_nothing here should be read as a working capability._ Adericel's twenty-six
+requirement paraphrases were written from working knowledge and none has been
+checked against the published scheme document, so this describes Adericel's
+coverage of _its own model_ of Cyber Essentials. "Cyber Essentials coverage"
+becomes a capability when somebody reads the scheme text against this model and
+the paraphrases are marked checked — not when the arithmetic runs.
+
+> **Generated by \`scripts/ce-coverage.ts\`. Do not edit by hand.**
+> \`tests/unit/ce-coverage-doc.test.ts\` fails if this drifts from what the
+> generator produces, so an edit here is overwritten rather than kept.
+
+## The figure, and what it is not
+
+**${summary.observed} of ${summary.total} requirements are observed end to end.**
+${summary.partial} are partly observed, ${summary.attestedOnly} need somebody to
+attest, and ${summary.notObservable} cannot be observed by any connector.
+Continuous coverage is therefore **${percent}%** of the requirements that are
+observable at all.
+
+${summary.caveat}
+
+Two further limits, stated here rather than left to be found:
+
+- **${unchecked} of the ${summary.total} requirement paraphrases have not been
+  checked against the published scheme document.** They were written from
+  working knowledge. Until somebody reads them against the real text, this
+  document describes Adericel's coverage of _its own model_ of Cyber
+  Essentials, which is a weaker claim than it looks.
+- The figure is computed from what the installed connectors **declare** they
+  supply, against a customer whose integrations are all connected and
+  collecting. A deployment that has connected one of the three, or whose
+  collection is failing, observes less than this.
+
+No statement here means an organisation is certified, compliant, or ready for
+assessment. Adericel reports what it can and cannot see; the scheme's
+requirements are met by the organisation, and judged by its assessor.
+
+## By theme
+
+| Theme | Observed end to end |
+| --- | --- |
+${byTheme}
+
+## Predicates the counted connectors supply
+
+${COUNTED.map((m) => `\`${m.id}\``).join(', ')} — ${supplied.length} distinct predicates.
+
+${supplied.map((predicate) => `- \`${predicate}\``).join('\n')}
+
+## Every requirement
+
+${table(CE_V3_3_REQUIREMENTS, missingOf)}
+`;
+}
+
+const rendered = render();
+if (process.argv.includes('--check')) {
+  process.stdout.write(rendered);
+} else {
+  writeFileSync(OUT, rendered, 'utf8');
+  process.stdout.write(`wrote ${OUT}\n`);
+}
