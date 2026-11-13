@@ -61,7 +61,7 @@
   },
   "dependencies": {
     "@adericel/resolution": "workspace:*",
-    "pg": "^8.16.3"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@adericel/actions": "workspace:*",
