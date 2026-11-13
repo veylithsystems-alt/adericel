@@ -6,13 +6,29 @@ import {
   createExceptionQueue,
   createMetricsService,
   createOperator,
+  COMPANY_PERSONAL_DATA,
   DEFAULT_COMPANY_POLICY,
 } from '@adericel/vaol';
 import { AdericelError } from '@adericel/shared';
-import type { AppContext } from '../context.js';
-import { audit, requirePlatform } from '../middleware/request-context.js';
-import { retentionSchedule } from '../services/retention.js';
-import { parseBody, parseParams, parseQuery } from '../middleware/validation.js';
+/**
+ * Everything this file needs from the product, through the product's public
+ * surface.
+ *
+ * It used to live inside `apps/api/src` and reach into the app with relative
+ * imports, which is why the product could not be extracted into its own
+ * repository without editing manifests on the way out. It is now a consumer of
+ * `@adericel/api` like any other, and the dependency points company → product
+ * with nothing pointing back.
+ */
+import {
+  audit,
+  parseBody,
+  parseParams,
+  parseQuery,
+  requirePlatform,
+  retentionSchedule,
+  type AppContext,
+} from '@adericel/api';
 
 /**
  * The internal control room.
@@ -74,7 +90,9 @@ export function registerVeylithRoutes(server: FastifyInstance, app: AppContext):
           : Math.floor((Date.parse(app.clock.nowIso()) - Date.parse(lastRun)) / 3_600_000);
 
       return reply.status(200).send({
-        schedule: retentionSchedule(),
+        // Product plus company: this deployment holds both, and the schedule
+        // must say so. A customer's deployment holds only the first.
+        schedule: retentionSchedule(COMPANY_PERSONAL_DATA),
         lastRunAt: lastRun,
         hoursSinceLastRun: hoursSince,
         // The sweep is scheduled daily. Anything past 48 hours means it has

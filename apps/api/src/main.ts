@@ -39,38 +39,23 @@ async function main(): Promise<void> {
   });
 
   /**
-   * The company's authority model, on a company deployment only.
+   * This is the product. There is no company branch here any more.
    *
-   * Imported dynamically rather than at the top of the file, and that is the
-   * substance of the separation rather than a style choice: a static import
-   * pulls `@adericel/vaol` into the module graph of every deployment, so the
-   * product could not be built or shipped without the company layer even when
-   * it never called it. A dynamic import inside the branch means a product
-   * build genuinely does not load it, and `tests/unit/architecture.test.ts`
-   * asserts there is no static path from the product to the company layer.
+   * There used to be one: a dynamic import of the company package behind
+   * `ADERICEL_COMPANY_LAYER`, which kept the company layer out of a product
+   * build's module graph. It did not keep it out of the product's source tree —
+   * `apps/api` declared the dependency and its TypeScript project referenced it
+   * — so giving Adericel its own repository meant editing manifests on the way
+   * out, and a separation held by a patch script is one that eventually does
+   * not hold.
    *
-   * Installed only when no version exists — once a policy is in the database it
-   * is the company's, possibly deliberately narrowed, and an upgrade
-   * overwriting it with the shipped default would be a privilege escalation
-   * performed by a deployment.
+   * Veylith's own deployment is now `apps/veylith`, which depends on this app
+   * and installs the company's autonomy policy itself. Nothing points back.
    */
-  if (config.companyLayerEnabled) {
-    const { DEFAULT_COMPANY_POLICY, ensureAutonomyPolicy } = await import('@adericel/vaol');
-    const policy = await app.db.withPlatform(async (ctx) =>
-      ensureAutonomyPolicy(ctx, DEFAULT_COMPANY_POLICY, 'bootstrap', app.clock),
-    );
-    app.logger.info(
-      { installed: policy.installed, policyHash: policy.hash },
-      policy.installed
-        ? 'installed the default company autonomy policy'
-        : 'company autonomy policy already present; left unchanged',
-    );
-  } else {
-    app.logger.info(
-      'company layer disabled; this is a product deployment and holds none of Veylith’s own ' +
-        'operating or commercial machinery',
-    );
-  }
+  app.logger.info(
+    'product deployment: holds none of Veylith\u2019s own operating or commercial machinery, ' +
+      'and cannot be configured into holding it',
+  );
 
   const server = await buildServer(app);
 

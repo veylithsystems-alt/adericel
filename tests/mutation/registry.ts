@@ -439,8 +439,8 @@ export const MUTATIONS: readonly Mutation[] = [
     id: 'readme-package-count-drifts',
     invariant: 'A count stated in the README prose is verified, or it is not stated.',
     file: 'README.md',
-    find: 'Twenty workspace packages',
-    replace: 'Eighteen workspace packages',
+    find: 'Eighteen workspace packages',
+    replace: 'Sixteen workspace packages',
     suite: 'tests/unit/documentation.test.ts',
     mustFail: ['states the package count correctly, or not at all'],
   },
@@ -452,5 +452,533 @@ export const MUTATIONS: readonly Mutation[] = [
     replace: 'tests/e2e/support-cases-renamed.test.ts',
     suite: 'tests/unit/capability-status.test.ts',
     mustFail: ['cites only paths that exist'],
+  },
+  {
+    id: 'reobservation-recorded-as-nothing',
+    invariant:
+      'Re-observing an unchanged fact is recorded, so a stable estate that keeps being collected ' +
+      'stays proven instead of decaying to UNKNOWN.',
+    file: 'packages/evidence/src/observations.ts',
+    // The defect that actually shipped: the conflict did nothing at all, so
+    // nothing downstream ran and no evidence was ever refreshed.
+    find: `           DO UPDATE SET
+             collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),
+             observed_at = GREATEST(observations.observed_at, EXCLUDED.observed_at),
+             integration_run_id = EXCLUDED.integration_run_id,
+             correlation_id = EXCLUDED.correlation_id,
+             subject_node_id = COALESCE(EXCLUDED.subject_node_id, observations.subject_node_id)`,
+    replace: '           DO NOTHING',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: [
+      'stays proven for as long as it keeps being observed',
+      'stays proven when the source reports no timestamp of its own',
+    ],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-does-not-refresh-collected-at',
+    invariant:
+      'Re-observation refreshes `collected_at`, which is the only recency anchor a source that ' +
+      'reports no timestamp of its own ever has.',
+    file: 'packages/evidence/src/observations.ts',
+    find: 'collected_at = GREATEST(observations.collected_at, EXCLUDED.collected_at),',
+    replace: 'collected_at = observations.collected_at,',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    /**
+     * Not the test above, and that is the whole point of this entry.
+     *
+     * This mutation SURVIVED when it was first recorded, pointed at the
+     * twenty-day test. Evidence usability is anchored on
+     * `observed_at ?? collected_at`, and the fixture always reported a
+     * timestamp, so `observed_at` carried the property and breaking
+     * `collected_at` changed nothing. The guard was real and had no test over
+     * it — which is exactly the state the harness exists to detect, and it
+     * detected it on the most important defect in the repository.
+     */
+    mustFail: ['stays proven when the source reports no timestamp of its own'],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-does-not-refresh-observed-at',
+    invariant:
+      'Re-observation refreshes `observed_at`, which is the anchor for every source that reports ' +
+      'when a fact became true.',
+    file: 'packages/evidence/src/observations.ts',
+    find: 'observed_at = GREATEST(observations.observed_at, EXCLUDED.observed_at),',
+    replace: 'observed_at = observations.observed_at,',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['stays proven for as long as it keeps being observed'],
+    needsDatabase: true,
+  },
+  {
+    id: 'evidence-identity-ignores-its-subject',
+    invariant:
+      'Evidence identity includes the subject it is evidence about, so two identically ' +
+      'configured devices never share one proof record.',
+    file: 'packages/evidence/src/repository.ts',
+    find: '          sourceReference: input.sourceReference ?? null,\n',
+    replace: '',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['never offers evidence about one subject as proof about another'],
+    needsDatabase: true,
+  },
+  {
+    id: 'engine-gets-no-impairment',
+    invariant:
+      'The assessment service supplies impairment to the engine, so a control whose source is ' +
+      'broken names the repair instead of reporting INSUFFICIENT_EVIDENCE.',
+    file: 'packages/actions/src/assessment-service.ts',
+    find: 'impairments: impairments.filter((impairment) => predicates.includes(impairment.predicate)),',
+    replace: 'impairments: [],',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    // A literal title, not one of the generated per-code ones: the registry
+    // checker matches `mustFail` against titles it can find in the file, and a
+    // template literal is not findable. This test asserts the broken state is
+    // DEGRADED, which is only reachable when impairment reaches the engine.
+    mustFail: ['returns to proven only after a successful collection, not on repair alone'],
+    needsDatabase: true,
+  },
+  {
+    id: 'degraded-reason-never-persisted',
+    invariant:
+      'The reason a control is DEGRADED or BLOCKED is written to its state row, not only ' +
+      'computed and dropped.',
+    file: 'packages/actions/src/assessment-service.ts',
+    find:
+      '        outcome.provenance.assessedAt,\n' +
+      '        outcome.degradedReason,\n' +
+      '        outcome.blockedReason,\n' +
+      '      ],\n',
+    replace: '        outcome.provenance.assessedAt,\n        null,\n        null,\n      ],\n',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    // Asserts `degraded_reason` reads SCHEMA_DRIFT, which is only true if the
+    // reason computed by the engine was actually written to the state row.
+    mustFail: ['treats a collection that read nothing as drift, not as a success'],
+    needsDatabase: true,
+  },
+  {
+    id: 'silent-schema-drift-recorded-as-success',
+    invariant:
+      'A collection that stored observations and derived no claims at all is reported as drift, ' +
+      'never as a successful run.',
+    file: 'packages/actions/src/collection-service.ts',
+    find: 'processed.mappableObservations > 0 && processed.claimsDerived === 0',
+    replace: 'processed.mappableObservations > 0 && processed.claimsDerived < 0',
+    suite: 'tests/chaos/failure-injection.test.ts',
+    mustFail: ['keeps detecting drift on the runs after the first'],
+    needsDatabase: true,
+  },
+  {
+    id: 'fixture-manifest-under-declares-its-predicates',
+    invariant:
+      "A connector's declared predicates are derived from what it can produce, not hand-listed, " +
+      'because an omission silently disables impairment for the predicates it forgot.',
+    file: 'packages/integrations/src/connectors/demo-fixture.ts',
+    find: 'predicates: FIXTURE_KINDS.flatMap((kind) => predicatesForKind(kind)),',
+    replace: "predicates: ['device.disk.encrypted', 'identity.mfa.enforced'],",
+    suite: 'packages/integrations/src/impairment.test.ts',
+    mustFail: ['declares every predicate the demonstration connector can actually produce'],
+  },
+  {
+    id: 'failure-code-guessed-from-error-prose',
+    invariant:
+      'A collection failure is classified by the code the connector reported, never by ' +
+      'pattern-matching a vendor error message.',
+    file: 'packages/domain/src/collection-failure.ts',
+    find:
+      '  // Deliberately no message inspection. See the note on the code list above.\n' +
+      "  return 'UNCLASSIFIED';",
+    replace:
+      '  const message = error instanceof Error ? error.message.toLowerCase() : String(error);\n' +
+      "  if (message.includes('401') || message.includes('unauthor')) return 'CREDENTIAL_INVALID';\n" +
+      "  if (message.includes('429')) return 'RATE_LIMITED';\n" +
+      "  if (message.includes('consent')) return 'CONSENT_WITHDRAWN';\n" +
+      "  if (message.includes('timedout')) return 'TIMEOUT';\n" +
+      "  return 'UNCLASSIFIED';",
+    suite: 'packages/domain/src/collection-failure.test.ts',
+    mustFail: ['refuses to guess a code from an error message'],
+  },
+  {
+    id: 'withdrawn-consent-routed-to-an-engineer',
+    invariant:
+      'A withdrawn consent is BLOCKED, routed to somebody with authority, because no engineer ' +
+      'can repair a decision the customer made.',
+    file: 'packages/domain/src/collection-failure.ts',
+    find: "  CONSENT_WITHDRAWN: 'CONSENT_REQUIRED',",
+    replace: '  CONSENT_WITHDRAWN: null,',
+    suite: 'packages/domain/src/collection-failure.test.ts',
+    mustFail: ['routes a withdrawn consent to somebody with authority, not to an engineer'],
+  },
+  {
+    id: 'portfolio-sweep-silently-drops-the-tail',
+    invariant:
+      'A sweep with no named organisation processes every maintained organisation, or the ones ' +
+      'it skipped are visible rather than silently absent.',
+    file: 'apps/worker/src/jobs/handlers.ts',
+    /**
+     * Not a live defect, and recorded anyway.
+     *
+     * In production every organisation gets its own scheduled job, so
+     * `organisationsToProcess` takes the single-organisation branch and this
+     * limit is never reached — a fact worth stating, because a reader seeing
+     * `LIMIT 200` would reasonably assume otherwise. It *is* reached by a
+     * manual sweep, which is what an operator runs and what the load suite
+     * drives.
+     *
+     * The trap is that moving these to one platform-wide schedule is the
+     * obvious optimisation at scale, and doing it would silently stop
+     * collecting from every customer past the two hundredth — each of whom
+     * would keep looking healthy until their evidence aged out. That is the
+     * day-seven defect arriving by a different route, so the guard is worth
+     * keeping whether or not the branch is live today.
+     */
+    find: 'const BATCH = 200;',
+    replace: 'const BATCH = 40;',
+    suite: 'tests/load/portfolio-scale.test.ts',
+    mustFail: ['collects from every organisation without dropping any'],
+    needsDatabase: true,
+  },
+  {
+    id: 'soak-accumulates-a-row-per-collection',
+    invariant:
+      'An unchanged fact re-collected daily for months is one evidence record, not one per ' +
+      'collection.',
+    file: 'packages/evidence/src/repository.ts',
+    /**
+     * The ruinous-but-correct implementation, re-introduced.
+     *
+     * Refreshing recency by writing a new row every time would keep a stable
+     * estate proven and would cost an MSP with a hundred customers a hundred
+     * thousand identical records a year. The chaos mutations cover the
+     * correctness half of this fix; this covers the cost half, which only a
+     * suite that runs for ninety days can see.
+     */
+    find: '      if (existing) {',
+    replace: '      if (existing && false) {',
+    suite: 'tests/soak/sustained-operation.test.ts',
+    mustFail: ['stores one observation per distinct fact, not one per collection'],
+    needsDatabase: true,
+  },
+  {
+    id: 'self-erasure-reads-a-target',
+    invariant:
+      'Erasing yourself takes no target: the subject is the authenticated principal, so there is ' +
+      'no parameter by which one person can erase another.',
+    file: 'apps/api/src/routes/msps.ts',
+    find:
+      '    const report = await eraseDataSubject(app, principal.principalId, ' +
+      '{ reason: body.reason });',
+    replace:
+      '    const target = (request.body as { userId?: string }).userId ?? principal.principalId;\n' +
+      '    const report = await eraseDataSubject(app, target, { reason: body.reason });',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['erases the caller, and takes no target to erase anybody else'],
+    needsDatabase: true,
+  },
+  {
+    id: 'on-behalf-erasure-reaches-across-msps',
+    invariant:
+      'An MSP may erase only its own members. A cross-tenant erasure is the most destructive act ' +
+      'available through this API.',
+    file: 'apps/api/src/routes/msps.ts',
+    find: '`SELECT id FROM users WHERE id = $1 AND msp_id = $2`',
+    replace: '`SELECT id FROM users WHERE id = $1 AND $2 IS NOT NULL`',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['refuses to reach into another MSP'],
+    needsDatabase: true,
+  },
+  {
+    id: 'self-erasure-without-a-second-factor',
+    invariant:
+      'Erasing a person requires a second factor in this session, because the act cannot be ' +
+      'undone and a stolen session must not be enough.',
+    file: 'apps/api/src/routes/msps.ts',
+    find: '    if (!principal.mfaSatisfied) {',
+    replace: '    if (false as boolean) {',
+    suite: 'tests/e2e/subject-erasure.test.ts',
+    mustFail: ['refuses without a second factor, because it cannot be undone'],
+    needsDatabase: true,
+  },
+  {
+    id: 'erasure-permission-granted-to-a-service-identity',
+    invariant:
+      'No automation may erase a person. An n8n workflow holding a service token must not be ' +
+      'able to remove somebody from the platform.',
+    file: 'packages/domain/src/authz.ts',
+    find: "  'msp:member:erase',\n]);\n\n/**\n * Permissions that require a second factor",
+    replace: ']);\n\n/**\n * Permissions that require a second factor',
+    suite: 'packages/domain/src/authz.test.ts',
+    mustFail: [
+      'never lets a service identity erase a person',
+      'names every permission that only a human may hold, so additions are deliberate',
+    ],
+  },
+  {
+    id: 'upgrade-suite-populates-nothing',
+    invariant:
+      'The upgrade suite plants rows before the later migrations run, so each of them is applied ' +
+      'to a populated database rather than an empty one.',
+    file: 'tests/upgrade/populated-migration.test.ts',
+    /**
+     * The suite's own premise, which is the thing most worth guarding.
+     *
+     * Every assertion in that file is about rows surviving an upgrade. Point it
+     * at a migration that does not exist and it populates nothing, migrates an
+     * empty schema, and passes — proving exactly what the test suite as a whole
+     * already proved and nothing more. That is the failure mode the chaos suite
+     * shipped with, and the reason this file asserts its own premise.
+     */
+    find: "const POPULATE_AFTER = '0001_core_tenancy_identity';",
+    replace: "const POPULATE_AFTER = '0001_core_tenancy_identity_renamed';",
+    suite: 'tests/upgrade/populated-migration.test.ts',
+    mustFail: ['applies every later migration against real rows'],
+    needsDatabase: true,
+  },
+  /**
+   * The register's own checks.
+   *
+   * This document is the artefact that says Adericel distinguishes what was
+   * measured from what was asserted, and it had seven entries contradicting
+   * themselves about whether a risk was live (RR-094). These five break each
+   * rule separately, because a single check that catches all five would not
+   * tell anybody which one had rotted.
+   */
+  {
+    id: 'register-heading-contradicts-state',
+    invariant:
+      'An entry\'s heading and its State row must give the same answer to "is this risk live".',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find: '### RR-093 — No release baseline is tagged',
+    replace: '### RR-093 — No release baseline is tagged — **CLOSED 6 Nov 2026**',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never lets a heading contradict the state it records'],
+  },
+  {
+    id: 'register-closure-without-evidence',
+    invariant:
+      'A CLOSED entry must cite evidence, not merely a mitigation it planned to carry out.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find:
+      '| **Verified**    | PR #3 (`increment-1-passport-interchange`) closed unmerged on 15 Sept 2026. ' +
+      'Confirmed against GitHub: `state: closed`, `merged: false`. The duplicate never entered the tree, ' +
+      'and ADR-0039 on the working branch is the only one. |\n',
+    replace: '',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never closes an entry without citing evidence'],
+  },
+  {
+    id: 'register-dangling-cross-reference',
+    invariant: 'Every entry this register refers to must be an entry this register defines.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    /**
+     * The defect that was actually there. RR-075's residual said "Tracked as
+     * RR-080" and no RR-080 existed, so a residual risk recorded as handled
+     * elsewhere was recorded nowhere at all — for three weeks, in the document
+     * whose job is to not let that happen.
+     */
+    find: 'Raised as RR-095, and closed.',
+    replace: 'Raised as RR-199, and closed.',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['never refers to an entry that does not exist'],
+  },
+  {
+    id: 'register-cites-a-path-that-does-not-exist',
+    invariant: 'Every repository path the register cites as evidence must resolve.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find: '`packages/support/src/case.ts` carries twenty states',
+    replace: '`packages/support/src/cases.ts` carries twenty states',
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['names real files wherever it cites one'],
+  },
+  {
+    id: 'register-live-entry-without-an-owner',
+    invariant: 'An OPEN or MITIGATING entry must name who owns it.',
+    file: 'docs/audit/RESIDUAL_RISK_REGISTER.md',
+    find:
+      '| **Owner**       | **Founder.** It can only be closed by a real customer, and stating it in a ' +
+      "commercial conversation is the founder's act, not a test's.",
+    replace:
+      '| **Note**        | **Founder.** It can only be closed by a real customer, and stating it in a ' +
+      "commercial conversation is the founder's act, not a test's.",
+    suite: 'tests/unit/risk-register.test.ts',
+    mustFail: ['gives every live entry an owner'],
+  },
+  /**
+   * The verification authority boundary (RR-095).
+   *
+   * Each of these reinstates a different half of the defect: accepting a value
+   * nobody observed, turning an absence into a reading, and writing a
+   * verification that does not say where its reading came from.
+   */
+  {
+    id: 'verification-accepts-an-unattested-value',
+    invariant:
+      'The action service refuses a verification value that did not come out of a re-observer, ' +
+      'before any state moves and before any evidence is written.',
+    file: 'packages/actions/src/action-service.ts',
+    find: '      assertReObservation(reobservation);\n',
+    replace: '',
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['refuses the executor reporting its own success, and records nothing'],
+    needsDatabase: true,
+  },
+  {
+    id: 'an-absence-can-confirm',
+    invariant:
+      'A re-observation that could not be attempted reaches the judgement as nothing, so the ' +
+      'only outcome it can produce is INCONCLUSIVE.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: "  return reobservation.kind === 'OBSERVED' ? reobservation.value : undefined;",
+    replace: "  return reobservation.kind === 'OBSERVED' ? reobservation.value : true;",
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['cannot confirm from an absence, however the absence is dressed up'],
+    needsDatabase: true,
+  },
+  {
+    id: 'verification-does-not-record-which-run-it-read',
+    invariant:
+      'A verification row names the integration run its reading came out of, or the reason there ' +
+      'was no run. Never neither.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: `  return reobservation.kind === 'OBSERVED'
+    ? {
+        integrationRunId: reobservation.integrationRunId,
+        observedAt: reobservation.observedAt,
+        notObservableReason: null,
+      }
+    : { integrationRunId: null, observedAt: null, notObservableReason: reobservation.reason };`,
+    replace:
+      '  return { integrationRunId: null, observedAt: null, notObservableReason: null };\n' +
+      '  void reobservation;',
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['names the collection run its reading came out of'],
+    needsDatabase: true,
+  },
+  {
+    id: 'reobservation-shape-check-waves-everything-through',
+    invariant:
+      'The run-time attestation check actually inspects the value, rather than trusting that the ' +
+      'compiler already did. The API boundary deserialises JSON and a cast silences the compiler.',
+    file: 'packages/actions/src/reobservation.ts',
+    find: '  const kind = (value as { kind?: unknown } | null)?.kind;',
+    replace:
+      "  const kind = (value as { kind?: unknown } | null)?.kind ?? 'OBSERVED';\n  if (true as boolean) return;",
+    suite: 'tests/security/verification-attestation.test.ts',
+    mustFail: ['refuses every value that did not come out of a re-observer'],
+  },
+  /**
+   * The two honesty defects the first rendering of the interface found (RR-096).
+   *
+   * Both were individually defensible SQL and jointly a product that told an
+   * MSP everything was fine about a customer it could say nothing about.
+   */
+  {
+    id: 'portfolio-counts-only-what-was-assessed',
+    invariant:
+      'The MSP portfolio counts in-scope controls, so a control nobody has assessed yet counts ' +
+      'as unknown rather than as nothing at all.',
+    file: 'apps/api/src/routes/portfolio.ts',
+    find: "count(c.*) FILTER (WHERE a.state = 'UNKNOWN' OR a.state IS NULL)::text AS unknown,",
+    replace: "count(c.*) FILTER (WHERE a.state = 'UNKNOWN')::text AS unknown,",
+    suite: 'tests/e2e/unassessed-is-not-nothing-wrong.test.ts',
+    mustFail: ['is reported to the MSP as unknown, not as nothing wrong'],
+    needsDatabase: true,
+  },
+  {
+    id: 'unassessed-reported-as-no-evidence',
+    invariant:
+      'A control that has never been assessed reports NOT_YET_ASSESSED. It does not report ' +
+      'NO_EVIDENCE, which asserts a cause nobody established and can contradict the evidence ' +
+      'the organisation visibly holds.',
+    file: 'apps/api/src/routes/assurance.ts',
+    find: "CASE WHEN a.state IS NULL THEN 'NOT_YET_ASSESSED' ELSE a.unknown_reason END",
+    replace: "CASE WHEN a.state IS NULL THEN 'NO_EVIDENCE' ELSE a.unknown_reason END",
+    suite: 'tests/e2e/unassessed-is-not-nothing-wrong.test.ts',
+    mustFail: [
+      'says the controls have never been assessed, not that no evidence exists',
+      'holds evidence, which is why "no evidence has been collected" was a lie',
+    ],
+    needsDatabase: true,
+  },
+  /**
+   * The brand's one hard rule, now asserted against a rendered page (RR-097).
+   *
+   * Green means PROVEN. These paint something green that is not proven, and
+   * detach a chip's colour from the state it describes.
+   */
+  {
+    id: 'unknown-chip-painted-with-a-state-colour',
+    invariant:
+      'Unknown is hatched and has no colour, because any hue would place it on the good-to-bad ' +
+      'axis and Unknown is not on that axis.',
+    file: 'apps/web/src/styles/app.css',
+    find: `.state--unknown {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: transparent;`,
+    replace: `.state--unknown {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+  background-color: var(--state-proven);`,
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['gives Unknown no colour at all, as the brand requires'],
+    needsDatabase: true,
+  },
+  {
+    id: 'the-proven-colour-used-as-decoration',
+    invariant:
+      'No element wears the proven colour unless it is about something proven. A state colour is ' +
+      'never decoration.',
+    file: 'apps/web/src/styles/app.css',
+    find: `.panel {
+  border: var(--border);
+  background: var(--surface-raised);`,
+    replace: `.panel {
+  border: var(--border);
+  background: var(--state-proven);`,
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['uses the proven colour for nothing but proven'],
+    needsDatabase: true,
+  },
+  {
+    id: 'chip-tone-stops-following-its-state',
+    invariant:
+      "A state chip's colour comes from the one module that maps states to presentation, so a " +
+      'component cannot decide a tone for itself.',
+    file: 'apps/web/src/components/State.tsx',
+    find: 'className={`state state--${presentation.tone}`}',
+    replace: "className={'state state--proven'}",
+    suite: 'tests/browser/interface.test.ts',
+    mustFail: ['labels every state chip the way the presentation module says'],
+    needsDatabase: true,
+  },
+  /**
+   * The support lifecycle against the one the contract states (RR-080).
+   *
+   * Twenty states, seven stated stages, and until this mapping existed nothing
+   * said which was which. These drop a stage, and record a refused case as a
+   * finished one.
+   */
+  {
+    id: 'a-stated-support-stage-dropped',
+    invariant:
+      "Every stage of the contract's support lifecycle is occupied by at least one state of this " +
+      'system, so no stated obligation is quietly unmet.',
+    file: 'packages/support/src/contract-stage.ts',
+    find: "  RESOLVED: 'RESOLVED',",
+    replace: '  RESOLVED: null,',
+    suite: 'packages/support/src/contract-stage.test.ts',
+    mustFail: ['occupies every stage the contract states, so none was quietly dropped'],
+  },
+  {
+    id: 'a-refused-case-recorded-as-a-finished-one',
+    invariant:
+      'WITHDRAWN and REJECTED belong to no stage of a path to resolution, so a case that was ' +
+      'refused can never be mistaken for one that was fixed.',
+    file: 'packages/support/src/contract-stage.ts',
+    find: '  REJECTED: null,',
+    replace: "  REJECTED: 'CLOSED',",
+    suite: 'packages/support/src/contract-stage.test.ts',
+    mustFail: ['leaves exactly the two endings that are not resolutions outside the path'],
   },
 ];

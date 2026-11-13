@@ -30,9 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -51,9 +53,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -83,9 +87,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -113,13 +119,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The backup and restore suite shells out to pg_dump and pg_restore, and
+      # the runner's default client is newer than the server this product
+      # targets. A PostgreSQL 17 pg_dump emits `SET transaction_timeout = 0;`,
+      # which PostgreSQL 16 does not recognise, so `pg_restore --exit-on-error`
+      # aborted and every later assertion failed against an empty database —
+      # four errors, none of them about the product.
+      #
+      # A dump is only restorable by a server of its own major version or newer,
+      # so the client has to match the server. Installed explicitly rather than
+      # relying on whatever the runner image ships this month.
+      - name: PostgreSQL 16 client, matching the service container
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          echo '/usr/lib/postgresql/16/bin' >> "$GITHUB_PATH"
+      - name: The client matches the server it will restore into
+        run: |
+          pg_dump --version
+          pg_restore --version
+          pg_dump --version | grep -q ' 16\.' || {
+            echo 'pg_dump is not version 16; a newer dump will not restore into the 16 service'
+            exit 1
+          }
       - run: pnpm test:integration
       - run: pnpm test:e2e
 
@@ -134,15 +171,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm sbom
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: adericel-sbom
           path: var/sbom/*.cdx.json
@@ -158,7 +197,19 @@ jobs:
   # looks. This is the job that notices.
   mutation:
     name: Mutation testing
-    runs-on: ubuntu-latest
+    # Pinned, where every other job tracks `ubuntu-latest`.
+    #
+    # `ubuntu-latest` became Ubuntu 26.04, and Playwright refuses to install a
+    # browser's system dependencies on a release it does not yet support:
+    # "Cannot install dependencies for ubuntu26.04-x64". The job failed in 34
+    # seconds, before a single mutation had been applied.
+    #
+    # The browser is a test dependency, so the version that matters is the one
+    # Playwright supports, not the newest one GitHub offers. This moves to
+    # ubuntu-26.04 when the pinned Playwright supports it; until then a pin is
+    # honest about what the suite needs, and a job that cannot start its browser
+    # cannot report a surviving mutation either way.
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
       postgres:
@@ -176,13 +227,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Three mutations are checked by the browser suite, which cannot run
+      # without a browser. Without this they were reported AMBIGUOUS — the
+      # suite failed in a hook, outside any test, so no mutation's named test
+      # could be checked against it — and the job failed for a missing
+      # dependency rather than a rotted guard.
+      - name: Chromium, for the mutations the browser suite checks
+        run: pnpm exec playwright install --with-deps chromium
       # The runner refuses to start on a dirty tree, because it edits source
       # files and restores them. A fresh checkout is clean by definition.
       - run: pnpm test:mutation
@@ -197,9 +257,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -207,7 +269,7 @@ jobs:
       # Validation includes a drift check: it rebuilds the export and fails if
       # the committed JSON differs.
       - run: pnpm n8n:validate
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: adericel-n8n-export
           path: workflows/n8n/adericel.n8n.json
@@ -222,9 +284,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
         with:
           version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -239,7 +303,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: Build API and worker image
         uses: docker/build-push-action@v6

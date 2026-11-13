@@ -11,6 +11,7 @@ export * from './registry.js';
 export * from './manifest.js';
 export * from './planning.js';
 export * from './drift.js';
+export * from './impairment.js';
 // Conflict resolution reasons about claims, not about vendors, so it lives in
 // the domain. Re-exported here because the fabric is where callers look for it.
 export {

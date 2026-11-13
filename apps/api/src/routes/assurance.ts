@@ -8,9 +8,11 @@ import {
   type AssuranceState,
 } from '@adericel/domain';
 import { createAssessmentService } from '@adericel/actions';
+import { predicatesForConnectorFrom } from '@adericel/integrations';
 import { referencedPredicates } from '@adericel/truth-engine';
 import { AdericelError } from '@adericel/shared';
 import type { AppContext } from '../context.js';
+import { retentionSchedule } from '../services/retention.js';
 import { audit, requireOrganisation } from '../middleware/request-context.js';
 import { parseBody, parseParams, parseQuery, organisationParam } from '../middleware/validation.js';
 import { explainEvidenceGaps } from '../services/observation-coverage.js';
@@ -55,7 +57,18 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
         }>(
           `SELECT c.id AS subject_id,
                   COALESCE(a.state, 'UNKNOWN') AS state,
-                  CASE WHEN a.state IS NULL THEN 'NO_EVIDENCE' ELSE a.unknown_reason END
+                  -- NOT_YET_ASSESSED, never NO_EVIDENCE.
+                  --
+                  -- These are two different facts and this used to collapse
+                  -- them. An organisation holding three usable evidence records
+                  -- was told "No evidence has been collected" for every control,
+                  -- because none had been assessed yet — a cause Adericel had
+                  -- not established, stated as though it had. The reason
+                  -- vocabulary already carries NOT_YET_ASSESSED, the interface
+                  -- already renders it, and 'organisations.ts' and
+                  -- 'services/resolution.ts' already use it. This was the odd
+                  -- one out. See RR-096.
+                  CASE WHEN a.state IS NULL THEN 'NOT_YET_ASSESSED' ELSE a.unknown_reason END
                     AS unknown_reason,
                   a.since,
                   a.last_assessed_at,
@@ -507,6 +520,7 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           clock: app.clock,
           logger: request.adericel.logger,
           rulesets: app.rulesets,
+          predicatesForConnector: predicatesForConnectorFrom(app.connectors),
           actor: principal?.displayName ?? 'system',
           correlationId: request.adericel.correlationId,
         });
@@ -567,6 +581,7 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           clock: app.clock,
           logger: request.adericel.logger,
           rulesets: app.rulesets,
+          predicatesForConnector: predicatesForConnectorFrom(app.connectors),
           actor: principal?.displayName ?? 'system',
           correlationId: request.adericel.correlationId,
         });
@@ -692,6 +707,7 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
           clock: app.clock,
           logger: request.adericel.logger,
           rulesets: app.rulesets,
+          predicatesForConnector: predicatesForConnectorFrom(app.connectors),
           actor: request.adericel.principal?.displayName ?? 'system',
           correlationId: request.adericel.correlationId,
         }).replay(params.id),
@@ -706,6 +722,27 @@ export function registerAssuranceRoutes(server: FastifyInstance, app: AppContext
 
       return reply.status(200).send(result);
     },
+  );
+
+  /**
+   * What this deployment holds about a person, and for how long.
+   *
+   * COMMON on purpose: the right to know belongs to the person rather than to a
+   * surface, the answer is a property of the software and names no
+   * organisation, and it is identical for every caller.
+   *
+   * It had no route at all until now. `retentionSchedule()` was implemented,
+   * tested, and reachable only through Veylith's internal control room — so
+   * Adericel could tell the company what it retained and could not tell the
+   * people it retained it about. Found by extracting the product and running
+   * the reachability check against the tree a customer would actually receive
+   * (RR-086's shape, with a data-protection edge).
+   *
+   * Read straight from the same registry the retention sweep runs from, so a
+   * published schedule cannot describe a policy the code does not implement.
+   */
+  server.get('/v1/retention', { preHandler: server.authenticate }, async (_request, reply) =>
+    reply.status(200).send({ schedule: retentionSchedule() }),
   );
 
   /** The rulesets this build can run, with their hashes. */
