@@ -32,7 +32,7 @@ import {
 } from '@adericel/integrations';
 import { createFilesystemStore } from '@adericel/evidence';
 import { createRecordingNotifier, type RecordingNotifier } from '@adericel/notifications';
-import { buildServer, createAppContext, type AppContext } from '@adericel/api';
+import { buildServer, createAppContext, type AppContext, type RouteRegistrar } from '@adericel/api';
 import { buildHandlers, type JobType } from '@adericel/worker';
 
 export const TEST_INSTANT = '2026-09-09T12:00:00.000Z';
@@ -135,6 +135,14 @@ export async function createHarness(
     rateLimitMax?: number;
     /** Extra environment for suites that need a differently configured server. */
     env?: Record<string, string>;
+    /**
+     * Surfaces a deployment composes on top of the product.
+     *
+     * Empty for every suite but the company ones, which hand in Veylith's own
+     * routes to prove the company layer is a composition rather than a
+     * deletion. The product has no way to ask for them.
+     */
+    additionalRoutes?: readonly RouteRegistrar[];
   } = {},
 ): Promise<Harness> {
   await ensureMigrated();
@@ -182,7 +190,7 @@ export async function createHarness(
     connectors,
   });
 
-  const server = await buildServer(app);
+  const server = await buildServer(app, { additionalRoutes: options.additionalRoutes ?? [] });
 
   const harness: Harness = {
     app,

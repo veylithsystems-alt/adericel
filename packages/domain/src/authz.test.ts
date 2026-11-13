@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   HUMAN_ONLY_PERMISSIONS,
+  MFA_REQUIRED_PERMISSIONS,
   PRINCIPAL_TYPES,
   ROLE_PERMISSIONS,
   SURFACE_DENIAL_PREFIX,
@@ -297,9 +298,42 @@ describe('permissions only a human may hold', () => {
     // A change to this list changes who can accept risk on a customer's behalf.
     // It should never happen as a side effect of something else.
     expect([...HUMAN_ONLY_PERMISSIONS].sort()).toEqual([
+      'msp:member:erase',
       'org:action:approve',
       'org:exception:approve',
     ]);
+  });
+
+  it('names every permission that needs a second factor, for the same reason', () => {
+    // Same discipline, and it was previously unasserted. Quietly dropping one
+    // from this set would mean a stolen session could approve a change to a
+    // customer's estate, or erase a person, and no test would notice.
+    expect([...MFA_REQUIRED_PERMISSIONS].sort()).toEqual([
+      'msp:member:erase',
+      'org:action:approve',
+      'org:exception:approve',
+    ]);
+  });
+
+  it('never lets a service identity erase a person', () => {
+    /**
+     * An n8n workflow holds a service token. n8n orchestrates and is not
+     * authority, so it must not be able to remove somebody from the platform
+     * — and the refusal has to come from the authorisation decision rather
+     * than from a route, so a future caller that forgets still fails.
+     */
+    const service = principal({
+      principalType: 'SERVICE',
+      grants: [{ scopeType: 'MSP', scopeId: 'msp-1', roles: ['MSP_OWNER'], expiresAt: null }],
+      mfaSatisfied: true,
+    });
+    const answer = authorise(
+      service,
+      { permission: 'msp:member:erase', mspId: 'msp-1' },
+      { atIso: AT, surface: 'ADERICEL_MSP' },
+    );
+    expect(answer.allowed).toBe(false);
+    expect(answer.reason).toContain('requires a human principal');
   });
 
   it('still allows a human approver', () => {

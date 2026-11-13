@@ -14,6 +14,7 @@
     { "path": "../evidence" },
     { "path": "../truth-engine" },
     { "path": "../policy" },
-    { "path": "../integrations" }
+    { "path": "../integrations" },
+    { "path": "../containment" }
   ]
 }

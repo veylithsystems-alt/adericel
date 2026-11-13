@@ -26,7 +26,7 @@ import {
   systemClock,
 } from '@adericel/shared';
 import { databaseFromConfig, publish, type Database, type PlatformContext } from '@adericel/graph';
-import { buildConnectorRegistry } from '@adericel/integrations';
+import { buildConnectorRegistry, predicatesForConnectorFrom } from '@adericel/integrations';
 import { SYSTEM_FRAMEWORKS } from '../database/seeds/frameworks.js';
 import { DEMO_ORGANISATIONS } from '../database/seeds/demo-data.js';
 import { ensureOrganisationJobs, ensurePlatformJobs } from '../apps/worker/src/jobs/scheduler.js';
@@ -346,6 +346,7 @@ async function main(): Promise<void> {
         clock,
         logger,
         rulesets,
+        predicatesForConnector: predicatesForConnectorFrom(connectors),
         actor: 'seed',
         correlationId,
       });

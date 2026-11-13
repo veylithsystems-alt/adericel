@@ -1,4 +1,10 @@
-import type { NewDomainEvent, NodeKind, ObservationRecord } from '@adericel/domain';
+import {
+  classifyCollectionFailure,
+  type CollectionFailureCode,
+  type NewDomainEvent,
+  type NodeKind,
+  type ObservationRecord,
+} from '@adericel/domain';
 import {
   createClaimRepository,
   createEvidenceRepository,
@@ -9,6 +15,8 @@ import {
   capabilityInformative,
   healthFromReports,
   normalise,
+  predicatesForKind,
+  predicatesOf,
   unavailablePredicates,
   type CapabilityReport,
   type Connector,
@@ -66,6 +74,32 @@ export interface IngestOutcome {
   readonly observationsRecorded: number;
   readonly evidenceCreated: number;
   readonly claimsChanged: number;
+  /**
+   * Claims normalisation produced, whether or not any value changed.
+   *
+   * Separate from `claimsChanged` and the whole point of the distinction. A
+   * healthy estate reassessed hourly changes nothing, so `claimsChanged` is
+   * zero on almost every run and cannot tell "nothing moved" from "nothing was
+   * readable". This counts what came out of the normaliser, which can.
+   */
+  readonly claimsDerived: number;
+  /**
+   * Observations whose kind the normaliser has mappings for.
+   *
+   * The denominator for drift. An observation of a kind with no mappings at all
+   * is *expected* to produce no claims, and counting it would make every such
+   * run look like drift.
+   */
+  readonly mappableObservations: number;
+  /**
+   * The canonical predicates this run actually derived.
+   *
+   * Compared against what the connector's manifest declares, because the
+   * manifest is a hand-maintained claim *about* a connector and this is the
+   * record of what it did. A connector that under-declares silently disables
+   * impairment for the predicates it forgot and understates its own coverage.
+   */
+  readonly derivedPredicates: readonly string[];
   readonly nodesUpserted: number;
   readonly conflictsUnresolved: number;
   readonly events: readonly NewDomainEvent[];
@@ -81,8 +115,15 @@ export interface CollectionService {
     >[0][number][],
     options: { integrationId: string | null; sourceSystem: string },
   ): Promise<IngestOutcome>;
-  /** Re-read one predicate for one subject, used by action verification. */
-  reobserve(integrationId: string, subjectExternalId: string, predicate: string): Promise<unknown>;
+  /**
+   * Re-observation deliberately does not live here.
+   *
+   * It moved to `reobservation.ts`, which owns a brand it does not export, so
+   * the only way to obtain a value the action service will verify against is
+   * to actually perform the re-observation. Leaving a `reobserve` here that
+   * returned a bare `unknown` would reinstate the hole (RR-095): a caller
+   * could pass anything of that type to `verify`.
+   */
 }
 
 export function createCollectionService(deps: CollectionServiceDeps): CollectionService {
@@ -147,6 +188,9 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
     const events: NewDomainEvent[] = [];
     let evidenceCreated = 0;
     let claimsChanged = 0;
+    let claimsDerived = 0;
+    let mappableObservations = 0;
+    const derivedPredicates = new Set<string>();
     let nodesUpserted = 0;
     let conflictsUnresolved = 0;
 
@@ -156,6 +200,9 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
 
     for (const observation of recorded) {
       const normalisation = normalise(observation);
+      if (predicatesForKind(observation.kind).length > 0) mappableObservations += 1;
+      claimsDerived += normalisation.claims.length;
+      for (const claim of normalisation.claims) derivedPredicates.add(claim.predicate);
 
       for (const subject of normalisation.subjects) {
         if (!subject.externalId) continue;
@@ -318,6 +365,9 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
       observationsRecorded: recorded.length,
       evidenceCreated,
       claimsChanged,
+      claimsDerived,
+      mappableObservations,
+      derivedPredicates: [...derivedPredicates].sort(),
       nodesUpserted,
       conflictsUnresolved,
       events,
@@ -419,16 +469,42 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
           capabilityReports,
         );
 
+        /**
+         * A successful request that yielded nothing readable.
+         *
+         * THE WORST FAILURE THIS PRODUCT HAS
+         *
+         * A vendor ships a v2 API and renames its fields. The request
+         * succeeds. The response is well-formed. Observations are stored.
+         * Every light stays green — and not one claim comes out, so the
+         * affected controls sit on their last reading until the evidence ages
+         * out, at which point they become UNKNOWN and look exactly like a
+         * customer who never connected anything. Nobody is told, because
+         * nothing failed.
+         *
+         * It is detectable without knowing anything about the vendor:
+         * observations arrived whose kind the normaliser has mappings for, and
+         * not one claim came out of them. There is no healthy estate that
+         * produces that result.
+         *
+         * `claimsDerived`, not `claimsChanged` — a stable estate changes
+         * nothing on almost every run, so testing for change would report
+         * drift on every well-behaved integration in the portfolio.
+         */
+        const readNothing = processed.mappableObservations > 0 && processed.claimsDerived === 0;
+
         // Only an explicit partial signal degrades the integration. Advisory
         // warnings are recorded but do not imply the collection was incomplete.
         // A capability that failed does, because the connector saw it fail.
         const status =
+          readNothing ||
           result.partial === true ||
           capabilityReports.some((r) => !capabilityInformative(r.outcome))
             ? 'PARTIAL'
             : 'SUCCEEDED';
-        const health =
-          capabilityReports.length > 0
+        const health = readNothing
+          ? 'SCHEMA_DRIFT'
+          : capabilityReports.length > 0
             ? healthFromReports(capabilityReports)
             : result.partial === true
               ? 'PARTIAL'
@@ -436,9 +512,21 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
 
         await ctx.query(
           `UPDATE integration_runs
-           SET status = $2, observations_count = $3, evidence_count = $4, finished_at = now()
+           SET status = $2, observations_count = $3, evidence_count = $4, error_code = $5,
+               error_detail = $6, finished_at = now()
            WHERE id = $1`,
-          [run.id, status, recorded.recorded.length, processed.evidenceCreated],
+          [
+            run.id,
+            status,
+            recorded.recorded.length,
+            processed.evidenceCreated,
+            readNothing ? 'SCHEMA_DRIFT' : null,
+            readNothing
+              ? `${processed.mappableObservations} observation(s) of mapped kinds were collected ` +
+                'and produced no claims at all. The source is answering in a shape normalisation ' +
+                'no longer recognises.'
+              : null,
+          ],
         );
         await ctx.query(
           `UPDATE integrations
@@ -458,6 +546,76 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
         );
 
         const extraEvents: NewDomainEvent[] = [];
+
+        /**
+         * A connector that produced a predicate it never declared.
+         *
+         * Adericel's own bookkeeping error, not the customer's, so it does not
+         * touch the integration's health or the run's status — nothing about
+         * the estate is wrong. It is reported loudly anyway, because the
+         * consequences are invisible and expensive: impairment is matched
+         * predicate by predicate, so an undeclared predicate is one whose
+         * controls can never be told *why* they went dark, and the coverage
+         * ladder understates what the connector can answer.
+         *
+         * Found in the demonstration connector, having silently produced
+         * `device.managed` without declaring it. The manifest is a claim about
+         * a connector; this is the record of what it did, and where they
+         * disagree the record is right.
+         */
+        const declared = new Set(predicatesOf(integration.connector.manifest));
+        const undeclared = processed.derivedPredicates.filter(
+          (predicate) => !declared.has(predicate),
+        );
+        if (undeclared.length > 0) {
+          logger.error(
+            { integrationId: integration.id, connectorKey: integration.connectorKey, undeclared },
+            'connector produced predicates its manifest does not declare',
+          );
+          const event: NewDomainEvent = {
+            type: 'ConnectorManifestIncomplete',
+            organisationId: ctx.organisationId,
+            subjectType: 'Integration',
+            subjectId: integration.id,
+            payload: {
+              connectorKey: integration.connectorKey,
+              undeclaredPredicates: undeclared,
+              detail:
+                'This connector collected predicates its manifest does not list. The data is ' +
+                'good; the declaration is wrong. Until the manifest is corrected, controls ' +
+                'resting on these predicates cannot be told why they are impaired when this ' +
+                'integration breaks, and the coverage ladder understates this connector.',
+            },
+            correlationId,
+            actor,
+          };
+          await publish(ctx, event, now);
+          extraEvents.push(event);
+        }
+
+        if (readNothing) {
+          const event: NewDomainEvent = {
+            type: 'IntegrationSchemaDriftDetected',
+            organisationId: ctx.organisationId,
+            subjectType: 'Integration',
+            subjectId: integration.id,
+            payload: {
+              connectorKey: integration.connectorKey,
+              observationsCollected: recorded.recorded.length,
+              mappableObservations: processed.mappableObservations,
+              claimsDerived: 0,
+              observedKinds: [...new Set(recorded.recorded.map((o) => o.kind))].sort(),
+              detail:
+                'The source answered and nothing could be read from it. Until this is fixed, ' +
+                'every control depending on this integration is resting on its last reading ' +
+                'and will become undetermined when that evidence ages out.',
+            },
+            correlationId,
+            actor,
+          };
+          await publish(ctx, event, now);
+          extraEvents.push(event);
+        }
         const degraded = capabilityReports.filter((r) => !capabilityInformative(r.outcome));
         if (degraded.length > 0) {
           // Named, not lumped into "degraded": an operator needs to know which
@@ -505,13 +663,26 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
         };
       } catch (error) {
         const message = (error as Error).message;
-        logger.error({ integrationId, ...errorFields(error) }, 'integration collection failed');
+        /**
+         * The code, not the sentence.
+         *
+         * `error_detail` keeps the vendor's own words for whoever reads the
+         * run; `error_code` is what the resolution queue and the assessment
+         * impairment path act on. A connector that did not classify its own
+         * failure lands on UNCLASSIFIED rather than on a guess — see
+         * `classifyCollectionFailure`.
+         */
+        const failureCode: CollectionFailureCode = classifyCollectionFailure(error);
+        logger.error(
+          { integrationId, failureCode, ...errorFields(error) },
+          'integration collection failed',
+        );
 
         await ctx.query(
           `UPDATE integration_runs
-           SET status = 'FAILED', error_detail = $2, finished_at = now()
+           SET status = 'FAILED', error_code = $3, error_detail = $2, finished_at = now()
            WHERE id = $1`,
-          [run.id, message.slice(0, 2000)],
+          [run.id, message.slice(0, 2000), failureCode],
         );
         await ctx.query(
           `UPDATE integrations
@@ -528,7 +699,11 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
           organisationId: ctx.organisationId,
           subjectType: 'Integration',
           subjectId: integration.id,
-          payload: { connectorKey: integration.connectorKey, error: message.slice(0, 500) },
+          payload: {
+            connectorKey: integration.connectorKey,
+            failureCode,
+            error: message.slice(0, 500),
+          },
           correlationId,
           actor,
         };
@@ -560,22 +735,6 @@ export function createCollectionService(deps: CollectionServiceDeps): Collection
         correlationId,
       });
       return process(recorded.recorded, options.integrationId, options.sourceSystem);
-    },
-
-    async reobserve(integrationId, subjectExternalId, predicate): Promise<unknown> {
-      // Verification re-runs the connector and reads the claim that results.
-      // It deliberately goes back to the source rather than trusting the
-      // execution's own report of success.
-      await service.runIntegration(integrationId, 'VERIFICATION');
-      const row = await ctx.one<{ value: unknown }>(
-        `SELECT c.value FROM claims c
-         JOIN graph_nodes n ON n.id = c.subject_node_id
-         WHERE c.organisation_id = $1 AND c.predicate = $2 AND n.external_id = $3
-           AND c.status IN ('CANDIDATE', 'CONFIRMED')
-         ORDER BY c.asserted_at DESC LIMIT 1`,
-        [ctx.organisationId, predicate, subjectExternalId],
-      );
-      return row?.value;
     },
   };
 

@@ -17,3 +17,8 @@ docs/api/openapi.generated.json
 
 # Written by the mutation runner and deleted after each run.
 .mutation-report.json
+
+# Generated inventories. Produced by `pnpm sbom` and kept as CI artefacts
+# rather than committed: the lockfile is the source, and a committed snapshot
+# would go stale between releases.
+var/sbom/

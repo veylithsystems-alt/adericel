@@ -67,12 +67,28 @@ const PUBLIC_ROUTES = new Set([
 const COMMON_ROUTES = new Set([
   'GET /v1/auth/me',
   'GET /v1/auth/roles',
+  /**
+   * Erasing yourself.
+   *
+   * COMMON because the right belongs to the person, not to a surface: MSP
+   * staff, a client organisation's own staff and Veylith staff all hold it
+   * equally, and the route names no organisation and discloses nothing about
+   * one. It takes no target — the subject is the authenticated principal — so
+   * there is nothing here one tenant could point at another.
+   */
+  'POST /v1/me/erasure',
   'POST /v1/auth/logout',
   'GET /v1/auth/mfa',
   'POST /v1/auth/mfa/totp',
   'POST /v1/auth/mfa/totp/confirm',
   'DELETE /v1/auth/mfa/totp',
   'GET /v1/capabilities',
+  /**
+   * The retention schedule. A property of the software, naming no
+   * organisation, and the answer to a question any person may ask about
+   * themselves — so it belongs to every surface equally.
+   */
+  'GET /v1/retention',
   'GET /v1/rulesets',
   'GET /v1/connectors',
   'GET /v1/graph/schema',
