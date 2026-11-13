@@ -16,7 +16,7 @@
     "@adericel/graph": "workspace:*",
     "@adericel/shared": "workspace:*",
     "@adericel/vaol": "workspace:*",
-    "fastify": "^5.6.1",
+    "fastify": "^5.12.8",
     "zod": "^4.6.6"
   },
   "exports": {
